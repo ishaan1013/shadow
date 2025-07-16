@@ -23,6 +23,7 @@ model Task {
   id          String     @id @default(cuid())
   title       String?
   description String?
+  instructions String? // Task instructions
   status      TaskStatus @default(PENDING)
 
   // Git repo config
@@ -30,6 +31,7 @@ model Task {
   branch  String @default("main")
 
   // Execution config
+  llmModel String @default("claude-3-5-sonnet-20241022") // LLM model to use
   mode TaskMode @default(FULL_AUTO)
 
   // Timestamps

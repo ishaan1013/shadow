@@ -2,6 +2,7 @@ import { Message, MessageMetadata, ModelType } from "@repo/types";
 import { randomUUID } from "crypto";
 import { prisma } from "../../../packages/db/src/client";
 import { LLMService } from "./llm";
+import { systemPrompt } from "./prompt/system";
 import {
   emitStreamChunk,
   endStream,
@@ -53,7 +54,7 @@ export class ChatService {
         promptTokens: usage?.promptTokens,
         completionTokens: usage?.completionTokens,
         totalTokens: usage?.totalTokens,
-        finishReason: metadata?.finishReason,
+        finishReason: metadata?.finishReason as string,
       },
     });
   }
@@ -77,7 +78,8 @@ export class ChatService {
   async processUserMessage(
     taskId: string,
     userMessage: string,
-    llmModel: ModelType = DEFAULT_MODEL
+    llmModel: ModelType = DEFAULT_MODEL,
+    enableTools: boolean = true
   ) {
     // Save user message to database
     await this.saveUserMessage(taskId, userMessage);
@@ -88,7 +90,7 @@ export class ChatService {
     // Prepare messages for LLM (exclude the user message we just saved to avoid duplication)
     const messages: Message[] = history
       .slice(0, -1) // Remove the last message (the one we just saved)
-      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .filter((msg) => msg.role === "user" || msg.role === "assistant" || msg.role === "tool")
       .concat([
         {
           id: randomUUID(),
@@ -98,7 +100,7 @@ export class ChatService {
         },
       ]);
 
-    const systemPrompt = `You are a helpful coding assistant. You help users with their programming tasks by providing clear, accurate, and helpful responses.`;
+    console.log(`Processing message with ${messages.length} messages in context, tools: ${enableTools ? 'enabled' : 'disabled'}`);
 
     // Start streaming
     startStream();
@@ -111,7 +113,8 @@ export class ChatService {
       for await (const chunk of this.llmService.createMessageStream(
         systemPrompt,
         messages,
-        llmModel
+        llmModel,
+        enableTools
       )) {
         // Emit the chunk directly to clients
         emitStreamChunk(chunk);
@@ -169,5 +172,10 @@ export class ChatService {
   // Get available models from LLM service
   getAvailableModels(): ModelType[] {
     return this.llmService.getAvailableModels();
+  }
+
+  // Get available tools from LLM service
+  getAvailableTools(): string[] {
+    return this.llmService.getAvailableTools();
   }
 }

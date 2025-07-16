@@ -4,11 +4,13 @@ import express from "express";
 import http from "http";
 import { prisma } from "../../../packages/db/src/client";
 import { ChatService } from "./chat";
+import { CodingAgentController } from "./coding-agent";
 import { errorHandler } from "./middleware/error-handler";
 import { createSocketServer } from "./socket";
 
 const app = express();
 const chatService = new ChatService();
+const codingAgentController = new CodingAgentController();
 
 const socketIOServer = http.createServer(app);
 createSocketServer(socketIOServer);
@@ -77,6 +79,19 @@ app.get("/api/tasks/:taskId/messages", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
+// Coding Agent routes
+app.post("/api/coding-agent/create", (req, res) =>
+  codingAgentController.createTask(req, res)
+);
+
+app.post("/api/coding-agent/execute", (req, res) =>
+  codingAgentController.executeTask(req, res)
+);
+
+app.get("/api/coding-agent/tools", (req, res) =>
+  codingAgentController.getAvailableTools(req, res)
+);
 
 app.use(errorHandler);
 
