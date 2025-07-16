@@ -38,7 +38,7 @@ export function createSocketServer(server: http.Server): Server {
       });
     }
 
-    // Handle user message
+    // Handle user message (legacy format)
     socket.on(
       "user-message",
       async (data: { taskId: string; message: string; llmModel?: string }) => {
@@ -56,58 +56,133 @@ export function createSocketServer(server: http.Server): Server {
       }
     );
 
-    // Handle request for chat history
-    socket.on("get-chat-history", async (data: { taskId: string }) => {
-      try {
-        const history = await chatService.getChatHistory(data.taskId);
-        socket.emit("chat-history", { taskId: data.taskId, messages: history });
-      } catch (error) {
-        console.error("Error getting chat history:", error);
-        socket.emit("chat-history-error", {
-          error: "Failed to get chat history",
-        });
+    // Enhanced user message with AI SDK features
+    socket.on(
+      "user-message-enhanced",
+      async (data: { 
+        taskId: string; 
+        message: string; 
+        llmConfig?: {
+          model?: string;
+          provider?: string;
+          tools?: Record<string, any>;
+          maxSteps?: number;
+          temperature?: number;
+          maxTokens?: number;
+        };
+      }) => {
+        try {
+          console.log("Received enhanced user message:", data);
+          
+          if (data.llmConfig?.tools) {
+            // Use tools-enabled processing
+            await chatService.processUserMessageWithTools(
+              data.taskId,
+              data.message,
+              data.llmConfig
+            );
+          } else {
+            // Use standard processing
+            await chatService.processUserMessage(
+              data.taskId,
+              data.message,
+              data.llmConfig?.model || "claude-3-5-sonnet-20241022"
+            );
+          }
+        } catch (error) {
+          console.error("Error processing enhanced user message:", error);
+          socket.emit("message-error", { error: "Failed to process message" });
+        }
       }
-    });
+    );
+
+    // Handle model switching
+    socket.on(
+      "switch-model",
+      async (data: { taskId: string; model: string; provider?: string }) => {
+        try {
+          console.log("Switching model:", data);
+          // Could implement model validation here
+          socket.emit("model-switched", { 
+            model: data.model,
+            provider: data.provider,
+            success: true 
+          });
+        } catch (error) {
+          console.error("Error switching model:", error);
+          socket.emit("model-switched", { 
+            success: false, 
+            error: "Failed to switch model" 
+          });
+        }
+      }
+    );
+
+    // Handle tool registration/configuration
+    socket.on(
+      "configure-tools",
+      async (data: { taskId: string; tools: Record<string, any> }) => {
+        try {
+          console.log("Configuring tools:", data);
+          // Store tool configuration for the task
+          // This could be saved to database or session storage
+          socket.emit("tools-configured", { 
+            tools: Object.keys(data.tools),
+            success: true 
+          });
+        } catch (error) {
+          console.error("Error configuring tools:", error);
+          socket.emit("tools-configured", { 
+            success: false, 
+            error: "Failed to configure tools" 
+          });
+        }
+      }
+    );
 
     socket.on("disconnect", () => {
-      console.log("a user disconnected");
+      console.log("user disconnected");
     });
   });
 
   return io;
 }
 
-export function startStream() {
-  currentStreamContent = "";
+export function startStream(): void {
   isStreaming = true;
-}
-
-export function endStream() {
-  isStreaming = false;
-  io.emit("stream-complete");
-}
-
-export function handleStreamError(error: any) {
-  isStreaming = false;
-  io.emit("stream-error", error);
-}
-
-export function emitStreamChunk(chunk: StreamChunk) {
-  // Accumulate content for state tracking
-  if (chunk.type === "content" && chunk.content) {
-    currentStreamContent += chunk.content;
+  currentStreamContent = "";
+  if (io) {
+    io.emit("stream-start");
   }
+}
 
-  // Broadcast the chunk directly to all connected Socket.IO clients
-  io.emit("stream-chunk", chunk);
-
-  // Handle completion
-  if (chunk.type === "complete") {
-    endStream();
+export function emitStreamChunk(chunk: StreamChunk): void {
+  if (io) {
+    io.emit("stream-chunk", chunk);
+    
+    // Accumulate content for state management
+    if (chunk.type === "content" || (chunk.type === "text-delta" && chunk.content)) {
+      currentStreamContent += chunk.content || chunk.textDelta || "";
+    }
   }
+}
 
-  // Handle errors
-  if (chunk.type === "error") {
-    handleStreamError(chunk.error);
+export function endStream(): void {
+  isStreaming = false;
+  if (io) {
+    io.emit("stream-end", { 
+      finalContent: currentStreamContent,
+      success: true 
+    });
+  }
+}
+
+export function handleStreamError(error: unknown): void {
+  isStreaming = false;
+  console.error("Stream error:", error);
+  if (io) {
+    io.emit("stream-error", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 }

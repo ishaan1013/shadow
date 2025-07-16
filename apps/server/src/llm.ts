@@ -1,94 +1,147 @@
-import { Anthropic } from "@anthropic-ai/sdk";
-import { LLMMessage, StreamChunk } from "@repo/types";
+import { generateText, streamText, type CoreMessage, type LanguageModel } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { openai } from "@ai-sdk/openai";
+import type { StreamChunk, LLMConfig, ProviderType } from "@repo/types";
 import config from "./config";
 
 export class LLMService {
-  private client: Anthropic;
+  private getModel(modelName: string, provider?: ProviderType): LanguageModel {
+    // Auto-detect provider from model name if not specified
+    const detectedProvider = provider || this.detectProvider(modelName);
+    
+    switch (detectedProvider) {
+      case "anthropic":
+        return anthropic(modelName, {
+          apiKey: config.anthropicApiKey,
+        });
+      case "openai":
+        return openai(modelName, {
+          apiKey: config.openaiApiKey,
+        });
+      default:
+        throw new Error(`Unsupported provider: ${detectedProvider}`);
+    }
+  }
 
-  constructor() {
-    this.client = new Anthropic({
-      apiKey: config.anthropicApiKey,
+  private detectProvider(modelName: string): ProviderType {
+    if (modelName.startsWith("claude")) {
+      return "anthropic";
+    } else if (modelName.startsWith("gpt") || modelName.startsWith("o1")) {
+      return "openai";
+    } else if (modelName.startsWith("gemini")) {
+      return "google";
+    } else if (modelName.includes("llama") || modelName.includes("mixtral")) {
+      return "groq";
+    } else {
+      // Default to anthropic for backward compatibility
+      return "anthropic";
+    }
+  }
+
+  async generateText(
+    messages: CoreMessage[],
+    config: Partial<LLMConfig> = {}
+  ) {
+    const model = this.getModel(config.model || "claude-3-5-sonnet-20241022");
+    
+    const result = await generateText({
+      model,
+      messages,
+      maxTokens: config.maxTokens || 4096,
+      temperature: config.temperature || 0.7,
+      tools: config.tools,
+      toolChoice: config.toolChoice,
+      maxSteps: config.maxSteps || 1,
     });
+
+    return result;
   }
 
   async *createMessageStream(
     systemPrompt: string,
-    messages: LLMMessage[],
-    model: string = "claude-3-5-sonnet-20241022"
+    messages: CoreMessage[],
+    llmConfig: Partial<LLMConfig> = {}
   ): AsyncGenerator<StreamChunk> {
-    const anthropicMessages: Anthropic.Messages.MessageParam[] = messages.map(
-      (msg) => ({
-        role: msg.role,
-        content: msg.content,
-      })
-    );
+    const model = this.getModel(llmConfig.model || "claude-3-5-sonnet-20241022");
+    
+    // Add system message if provided
+    const allMessages: CoreMessage[] = systemPrompt 
+      ? [{ role: "system", content: systemPrompt }, ...messages]
+      : messages;
 
-    const stream = await this.client.messages.create({
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: anthropicMessages,
-      stream: true,
-      model: model,
+    const result = await streamText({
+      model,
+      messages: allMessages,
+      maxTokens: llmConfig.maxTokens || 4096,
+      temperature: llmConfig.temperature || 0.7,
+      tools: llmConfig.tools,
+      toolChoice: llmConfig.toolChoice,
+      maxSteps: llmConfig.maxSteps || 1,
     });
 
-    for await (const chunk of stream) {
-      switch (chunk.type) {
-        case "message_start":
-          const usage = chunk.message.usage;
+    // Stream text deltas
+    for await (const textPart of result.textStream) {
+      yield {
+        type: "text-delta",
+        textDelta: textPart,
+        // Legacy format for backward compatibility
+        content: textPart,
+      };
+    }
+
+    // Process tool calls if any
+    for await (const step of result.steps) {
+      if (step.stepType === "tool-call") {
+        for (const toolCall of step.toolCalls) {
           yield {
-            type: "usage",
-            usage: {
-              inputTokens: usage.input_tokens || 0,
-              outputTokens: usage.output_tokens || 0,
-              cacheWriteTokens:
-                (usage as any).cache_creation_input_tokens || undefined,
-              cacheReadTokens:
-                (usage as any).cache_read_input_tokens || undefined,
+            type: "tool-call",
+            toolCall: {
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              args: toolCall.args,
             },
           };
-          break;
+        }
+      }
 
-        case "message_delta":
+      if (step.stepType === "tool-result") {
+        for (const toolResult of step.toolResults) {
           yield {
-            type: "usage",
-            usage: {
-              inputTokens: 0,
-              outputTokens: chunk.usage.output_tokens || 0,
+            type: "tool-result",
+            toolResult: {
+              toolCallId: toolResult.toolCallId,
+              result: toolResult.result,
             },
           };
-          break;
-
-        case "content_block_start":
-          switch (chunk.content_block.type) {
-            case "text":
-              if (chunk.content_block.text) {
-                yield {
-                  type: "content",
-                  content: chunk.content_block.text,
-                };
-              }
-              break;
-          }
-          break;
-
-        case "content_block_delta":
-          switch (chunk.delta.type) {
-            case "text_delta":
-              yield {
-                type: "content",
-                content: chunk.delta.text,
-              };
-              break;
-          }
-          break;
-
-        case "message_stop":
-          yield {
-            type: "complete",
-            finishReason: "stop",
-          };
-          break;
+        }
       }
     }
+
+    // Get final usage and finish reason
+    const finalResult = await result.response;
+    
+    yield {
+      type: "finish",
+      finishReason: finalResult.finishReason,
+      usage: {
+        promptTokens: finalResult.usage.promptTokens,
+        completionTokens: finalResult.usage.completionTokens,
+        totalTokens: finalResult.usage.totalTokens,
+      },
+    };
+  }
+
+  // Legacy method for backward compatibility
+  async *createMessageStreamLegacy(
+    systemPrompt: string,
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    model: string = "claude-3-5-sonnet-20241022"
+  ): AsyncGenerator<StreamChunk> {
+    const coreMessages: CoreMessage[] = messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    yield* this.createMessageStream(systemPrompt, coreMessages, { model });
   }
 }

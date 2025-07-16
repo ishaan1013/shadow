@@ -1,40 +1,33 @@
 {
-  "$schema": "https://turborepo.com/schema.json",
-  "ui": "tui",
-  "tasks": {
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "pipeline": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
-    "lint": {
-      "dependsOn": ["^lint"]
-    },
-    "check-types": {
-      "dependsOn": ["^check-types"]
-    },
+    "lint": {},
     "dev": {
       "cache": false,
       "persistent": true
     },
-    "db:migrate:dev": {
-      "cache": false,
-      "persistent": true
+    "type-check": {
+      "dependsOn": ["^build"],
+      "outputs": []
     },
-    "db:migrate:deploy": {
+    "clean": {
+      "cache": false
+    },
+    "db:generate": {
       "cache": false
     },
     "db:push": {
       "cache": false
     },
+    "db:migrate": {
+      "cache": false
+    },
     "db:seed": {
-      "cache": false
-    },
-    "db:studio": {
-      "cache": false
-    },
-    "generate": {
-      "dependsOn": ["^generate"],
       "cache": false
     }
   }

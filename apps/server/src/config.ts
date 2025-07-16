@@ -10,8 +10,25 @@ const configSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
-  ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
-});
+  
+  // AI Provider API Keys
+  ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
+  
+  // At least one AI provider must be configured
+}).refine(
+  (data) => 
+    data.ANTHROPIC_API_KEY || 
+    data.OPENAI_API_KEY || 
+    data.GOOGLE_API_KEY || 
+    data.GROQ_API_KEY,
+  {
+    message: "At least one AI provider API key must be configured",
+    path: ["ANTHROPIC_API_KEY"],
+  }
+);
 
 const parsed = configSchema.safeParse(process.env);
 
@@ -25,7 +42,12 @@ const config = {
   socketPort: parsed.data.SOCKET_PORT,
   clientUrl: parsed.data.CLIENT_URL,
   nodeEnv: parsed.data.NODE_ENV,
+  
+  // AI Provider Keys
   anthropicApiKey: parsed.data.ANTHROPIC_API_KEY,
+  openaiApiKey: parsed.data.OPENAI_API_KEY,
+  googleApiKey: parsed.data.GOOGLE_API_KEY,
+  groqApiKey: parsed.data.GROQ_API_KEY,
 };
 
 export default config;

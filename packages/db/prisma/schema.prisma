@@ -40,26 +40,58 @@ model Task {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  messages    ChatMessage[]
-  commands    TerminalCommand[]
-  fileChanges FileChange[]
-  artifacts   Artifact[]
-  sessions    TaskSession[]
+  messages       ChatMessage[]
+  toolCalls      ToolCall[]
+  commands       TerminalCommand[]
+  fileChanges    FileChange[]
+  artifacts      Artifact[]
+  sessions       TaskSession[]
 }
 
 model ChatMessage {
   id       String      @id @default(cuid())
-  content  String
+  content  String      // Can be JSON for complex content (images, tool calls, etc.)
   role     MessageRole
-  llmModel String? // Model used for this message (only for ASSISTANT messages)
-  metadata Json? // For streaming tokens, model info, etc
+  llmModel String?     // Model used for this message (only for ASSISTANT messages)
+  
+  // AI SDK compatibility
+  finishReason    FinishReason? // AI SDK finish reason
+  toolInvocations Json?         // Array of tool invocations for assistant messages
+  
+  // Enhanced metadata
+  metadata Json? // Usage, thinking, streaming status, etc.
 
   createdAt DateTime @default(now())
 
   taskId String
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
+  // Relationships for tool calls
+  toolCalls ToolCall[]
+
   @@index([taskId, createdAt])
+}
+
+model ToolCall {
+  id         String @id @default(cuid())
+  toolCallId String // AI SDK tool call ID
+  toolName   String
+  args       Json   // Tool arguments
+  result     Json?  // Tool result
+  status     ToolStatus @default(PENDING)
+  error      String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  // Relationships
+  taskId    String
+  task      Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  messageId String?
+  message   ChatMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([toolCallId])
 }
 
 model TerminalCommand {
@@ -104,7 +136,7 @@ model Artifact {
   // Storage info
   s3Key    String? // S3 object key
   efsPath  String? // EFS file path
-  size     Int? // Size in bytes
+  size     Int?    // Size in bytes
   mimeType String?
 
   createdAt DateTime @default(now())
@@ -157,6 +189,23 @@ enum MessageRole {
   TOOL
 }
 
+enum FinishReason {
+  STOP
+  LENGTH
+  CONTENT_FILTER
+  TOOL_CALLS
+  ERROR
+  OTHER
+  UNKNOWN
+}
+
+enum ToolStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  ERROR
+}
+
 enum FileOp {
   CREATE
   UPDATE
@@ -167,9 +216,9 @@ enum FileOp {
 
 enum ArtifactType {
   CODE_SNAPSHOT // Full workspace zip
-  DIFF_PATCH // Git patch file
-  LOG_FILE // Execution logs
-  TEST_REPORT // Test results
-  BUILD_OUTPUT // Compiled artifacts
-  BINARY // Executables, images, etc
+  DIFF_PATCH    // Git patch file
+  LOG_FILE      // Execution logs
+  TEST_REPORT   // Test results
+  BUILD_OUTPUT  // Compiled artifacts
+  BINARY        // Executables, images, etc
 }
