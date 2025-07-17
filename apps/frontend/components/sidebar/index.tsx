@@ -41,6 +41,11 @@ import {
 
 const buttons = [
   {
+    title: "Home",
+    url: "/",
+    icon: Monitor,
+  },
+  {
     title: "All Tasks",
     url: "/tasks",
     icon: Folder,
