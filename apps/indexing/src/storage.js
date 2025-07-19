@@ -85,8 +85,8 @@ function buildInverted(graph,outDir){
     const toks = tokenize(textParts.join('\n'));
     for(const t of toks){
       if(typeof t === 'string' && t.length > 0) {
-        if(!idx[t]) idx[t] = new Set();
-        idx[t].add(node.id);
+      if(!idx[t]) idx[t] = new Set();
+      idx[t].add(node.id);
       }
     }
   }

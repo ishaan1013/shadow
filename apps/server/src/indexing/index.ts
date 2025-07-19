@@ -4,6 +4,7 @@ import TreeSitter from "tree-sitter";
 import { getLanguageForPath } from "./languages";
 import { retrieve } from "./retrieval";
 import PineconeHandler from "./embedding/pineconeService";
+import { isValidRepo } from "./utils/repository";
 
 const router = express.Router();
 const pinecone = new PineconeHandler();
@@ -41,36 +42,55 @@ router.post(
 router.post(
   "/index",
   async (
-    req: express.Request<
-      {},
-      {},
-      { repo: string; options: IndexRepoOptions | null }
-    >,
-    res
+    req: express.Request<{}, {}, { repo: string; options?: IndexRepoOptions }>,
+    res,
+    next
   ) => {
-    if (!req.body) {
-      res.status(400).json({ error: "Request body is missing" });
-      return;
+    const { repo, options } = req.body;
+    if (!repo || !isValidRepo(repo)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid or missing repo parameter" });
     }
-    const { repo, options = {} } = req.body;
 
-    const { graph, graphJSON, invertedIndex, embeddings } = await indexRepo(
-      repo,
-      options
-    );
-    res.json({ graph, graphJSON, invertedIndex, embeddings });
+    try {
+      const result = await indexRepo(repo, { ...options });
+      res.json({ message: "Indexing complete", ...result });
+    } catch (error: any) {
+      if (error.message.includes("Not Found")) {
+        return res.status(500).json({
+          error: `Failed to fetch repository: ${error.message}`
+        });
+      }
+      next(error);
+    }
   }
 );
 
 router.post(
   "/search",
   async (
-    req: express.Request<{}, {}, { query: string; namespace: string; topK?: number; fields?: string[] }>,
-    res
+    req: express.Request<
+      {},
+      {},
+      { query: string; namespace: string; topK?: number; fields?: string[] }
+    >,
+    res,
+    next
   ) => {
-    const { query, namespace, topK, fields } = req.body;
-    const response = await retrieve(query, namespace, topK, fields);
-    res.json(response);
+    try {
+      const { query, namespace, topK, fields } = req.body;
+      if (!query || !namespace) {
+        return res
+          .status(400)
+          .json({ error: "Missing required parameters: query, namespace" });
+      }
+      const response = await retrieve(query, namespace, topK, fields);
+      // The response from pinecone is { result: { hits: [] } }, let's return a `matches` property as expected by the test
+      res.json({ matches: response.result?.hits || [] });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -78,11 +98,21 @@ router.delete(
   "/clear-namespace",
   async (
     req: express.Request<{}, {}, { namespace: string }>,
-    res
+    res,
+    next
   ) => {
-    const { namespace } = req.body;
-    await pinecone.clearNamespace(namespace);
-    res.json({ message: "Namespace cleared" });
+    try {
+      const { namespace } = req.body;
+      if (!namespace) {
+        return res
+          .status(400)
+          .json({ error: "Missing required parameter: namespace" });
+      }
+      await pinecone.clearNamespace(namespace);
+      res.json({ message: "Namespace cleared" });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 

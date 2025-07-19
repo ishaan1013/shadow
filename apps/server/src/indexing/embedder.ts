@@ -17,7 +17,7 @@
 import { logger } from "./logger";
 import PineconeHandler from "./embedding/pineconeService";
 import { GraphNode } from "./graph";
-import { getNamespaceFromRepo } from "./utils/namespace";
+import { getNamespaceFromRepo } from "./utils/repository";
 
 type EmbeddingProvider = "jina-api" | "local-transformers" | "cheap-hash";
 const EMBEDDING_MODEL = "jinaai/jina-embeddings-v2-base-code";
@@ -265,11 +265,8 @@ async function embedAndUpsertToPinecone(
   const pinecone = new PineconeHandler();
   const namespace = getNamespaceFromRepo(repo);
 
-  console.log('nodes[10]', nodes[10]);
   // Chunk by line ranges and upload
   const recordChunks: GraphNode[][] = await pinecone.chunkRecords(nodes);
-
-
 
   let totalUploaded = 0;
   for (const recordChunk of recordChunks) {
@@ -287,7 +284,7 @@ async function embedAndUpsertToPinecone(
       }
     }));
     
-    const uploaded = await pinecone.upsertRecords(batchRecords, namespace);
+    const uploaded = await pinecone.upsertAutoEmbed(batchRecords, namespace);
     totalUploaded += uploaded;
   }
   

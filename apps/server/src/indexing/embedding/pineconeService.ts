@@ -34,14 +34,19 @@ class PineconeHandler {
         });
     }
 
-    async clearNamespace(namespace: string) {
-        await this.client.namespace(namespace).deleteAll();
+    async clearNamespace(namespace: string): Promise<number> {
+        try {
+            await this.client.namespace(namespace).deleteAll();
+            logger.info(`Namespace "${namespace}" cleared`);
+            return 1;
+        } catch (err) {
+            logger.warn(`Failed to clear namespace "${namespace}": ${err}`);
+            return 0;
+        }
     }
 
-    async upsertRecords(records: any[], namespace: string): Promise<number> {
-        try {
-            console.log("Sample record:", records[0]);
-            
+    async upsertAutoEmbed(records: any[], namespace: string): Promise<number> {
+        try {            
             // Convert to upsertRecords format and filter out empty text
             const autoEmbedRecords = records
                 .filter(record => {
@@ -59,11 +64,11 @@ class PineconeHandler {
                 }));
 
             if (autoEmbedRecords.length === 0) {
-                console.log("No records with text to upsert, skipping batch");
+                logger.info("No records with text to upsert, skipping batch");
                 return 0;
             }
 
-            console.log(`Upserting ${autoEmbedRecords.length} records with text (filtered from ${records.length})`);
+            logger.info(`Upserting ${autoEmbedRecords.length} records with text (filtered from ${records.length})`);
             
             // Use upsertRecords for auto-embedding
             await this.client.namespace(namespace).upsertRecords(autoEmbedRecords);

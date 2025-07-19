@@ -10,14 +10,9 @@ import { tokenize } from "@/indexing/utils/tokenize";
 import PineconeHandler from "@/indexing/embedding/pineconeService";
 import TreeSitter from "tree-sitter";
 import { embedAndUpsertToPinecone } from "./embedder";
+import { getOwnerRepo, isValidRepo } from "./utils/repository";
 
 export interface FileContentResponse {
-  content: string;
-  path: string;
-  type: string;
-}
-
-export interface GitHubFileResponse {
   content: string;
   path: string;
   type: string;
@@ -26,7 +21,6 @@ export interface GitHubFileResponse {
 export interface IndexRepoOptions {
   maxLines?: number;
   embed?: boolean;
-  usePinecone?: boolean;
   outDir?: string;
   force?: boolean;
   paths?: string[] | null;
@@ -40,7 +34,7 @@ async function fetchRepoFiles(
 ): Promise<Array<{ path: string; content: string; type: string }>> {
   const { Octokit } = await import("@octokit/rest");
   const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN,
+    auth: process.env.GITHUB_API_KEY,
   });
 
   try {
@@ -75,7 +69,7 @@ async function fetchRepoFiles(
       return files;
     } else {
       // Single file
-      const fileData = response.data as GitHubFileResponse;
+      const fileData = response.data as FileContentResponse;
       const content = Buffer.from(fileData.content, "base64").toString("utf8");
       return [{ path: fileData.path, content, type: "file" }];
     }
@@ -95,7 +89,7 @@ async function indexRepo(
   invertedIndex: any;
   embeddings?: { index: any; binary: Buffer };
 }> {
-  const { maxLines = 200, embed = false, paths = null, usePinecone = true } = options || {};
+  const { maxLines = 200, embed = false, paths = null } = options || {};
 
   logger.info(
     `Indexing ${repoName}${paths ? " (filtered)" : ""}${embed ? " + embeddings" : ""}`
@@ -106,17 +100,17 @@ async function indexRepo(
 
   // Check if it's a GitHub repo (format: "owner/repo")
   if (
-    repoName.includes("/") &&
-    !repoName.startsWith("/") &&
-    !repoName.startsWith("./")
+    isValidRepo(repoName)
   ) {
-    const [owner, repo] = repoName.split("/");
-    if (!owner || !repo) {
-      throw new Error(`Invalid repo name: ${repoName}`);
-    }
+    const { owner, repo } = getOwnerRepo(repoName);
     logger.info(`Fetching GitHub repo: ${owner}/${repo}`);
 
     files = await fetchRepoFiles(owner, repo);
+    if (files.length === 0) {
+      logger.warn(`No files found in ${owner}/${repo}`);
+      throw new Error(`No files found in ${owner}/${repo}`);
+    }
+
     repoId = getHash(`${owner}/${repo}`, 12);
     logger.info(`Number of files fetched: ${files.length}`);
     const graph = new Graph(repoId);
@@ -127,7 +121,7 @@ async function indexRepo(
     const repoNode = new GraphNode({
       id: repoId,
       kind: "REPO",
-      name: repoName.split("/").pop() || repoName,
+      name: repo,
       path: "",
       lang: "",
     });
@@ -356,53 +350,7 @@ async function indexRepo(
 
     // Output is the graph with nodes, adjacencies and inverted index
     // Only the nodes get embedded
-    const pinecone = new PineconeHandler();
-    if (embed && !usePinecone) {
-      logger.info("Computing embeddings...");
-      const chunks: GraphNode[] = [...graph.nodes.values()].filter(
-        (n) => n.kind === "CHUNK"
-      );
-      logger.info(`Found ${chunks.length} chunks to embed`);
-
-      if (chunks.length > 0) {
-        // await embedGraphChunks(chunks, { provider: "local-transformers" }); // Not used if usePinecone is true
-        logger.info(`Embedded ${chunks.length} chunks`);
-        // Debug: check if embeddings were actually added
-        const withEmbeddings = chunks.filter((ch) => ch.embedding);
-        logger.info(`${withEmbeddings.length} chunks have embeddings`);
-
-        // Upload to Pinecone
-        if (withEmbeddings.length > 0) {
-          logger.info("Uploading embeddings to Pinecone...");
-
-          // Chunk the GraphNodes directly
-          const recordChunks = await pinecone.chunkRecords(withEmbeddings, 50, 100);
-          let totalUploaded = 0;
-
-          for (const recordChunk of recordChunks) {
-            // Convert GraphNodes to Pinecone records for each chunk
-            const pineconeRecords = recordChunk.map((chunk) => ({
-              id: chunk.id,
-              values: Array.from(chunk.embedding),
-              metadata: {
-                code: chunk.code || "",
-                path: chunk.path,
-                name: chunk.name,
-                lang: chunk.lang,
-                line_start: chunk.loc?.startLine || 0,
-                line_end: chunk.loc?.endLine || 0,
-                repo: repoName
-              }
-            }));
-            
-            const uploaded = await pinecone.upsertRecords(pineconeRecords, repoName.replace("/", "-"));
-            totalUploaded += uploaded;
-          }
-
-          logger.info(`Uploaded ${totalUploaded} embeddings to Pinecone`);
-        }
-      }
-    } else if (embed && usePinecone) {
+    if (embed) {
       logger.info("Embedding and uploading to Pinecone...");      
       await embedAndUpsertToPinecone(Array.from(graph.nodes.values()), repoName);
     } else {
