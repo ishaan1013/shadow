@@ -5,7 +5,6 @@ import { prisma, Task } from "@repo/db";
 import { MessageRole } from "@repo/types";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 export async function createTask(formData: FormData) {
@@ -90,7 +89,5 @@ export async function createTask(formData: FormData) {
     throw new Error("Failed to create task");
   }
 
-  if (task) {
-    redirect(`/tasks/${task.id}`);
-  }
+  return task.id;
 }

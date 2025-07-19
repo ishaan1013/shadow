@@ -26,7 +26,7 @@ export interface MessageMetadata {
   tool?: {
     name: string;
     args: Record<string, any>;
-    status: "running" | "success" | "error";
+    status: ToolStatusType;
     result?: string;
     error?: string;
     changes?: {
@@ -174,6 +174,15 @@ export const MessageRole = {
 } as const;
 
 export type MessageRoleType = (typeof MessageRole)[keyof typeof MessageRole];
+
+// Tool status that aligns with database TaskStatus
+export const ToolStatus = {
+  RUNNING: "RUNNING",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+} as const;
+
+export type ToolStatusType = (typeof ToolStatus)[keyof typeof ToolStatus];
 
 // === LLM Integration Types ===
 

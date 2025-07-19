@@ -40,6 +40,7 @@ export function TaskLayoutContent({
     if (!panel) return;
     if (panel.isCollapsed()) {
       panel.expand();
+      resizablePanelGroupRef.current?.setLayout([40, 60]);
     } else {
       panel.collapse();
     }

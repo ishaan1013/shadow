@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { createTask } from "@/lib/actions/create-task";
+import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 import {
   AvailableModels,
@@ -16,6 +17,7 @@ import {
   type ModelType,
 } from "@repo/types";
 import { ArrowUp, Layers, Loader2, Square } from "lucide-react";
+import { redirect } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { GithubConnection } from "./github";
@@ -34,9 +36,11 @@ export function PromptForm({
   const [selectedModel, setSelectedModel] = useState<ModelType>(
     AvailableModels.GPT_4O
   );
+  const [repoUrl, setRepoUrl] = useState<string | null>(null);
+  const [branch, setBranch] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Fetch list of models from backend on mount
+  // TODO: initial fetch on server and use useQuery
   useEffect(() => {
     async function fetchModels() {
       try {
@@ -59,18 +63,31 @@ export function PromptForm({
     if (!message.trim() || isStreaming || !selectedModel) return;
 
     if (isHome) {
+      // Require repo and branch selection before creating a task
+      if (!repoUrl || !branch) {
+        toast.error("Select a repository and branch first");
+        return;
+      }
+
       const formData = new FormData();
       formData.append("message", message);
       formData.append("model", selectedModel);
+      formData.append("repoUrl", repoUrl);
+      formData.append("branch", branch);
 
       startTransition(async () => {
+        let taskId: string | null = null;
         try {
-          await createTask(formData);
+          taskId = await createTask(formData);
         } catch (error) {
           toast.error("Failed to create task", {
             description:
               error instanceof Error ? error.message : "Unknown error",
           });
+        }
+        if (taskId) {
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          redirect(`/tasks/${taskId}`);
         }
       });
     } else {
@@ -152,12 +169,23 @@ export function PromptForm({
           </Popover>
 
           <div className="flex items-center gap-2">
-            {isHome && <GithubConnection />}
+            {isHome && (
+              <GithubConnection
+                onSelect={(repo, br) => {
+                  setRepoUrl(repo);
+                  setBranch(br);
+                }}
+              />
+            )}
             <Button
               type="submit"
               size="iconSm"
               disabled={
-                isStreaming || isPending || !message.trim() || !selectedModel
+                isStreaming ||
+                isPending ||
+                !message.trim() ||
+                !selectedModel ||
+                (isHome && (!repoUrl || !branch))
               }
               className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
             >

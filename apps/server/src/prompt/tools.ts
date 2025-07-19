@@ -181,17 +181,4 @@ ANOTHER_CHANGE
 - Fails gracefully if file doesn't exist
 - Security restrictions prevent dangerous deletions
 - Good for cleanup operations
-
-### reapply
-**Purpose**: Error recovery for failed edit_file applications
-
-**When to Use:**
-- ONLY immediately after edit_file tool call
-- ONLY if diff is not what you expected
-- Indicates apply model didn't follow instructions correctly
-
-**Strategy:**
-- Always check edit_file results first
-- Use reapply if changes weren't applied correctly
-- Don't use for new edits
 </tool_guidance>`;

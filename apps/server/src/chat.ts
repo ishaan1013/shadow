@@ -92,7 +92,7 @@ export class ChatService {
           tool: {
             name: toolName,
             args: toolArgs,
-            status: "success",
+            status: "COMPLETED",
             result: toolResult,
           },
         } as any,
@@ -228,7 +228,7 @@ export class ChatService {
               tool: {
                 name: chunk.toolCall.name,
                 args: chunk.toolCall.args,
-                status: "running",
+                status: "RUNNING",
                 result: undefined,
               },
               isStreaming: true,
@@ -263,7 +263,7 @@ export class ChatService {
                     ...(toolMessage.metadata as any),
                     tool: {
                       ...(toolMessage.metadata as any)?.tool,
-                      status: "success",
+                      status: "COMPLETED",
                       result: chunk.toolResult.result,
                     },
                     isStreaming: false,

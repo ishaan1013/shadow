@@ -25,6 +25,18 @@ export const metadata: Metadata = {
   title: "Shadow",
   description:
     "A remote, autonomous coding agent for complex and long-running tasks.",
+  icons: {
+    icon: [
+      {
+        url: "/shadow-black.svg",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/shadow.svg",
+        media: "(prefers-color-scheme: dark)",
+      },
+    ],
+  },
 };
 
 export default async function RootLayout({

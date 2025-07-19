@@ -59,7 +59,11 @@ interface GroupedRepos {
   }[];
 }
 
-export function GithubConnection() {
+export function GithubConnection({
+  onSelect,
+}: {
+  onSelect?: (repoUrl: string, branch: string) => void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<"repos" | "branches">("repos");
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
@@ -168,6 +172,11 @@ export function GithubConnection() {
   const handleBranchSelect = (branchName: string) => {
     setSelectedBranch(branchName);
     setIsOpen(false);
+
+    // Notify parent component of the selection
+    if (selectedRepo && onSelect) {
+      onSelect(selectedRepo.full_name, branchName);
+    }
   };
 
   const handleBackToRepos = () => {

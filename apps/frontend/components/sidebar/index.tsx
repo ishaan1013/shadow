@@ -228,7 +228,7 @@ export function SidebarComponent({ initialTasks }: SidebarComponentProps) {
                                       .toLowerCase()
                                       .replace("_", " ")}
                                   </span>
-                                  <GitBranch className="size-3" /> {task.branch}
+                                  <GitBranch className="size-3" />  {task.branch}
                                 </div>
                               </a>
                             </SidebarMenuButton>
