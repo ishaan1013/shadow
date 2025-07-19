@@ -1,5 +1,6 @@
 import { chunkSymbol } from "@/indexing/chunker";
-import { ChunkNode, embedGraphChunks } from "@/indexing/embedder";
+import { ChunkNode } from "@/indexing/embedding/types";
+import { embedGraphChunks } from "@/indexing/embedding/embed";
 import { extractGeneric } from "@/indexing/extractors/generic";
 import { Graph, GraphEdge, GraphNode } from "@/indexing/graph";
 import { getLanguageForPath } from "@/indexing/languages";

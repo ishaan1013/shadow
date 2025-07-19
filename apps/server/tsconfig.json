@@ -11,6 +11,7 @@
       "@/*": ["src/*"],
       "@repo/*": ["../../packages/*"]
     },
+    "lib": ["ES2020", "DOM"],
     "outDir": "./dist",
     "module": "NodeNext"
   },
