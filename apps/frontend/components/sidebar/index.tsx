@@ -57,9 +57,9 @@ const buttons = [
 // Status order for sorting (most important first)
 const statusOrder = {
   RUNNING: 0,
-  PAUSED: 1,
-  PENDING: 2,
-  INITIALIZING: 3,
+  INITIALIZING: 1,
+  PAUSED: 2,
+  PENDING: 3,
   COMPLETED: 4,
   FAILED: 5,
   CANCELLED: 6,

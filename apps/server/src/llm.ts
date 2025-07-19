@@ -13,6 +13,27 @@ import config from "./config";
 import { tools } from "./tools";
 
 export class LLMService {
+  private getToolsWithWorkspace(workspaceDir?: string) {
+    if (!workspaceDir) {
+      return tools;
+    }
+    
+    // Create tools with workspace directory context
+    // This will be passed to individual tools that need workspace context
+    return Object.fromEntries(
+      Object.entries(tools).map(([name, tool]) => [
+        name,
+        {
+          ...tool,
+          execute: async (args: any) => {
+            // Pass workspace directory to tools that support it
+            return await tool.execute({ ...args, workspaceDir });
+          },
+        },
+      ])
+    );
+  }
+
   private getModel(modelId: ModelType): LanguageModel {
     const provider = getModelProvider(modelId);
 
@@ -38,7 +59,8 @@ export class LLMService {
     systemPrompt: string,
     messages: Message[],
     model: ModelType = DEFAULT_MODEL,
-    enableTools: boolean = true
+    enableTools: boolean = true,
+    workspaceDir?: string
   ): AsyncGenerator<StreamChunk> {
     try {
       const modelInstance = this.getModel(model);
@@ -55,7 +77,7 @@ export class LLMService {
         maxTokens: 4096,
         temperature: 0.7,
         maxSteps: 5, // Enable multi-step tool calls
-        ...(enableTools && { tools }),
+        ...(enableTools && { tools: this.getToolsWithWorkspace(workspaceDir) }),
       };
 
       const result = streamText(streamConfig);
@@ -149,7 +171,8 @@ export class LLMService {
     systemPrompt: string,
     messages: Message[],
     model: ModelType = DEFAULT_MODEL,
-    enableTools: boolean = true
+    enableTools: boolean = true,
+    workspaceDir?: string
   ) {
     try {
       const modelInstance = this.getModel(model);
@@ -162,7 +185,7 @@ export class LLMService {
         maxTokens: 4096,
         temperature: 0.7,
         maxSteps: 5, // Enable multi-step tool calls
-        ...(enableTools && { tools }),
+        ...(enableTools && { tools: this.getToolsWithWorkspace(workspaceDir) }),
       };
 
       const result = await generateText(config);

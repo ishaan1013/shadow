@@ -135,7 +135,7 @@ class LocalCodingAgent {
           id: this.taskId,
           title: "Local Agent Session",
           description: "Local coding agent session",
-          repoUrl: config.workspaceDir, // Use workspace dir as "repo"
+          repoUrl: "", // No repo for local sessions
           branch: "local",
           userId: defaultUser.id,
           mode: "FULL_AUTO",

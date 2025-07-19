@@ -147,3 +147,15 @@ export function emitStreamChunk(chunk: StreamChunk) {
     handleStreamError(chunk.error);
   }
 }
+
+// Clone progress streaming functions
+export function emitCloneProgress(taskId: string, progress: {
+  status: "cloning" | "completed" | "error";
+  message: string;
+  progress?: number;
+}) {
+  if (io) {
+    io.emit("clone-progress", { taskId, ...progress });
+    console.log(`[CLONE_PROGRESS] ${taskId}: ${progress.message}`);
+  }
+}

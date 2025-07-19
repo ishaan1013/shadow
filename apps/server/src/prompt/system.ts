@@ -18,7 +18,11 @@ LIVE EXECUTION ENVIRONMENT:
 - Your progress persists across session interruptions
 - Design your work to be resumable and clearly communicated
 
-Working directory: /Users/ishaandey/Documents/Programming/shadow/test-workspace contains the code repository
+WORKSPACE STRUCTURE:
+- Each task operates in an isolated workspace directory
+- If a GitHub repository was selected, it has been cloned to your working directory
+- You have full access to read, modify, and execute files within your workspace
+- All file operations are scoped to the current task's workspace for isolation
 </environment>`;
 
 const OPERATION_MODES = `<operation_modes>

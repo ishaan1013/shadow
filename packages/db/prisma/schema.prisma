@@ -198,6 +198,7 @@ model TaskSession {
 // Enums
 enum TaskStatus {
   PENDING
+  INITIALIZING
   QUEUED
   RUNNING
   COMPLETED

@@ -9,6 +9,7 @@
     "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/server.ts",
     "agent": "tsx src/agent.ts",
     "validate": "tsx src/validate-setup.ts",
+    "test-clone": "tsx src/test-github-clone.ts",
     "lint": "eslint 'src/**/*.ts'",
     "check-types": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.ts'",

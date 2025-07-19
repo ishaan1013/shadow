@@ -1,9 +1,12 @@
 import { prisma } from "@repo/db";
 import { Message, MessageMetadata, ModelType } from "@repo/types";
 import { randomUUID } from "crypto";
+import path from "path";
 import { type ChatMessage } from "../../../packages/db/src/client";
+import config from "./config";
 import { LLMService } from "./llm";
 import { systemPrompt } from "./prompt/system";
+import { GitHubCloneService } from "./services/github-clone";
 import {
   emitStreamChunk,
   endStream,
@@ -18,6 +21,52 @@ export class ChatService {
 
   constructor() {
     this.llmService = new LLMService();
+  }
+
+  /**
+   * Get the workspace directory for a specific task
+   * Returns cloned repo path if task has a repository, otherwise default workspace
+   */
+  private async getTaskWorkspaceDir(taskId: string): Promise<string> {
+    try {
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: { repoUrl: true, branch: true, user: { include: { accounts: true } } },
+      });
+
+      if (!task?.repoUrl || task.repoUrl === "") {
+        // No repository, use default workspace
+        return config.workspaceDir;
+      }
+
+      // Get GitHub access token for clone service
+      const githubAccount = task.user.accounts.find(
+        (account) => account.providerId === "github"
+      );
+
+      if (!githubAccount?.accessToken) {
+        console.warn(`[WORKSPACE] No GitHub token for task ${taskId}, using default workspace`);
+        return config.workspaceDir;
+      }
+
+      // Use cloned repository path
+      const cloneService = new GitHubCloneService(githubAccount.accessToken);
+      const clonedRepoPath = cloneService.getClonedRepoPath(taskId, task.repoUrl);
+      
+      // Verify the cloned repo exists
+      const isCloned = await cloneService.isRepositoryCloned(taskId, task.repoUrl);
+      if (!isCloned) {
+        console.warn(`[WORKSPACE] Repository not cloned for task ${taskId}, using default workspace`);
+        return config.workspaceDir;
+      }
+
+      console.log(`[WORKSPACE] Using cloned repo workspace for task ${taskId}: ${clonedRepoPath}`);
+      return clonedRepoPath;
+
+    } catch (error) {
+      console.error(`[WORKSPACE] Error getting workspace for task ${taskId}:`, error);
+      return config.workspaceDir;
+    }
   }
 
   private async getNextSequence(taskId: string): Promise<number> {
@@ -137,6 +186,9 @@ export class ChatService {
       await this.saveUserMessage(taskId, userMessage);
     }
 
+    // Get task workspace directory for tools
+    const taskWorkspaceDir = await this.getTaskWorkspaceDir(taskId);
+
     // Get chat history for context
     const history = await this.getChatHistory(taskId);
 
@@ -162,6 +214,7 @@ export class ChatService {
     console.log(
       `[CHAT] Using model: ${llmModel}, Tools enabled: ${enableTools}`
     );
+    console.log(`[CHAT] Workspace directory: ${taskWorkspaceDir}`);
 
     // Start streaming
     startStream();
@@ -181,7 +234,8 @@ export class ChatService {
         systemPrompt,
         messages,
         llmModel,
-        enableTools
+        enableTools,
+        taskWorkspaceDir // Pass workspace directory to tools
       )) {
         // Emit the chunk directly to clients
         emitStreamChunk(chunk);

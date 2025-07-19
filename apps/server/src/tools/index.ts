@@ -69,6 +69,7 @@ export const tools = {
       explanation: z
         .string()
         .describe("One sentence explanation as to why this tool is being used"),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
     execute: async ({
       target_file,
@@ -76,11 +77,13 @@ export const tools = {
       start_line_one_indexed,
       end_line_one_indexed_inclusive,
       explanation,
+      workspaceDir,
     }) => {
-      try {
-        console.log(`[READ_FILE] ${explanation}`);
+              try {
+          console.log(`[READ_FILE] ${explanation}`);
 
-        const filePath = path.resolve(config.workspaceDir, target_file);
+          const baseDir = workspaceDir || config.workspaceDir;
+          const filePath = path.resolve(baseDir, target_file);
         const content = await fs.readFile(filePath, "utf-8");
         const lines = content.split("\n");
 
@@ -136,8 +139,9 @@ export const tools = {
         .describe(
           "One sentence explanation as to why this command needs to be run"
         ),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
-    execute: async ({ command, is_background, explanation }) => {
+    execute: async ({ command, is_background, explanation, workspaceDir }) => {
       console.log(`[TERMINAL_CMD] ${explanation}`);
       console.log(`Command: ${command} (background: ${is_background})`);
 
@@ -153,11 +157,12 @@ export const tools = {
         };
       }
 
-      try {
-        const options = {
-          cwd: config.workspaceDir,
-          timeout: is_background ? undefined : 30000, // 30 second timeout for non-background commands
-        };
+              try {
+          const baseDir = workspaceDir || config.workspaceDir;
+          const options = {
+            cwd: baseDir,
+            timeout: is_background ? undefined : 30000, // 30 second timeout for non-background commands
+          };
 
         if (is_background) {
           // For background commands, start and don't wait
@@ -204,8 +209,9 @@ export const tools = {
       explanation: z
         .string()
         .describe("One sentence explanation as to why this tool is being used"),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
-    execute: async ({ relative_workspace_path, explanation }) => {
+    execute: async ({ relative_workspace_path, explanation, workspaceDir }) => {
       try {
         console.log(`[LIST_DIR] ${explanation}`);
 
@@ -220,7 +226,8 @@ export const tools = {
           normalizedPath = ".";
         }
 
-        const dirPath = path.resolve(config.workspaceDir, normalizedPath);
+        const baseDir = workspaceDir || config.workspaceDir;
+        const dirPath = path.resolve(baseDir, normalizedPath);
         console.log(`[LIST_DIR] Resolved path: ${dirPath}`);
         const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
@@ -266,6 +273,7 @@ export const tools = {
       explanation: z
         .string()
         .describe("One sentence explanation as to why this tool is being used"),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
     execute: async ({
       query,
@@ -273,11 +281,13 @@ export const tools = {
       exclude_pattern,
       case_sensitive = false,
       explanation,
+      workspaceDir,
     }) => {
-      try {
-        console.log(`[GREP_SEARCH] ${explanation}`);
+              try {
+          console.log(`[GREP_SEARCH] ${explanation}`);
 
-        let command = `rg "${query}" "${config.workspaceDir}"`;
+          const baseDir = workspaceDir || config.workspaceDir;
+          let command = `rg "${query}" "${baseDir}"`;
 
         if (!case_sensitive) {
           command += " -i";
@@ -341,12 +351,14 @@ export const tools = {
       code_edit: z
         .string()
         .describe("The precise lines of code to edit or create"),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
-    execute: async ({ target_file, instructions, code_edit }) => {
-      try {
-        console.log(`[EDIT_FILE] ${instructions}`);
+    execute: async ({ target_file, instructions, code_edit, workspaceDir }) => {
+              try {
+          console.log(`[EDIT_FILE] ${instructions}`);
 
-        const filePath = path.resolve(config.workspaceDir, target_file);
+          const baseDir = workspaceDir || config.workspaceDir;
+          const filePath = path.resolve(baseDir, target_file);
         const dirPath = path.dirname(filePath);
 
         // Ensure directory exists
@@ -413,12 +425,14 @@ export const tools = {
       new_string: z
         .string()
         .describe("The edited text to replace the old_string"),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
-    execute: async ({ file_path, old_string, new_string }) => {
-      try {
-        console.log(`[SEARCH_REPLACE] Replacing text in ${file_path}`);
+    execute: async ({ file_path, old_string, new_string, workspaceDir }) => {
+              try {
+          console.log(`[SEARCH_REPLACE] Replacing text in ${file_path}`);
 
-        const filePath = path.resolve(config.workspaceDir, file_path);
+          const baseDir = workspaceDir || config.workspaceDir;
+          const filePath = path.resolve(baseDir, file_path);
         const content = await fs.readFile(filePath, "utf-8");
 
         const occurrences = content.split(old_string).length - 1;
@@ -469,19 +483,21 @@ export const tools = {
       explanation: z
         .string()
         .describe("One sentence explanation as to why this tool is being used"),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
-    execute: async ({ query, explanation }) => {
-      try {
-        console.log(`[FILE_SEARCH] ${explanation}`);
+    execute: async ({ query, explanation, workspaceDir }) => {
+              try {
+          console.log(`[FILE_SEARCH] ${explanation}`);
 
-        const command = `find "${config.workspaceDir}" -name "*${query}*" -type f | head -10`;
+          const baseDir = workspaceDir || config.workspaceDir;
+          const command = `find "${baseDir}" -name "*${query}*" -type f | head -10`;
         const { stdout } = await execAsync(command);
 
-        const files = stdout
-          .trim()
-          .split("\n")
-          .filter((line) => line.length > 0)
-          .map((file) => file.replace(config.workspaceDir + "/", ""));
+                  const files = stdout
+            .trim()
+            .split("\n")
+            .filter((line) => line.length > 0)
+            .map((file) => file.replace(baseDir + "/", ""));
 
         return {
           success: true,
@@ -508,12 +524,14 @@ export const tools = {
       explanation: z
         .string()
         .describe("One sentence explanation as to why this tool is being used"),
+      workspaceDir: z.string().optional().describe("Workspace directory override"),
     }),
-    execute: async ({ target_file, explanation }) => {
-      try {
-        console.log(`[DELETE_FILE] ${explanation}`);
+    execute: async ({ target_file, explanation, workspaceDir }) => {
+              try {
+          console.log(`[DELETE_FILE] ${explanation}`);
 
-        const filePath = path.resolve(config.workspaceDir, target_file);
+          const baseDir = workspaceDir || config.workspaceDir;
+          const filePath = path.resolve(baseDir, target_file);
         await fs.unlink(filePath);
 
         return {
@@ -552,6 +570,8 @@ export function approveTerminalCommand(commandId: string, approved: boolean) {
   if (approved) {
     // Execute the approved command
     const { command, resolve } = pending;
+    // Note: For pending commands, we use the default workspace dir
+    // since we don't have access to the task context here
     execAsync(command, { cwd: config.workspaceDir })
       .then(({ stdout, stderr }) => {
         resolve({

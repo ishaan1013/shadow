@@ -8,6 +8,7 @@ import type { Task } from "@/lib/db-operations/get-task";
 import { queryClient } from "@/lib/query-client";
 import { socket } from "@/lib/socket";
 import type { Message, StreamChunk, ToolStatusType } from "@repo/types";
+import { GitBranch, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 // Types for streaming tool calls
@@ -37,6 +38,11 @@ export function TaskPageContent({
   const [streamingToolCalls, setStreamingToolCalls] = useState<
     StreamingToolCall[]
   >([]);
+  const [cloneProgress, setCloneProgress] = useState<{
+    status: "cloning" | "completed" | "error";
+    message: string;
+    progress?: number;
+  } | null>(null);
 
   useEffect(() => {
     function onConnect() {
@@ -148,6 +154,28 @@ export function TaskPageContent({
       setIsStreaming(false);
     }
 
+    function onCloneProgress(data: {
+      taskId: string;
+      status: "cloning" | "completed" | "error";
+      message: string;
+      progress?: number;
+    }) {
+      if (data.taskId === taskId) {
+        setCloneProgress({
+          status: data.status,
+          message: data.message,
+          progress: data.progress,
+        });
+
+        // Auto-hide completed or error states after a delay
+        if (data.status === "completed" || data.status === "error") {
+          setTimeout(() => {
+            setCloneProgress(null);
+          }, 3000);
+        }
+      }
+    }
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("chat-history", onChatHistory);
@@ -156,6 +184,7 @@ export function TaskPageContent({
     socket.on("stream-complete", onStreamComplete);
     socket.on("stream-error", onStreamError);
     socket.on("message-error", onMessageError);
+    socket.on("clone-progress", onCloneProgress);
 
     if (!socket.connected) {
       socket.connect();
@@ -170,6 +199,7 @@ export function TaskPageContent({
       socket.off("stream-complete", onStreamComplete);
       socket.off("stream-error", onStreamError);
       socket.off("message-error", onMessageError);
+      socket.off("clone-progress", onCloneProgress);
     };
   }, [taskId]);
 
@@ -235,6 +265,40 @@ export function TaskPageContent({
     <div className="mx-auto flex w-full grow max-w-lg flex-col items-center px-4 sm:px-6 relative z-0">
       {/* Todo: only show if not scrolled to the very top  */}
       <div className="sticky -left-px w-[calc(100%+2px)] top-[calc(3rem+1px)] h-16 bg-gradient-to-b from-background via-background/60 to-transparent -translate-y-px pointer-events-none z-10" />
+
+      {/* Clone Progress Indicator */}
+      {cloneProgress && (
+        <div className="w-full mb-4 p-4 bg-accent/50 border border-border rounded-lg">
+          <div className="flex items-center gap-3">
+            {cloneProgress.status === "cloning" && (
+              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+            )}
+            {cloneProgress.status === "completed" && (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            )}
+            {cloneProgress.status === "error" && (
+              <XCircle className="h-4 w-4 text-red-500" />
+            )}
+            
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <GitBranch className="h-3 w-3" />
+                <span className="text-sm font-medium">Repository Setup</span>
+              </div>
+              <p className="text-sm text-muted-foreground">{cloneProgress.message}</p>
+              
+              {cloneProgress.progress !== undefined && cloneProgress.status === "cloning" && (
+                <div className="mt-2 w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${cloneProgress.progress}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <Messages messages={displayMessages} />
       <PromptForm
