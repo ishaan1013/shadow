@@ -1,4 +1,5 @@
 import { Pinecone, Index } from '@pinecone-database/pinecone'
+import { GraphNode } from '../graph';
 
 interface CodeBlockRecord {
     id: string;
@@ -39,11 +40,36 @@ class PineconeHandler {
         return records.length;
     }
 
-    async chunkRecords(records: CodeBlockRecord[], chunkSize: number): Promise<CodeBlockRecord[][]> {
-        const chunks: CodeBlockRecord[][] = [];
-        for (let i = 0; i < records.length; i += chunkSize) {
-            chunks.push(records.slice(i, i + chunkSize));
+    async chunkRecords(records: GraphNode[], maxLinesPerChunk = 50, maxRecordsPerBatch = 100): Promise<GraphNode[][]> {
+        const chunks: GraphNode[][] = [];
+        let currentChunk: GraphNode[] = [];
+        let currentLineSpan = 0;
+        
+        for (const record of records) {
+            const lineSpan = (record.loc?.endLine || 0) - (record.loc?.startLine || 0) + 1;
+            
+            const pathChanged = currentChunk.length > 0 && 
+                currentChunk[0]?.path !== record.path;
+            
+            if (currentChunk.length >= maxRecordsPerBatch || 
+                currentLineSpan + lineSpan > maxLinesPerChunk ||
+                pathChanged) {
+                if (currentChunk.length > 0) {
+                    chunks.push([...currentChunk]);
+                    currentChunk = [];
+                    currentLineSpan = 0;
+                }
+            }
+            
+            currentChunk.push(record);
+            currentLineSpan += lineSpan;
         }
+        
+        // Add final chunk
+        if (currentChunk.length > 0) {
+            chunks.push(currentChunk);
+        }
+        
         return chunks;
     }
 

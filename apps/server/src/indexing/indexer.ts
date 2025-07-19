@@ -1,5 +1,4 @@
 import { chunkSymbol } from "@/indexing/chunker";
-import { ChunkNode } from "@/indexing/embedding/types";
 import { embedGraphChunks } from "@/indexing/embedding/embed";
 import { extractGeneric } from "@/indexing/extractors/generic";
 import { Graph, GraphEdge, GraphNode } from "@/indexing/graph";
@@ -8,6 +7,7 @@ import logger from "@/indexing/logger";
 import { getHash, getNodeHash } from "@/indexing/utils/hash";
 import { sliceByLoc } from "@/indexing/utils/text";
 import { tokenize } from "@/indexing/utils/tokenize";
+import PineconeHandler from "@/indexing/embedding/pineconeService";
 import TreeSitter from "tree-sitter";
 
 export interface FileContentResponse {
@@ -353,16 +353,49 @@ async function indexRepo(
     // Embed chunks if requested
     if (embed) {
       logger.info("Computing embeddings...");
-      const chunks = [...graph.nodes.values()].filter(
+      const chunks: GraphNode[] = [...graph.nodes.values()].filter(
         (n) => n.kind === "CHUNK"
-      ) as unknown as ChunkNode[];
+      );
       logger.info(`Found ${chunks.length} chunks to embed`);
+
       if (chunks.length > 0) {
         await embedGraphChunks(chunks, { provider: "local-transformers" });
         logger.info(`Embedded ${chunks.length} chunks`);
         // Debug: check if embeddings were actually added
         const withEmbeddings = chunks.filter((ch) => ch.embedding);
         logger.info(`${withEmbeddings.length} chunks have embeddings`);
+
+        // Upload to Pinecone
+        if (withEmbeddings.length > 0) {
+          logger.info("Uploading embeddings to Pinecone...");
+          const pinecone = new PineconeHandler("code-search", repoName.replace("/", "-"));
+
+          // Chunk the GraphNodes directly
+          const recordChunks = await pinecone.chunkRecords(withEmbeddings, 50, 100);
+          let totalUploaded = 0;
+
+          for (const recordChunk of recordChunks) {
+            // Convert GraphNodes to Pinecone records for each chunk
+            const pineconeRecords = recordChunk.map((chunk) => ({
+              id: chunk.id,
+              values: Array.from(chunk.embedding),
+              metadata: {
+                code: chunk.code || "",
+                path: chunk.path,
+                name: chunk.name,
+                lang: chunk.lang,
+                line_start: chunk.loc?.startLine || 0,
+                line_end: chunk.loc?.endLine || 0,
+                repo: repoName
+              }
+            }));
+            
+            const uploaded = await pinecone.upsertRecords(pineconeRecords);
+            totalUploaded += uploaded;
+          }
+
+          logger.info(`Uploaded ${totalUploaded} embeddings to Pinecone`);
+        }
       }
     } else {
       logger.info("Embedding skipped (embed=false).");

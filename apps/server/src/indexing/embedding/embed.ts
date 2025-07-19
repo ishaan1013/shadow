@@ -1,7 +1,8 @@
-import { defaultEmbedTextsOptions, EmbeddingResult, EmbedViaProviderOptions, ChunkNode } from "./types";
+import { defaultEmbedTextsOptions, EmbeddingResult, EmbedViaProviderOptions } from "./types";
 import { embedViaJinaAPI } from "./jinaAPI";
 import { embedViaLocalTransformers } from "./localTransformer";
 import { cheapHashEmbedding } from "./cheapHash";
+import { GraphNode } from "../graph";
 
 // ==== Main dispatcher ==== //
 export async function embedTexts(
@@ -27,7 +28,7 @@ export async function embedTexts(
   
 // ==== Graph wiring helper ==== //
 export async function embedGraphChunks(
-    chunks: ChunkNode[],
+    chunks: GraphNode[],
     options: Partial<EmbedViaProviderOptions> = {}
 ): Promise<number> {
     const opts = { ...defaultEmbedTextsOptions, ...options };
@@ -36,8 +37,9 @@ export async function embedGraphChunks(
     const { embeddings, dim } = await embedTexts(texts, opts);
     for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        if (chunk) {
-            chunk.embedding = embeddings[i];
+        const embedding = embeddings[i];
+        if (chunk && embedding) {
+            chunk.embedding = Array.from(embedding);
             // record dim in meta for persistence
             if (chunk.meta) {
                 chunk.meta.embedding_dim = dim;
