@@ -1,6 +1,7 @@
 import { prisma } from "@repo/db";
 import { Message, MessageMetadata, ModelType } from "@repo/types";
 import { randomUUID } from "crypto";
+import path from "path";
 import { type ChatMessage } from "../../../packages/db/src/client";
 import config from "./config";
 import { LLMService } from "./llm";
@@ -30,11 +31,7 @@ export class ChatService {
     try {
       const task = await prisma.task.findUnique({
         where: { id: taskId },
-        select: {
-          repoUrl: true,
-          branch: true,
-          user: { include: { accounts: true } },
-        },
+        select: { repoUrl: true, branch: true, user: { include: { accounts: true } } },
       });
 
       if (!task?.repoUrl || task.repoUrl === "") {
@@ -48,40 +45,26 @@ export class ChatService {
       );
 
       if (!githubAccount?.accessToken) {
-        console.warn(
-          `[WORKSPACE] No GitHub token for task ${taskId}, using default workspace`
-        );
+        console.warn(`[WORKSPACE] No GitHub token for task ${taskId}, using default workspace`);
         return config.workspaceDir;
       }
 
       // Use cloned repository path
       const cloneService = new GitHubCloneService(githubAccount.accessToken);
-      const clonedRepoPath = cloneService.getClonedRepoPath(
-        taskId,
-        task.repoUrl
-      );
-
+      const clonedRepoPath = cloneService.getClonedRepoPath(taskId, task.repoUrl);
+      
       // Verify the cloned repo exists
-      const isCloned = await cloneService.isRepositoryCloned(
-        taskId,
-        task.repoUrl
-      );
+      const isCloned = await cloneService.isRepositoryCloned(taskId, task.repoUrl);
       if (!isCloned) {
-        console.warn(
-          `[WORKSPACE] Repository not cloned for task ${taskId}, using default workspace`
-        );
+        console.warn(`[WORKSPACE] Repository not cloned for task ${taskId}, using default workspace`);
         return config.workspaceDir;
       }
 
-      console.log(
-        `[WORKSPACE] Using cloned repo workspace for task ${taskId}: ${clonedRepoPath}`
-      );
+      console.log(`[WORKSPACE] Using cloned repo workspace for task ${taskId}: ${clonedRepoPath}`);
       return clonedRepoPath;
+
     } catch (error) {
-      console.error(
-        `[WORKSPACE] Error getting workspace for task ${taskId}:`,
-        error
-      );
+      console.error(`[WORKSPACE] Error getting workspace for task ${taskId}:`, error);
       return config.workspaceDir;
     }
   }
