@@ -2,8 +2,12 @@ import indexRepo, { IndexRepoOptions } from "@/indexing/indexer";
 import express from "express";
 import TreeSitter from "tree-sitter";
 import { getLanguageForPath } from "./languages";
+import { retrieve } from "./retrieval";
+import PineconeHandler from "./embedding/pineconeService";
 
 const router = express.Router();
+const pinecone = new PineconeHandler();
+
 interface CodeBody {
   text: string;
   language: string;
@@ -55,6 +59,30 @@ router.post(
       options
     );
     res.json({ graph, graphJSON, invertedIndex, embeddings });
+  }
+);
+
+router.post(
+  "/search",
+  async (
+    req: express.Request<{}, {}, { query: string; namespace: string; topK?: number; fields?: string[] }>,
+    res
+  ) => {
+    const { query, namespace, topK, fields } = req.body;
+    const response = await retrieve(query, namespace, topK, fields);
+    res.json(response);
+  }
+);
+
+router.delete(
+  "/clear-namespace",
+  async (
+    req: express.Request<{}, {}, { namespace: string }>,
+    res
+  ) => {
+    const { namespace } = req.body;
+    await pinecone.clearNamespace(namespace);
+    res.json({ message: "Namespace cleared" });
   }
 );
 

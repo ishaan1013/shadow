@@ -9,6 +9,7 @@ import { sliceByLoc } from "@/indexing/utils/text";
 import { tokenize } from "@/indexing/utils/tokenize";
 import PineconeHandler from "@/indexing/embedding/pineconeService";
 import TreeSitter from "tree-sitter";
+import { embedAndUpsertToPinecone } from "./embedder";
 
 export interface FileContentResponse {
   content: string;
@@ -25,6 +26,7 @@ export interface GitHubFileResponse {
 export interface IndexRepoOptions {
   maxLines?: number;
   embed?: boolean;
+  usePinecone?: boolean;
   outDir?: string;
   force?: boolean;
   paths?: string[] | null;
@@ -93,7 +95,7 @@ async function indexRepo(
   invertedIndex: any;
   embeddings?: { index: any; binary: Buffer };
 }> {
-  const { maxLines = 200, embed = false, paths = null } = options || {};
+  const { maxLines = 200, embed = false, paths = null, usePinecone = true } = options || {};
 
   logger.info(
     `Indexing ${repoName}${paths ? " (filtered)" : ""}${embed ? " + embeddings" : ""}`
@@ -351,7 +353,11 @@ async function indexRepo(
       // ================================ END OF THIS CODE SHOULD NOT BE CHANGED ================================ //
     } // END OF FILE LOOP
     // Embed chunks if requested
-    if (embed) {
+
+    // Output is the graph with nodes, adjacencies and inverted index
+    // Only the nodes get embedded
+    const pinecone = new PineconeHandler();
+    if (embed && !usePinecone) {
       logger.info("Computing embeddings...");
       const chunks: GraphNode[] = [...graph.nodes.values()].filter(
         (n) => n.kind === "CHUNK"
@@ -359,7 +365,7 @@ async function indexRepo(
       logger.info(`Found ${chunks.length} chunks to embed`);
 
       if (chunks.length > 0) {
-        await embedGraphChunks(chunks, { provider: "local-transformers" });
+        // await embedGraphChunks(chunks, { provider: "local-transformers" }); // Not used if usePinecone is true
         logger.info(`Embedded ${chunks.length} chunks`);
         // Debug: check if embeddings were actually added
         const withEmbeddings = chunks.filter((ch) => ch.embedding);
@@ -368,7 +374,6 @@ async function indexRepo(
         // Upload to Pinecone
         if (withEmbeddings.length > 0) {
           logger.info("Uploading embeddings to Pinecone...");
-          const pinecone = new PineconeHandler("code-search", repoName.replace("/", "-"));
 
           // Chunk the GraphNodes directly
           const recordChunks = await pinecone.chunkRecords(withEmbeddings, 50, 100);
@@ -390,13 +395,16 @@ async function indexRepo(
               }
             }));
             
-            const uploaded = await pinecone.upsertRecords(pineconeRecords);
+            const uploaded = await pinecone.upsertRecords(pineconeRecords, repoName.replace("/", "-"));
             totalUploaded += uploaded;
           }
 
           logger.info(`Uploaded ${totalUploaded} embeddings to Pinecone`);
         }
       }
+    } else if (embed && usePinecone) {
+      logger.info("Embedding and uploading to Pinecone...");      
+      await embedAndUpsertToPinecone(Array.from(graph.nodes.values()), repoName);
     } else {
       logger.info("Embedding skipped (embed=false).");
     }

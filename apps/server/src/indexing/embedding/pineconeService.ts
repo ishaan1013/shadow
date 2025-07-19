@@ -1,5 +1,6 @@
 import { Pinecone, Index } from '@pinecone-database/pinecone'
 import { GraphNode } from '../graph';
+import logger from '../logger';
 
 interface CodeBlockRecord {
     id: string;
@@ -8,17 +9,15 @@ interface CodeBlockRecord {
     text: string;
 }
 class PineconeHandler {
-    private pc: Pinecone;
+    public pc: Pinecone;
     private client: Index;
     private embeddingModel: string;
     private indexName: string;
-    private namespace: string;
-
-    constructor(indexName: string, namespace: string) {
+    // Hardcoded to shadow index for now
+    constructor(indexName: string = "shadow") {
         this.pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY || '' });
         this.indexName = indexName;
-        this.namespace = namespace;
-        this.client = this.pc.Index(this.indexName).namespace(this.namespace);
+        this.client = this.pc.Index(this.indexName);
         this.embeddingModel = process.env.EMBEDDING_MODEL || 'llama-text-embed-v2'; // Default to llama-text-embed-v2
     }
 
@@ -35,9 +34,44 @@ class PineconeHandler {
         });
     }
 
-    async upsertRecords(records: any[]): Promise<number> {
-        await this.client.upsert(records);
-        return records.length;
+    async clearNamespace(namespace: string) {
+        await this.client.namespace(namespace).deleteAll();
+    }
+
+    async upsertRecords(records: any[], namespace: string): Promise<number> {
+        try {
+            console.log("Sample record:", records[0]);
+            
+            // Convert to upsertRecords format and filter out empty text
+            const autoEmbedRecords = records
+                .filter(record => {
+                    const text = record.metadata.code || record.metadata.text || "";
+                    if (!text.trim()) {
+                        console.log(`Skipping record ${record.id} - no text to embed`);
+                        return false;
+                    }
+                    return true;
+                })
+                .map(record => ({
+                    _id: record.id,
+                    text: record.metadata.code || record.metadata.text || "",
+                    ...record.metadata
+                }));
+
+            if (autoEmbedRecords.length === 0) {
+                console.log("No records with text to upsert, skipping batch");
+                return 0;
+            }
+
+            console.log(`Upserting ${autoEmbedRecords.length} records with text (filtered from ${records.length})`);
+            
+            // Use upsertRecords for auto-embedding
+            await this.client.namespace(namespace).upsertRecords(autoEmbedRecords);
+            return autoEmbedRecords.length;
+        } catch (error) {
+            logger.error(`Error upserting records: ${error}`);
+            throw error;    
+        }
     }
 
     async chunkRecords(records: GraphNode[], maxLinesPerChunk = 50, maxRecordsPerBatch = 100): Promise<GraphNode[][]> {
@@ -73,8 +107,8 @@ class PineconeHandler {
         return chunks;
     }
 
-    async searchRecords(query: string, topK: number = 3, fields: string[]) {
-        const response = await this.client.searchRecords({
+    async searchRecords(query: string, namespace: string, topK: number = 3, fields: string[]) {
+        const response = await this.client.namespace(namespace).searchRecords({
             query: {
             topK: 3,
             inputs: { text: query },

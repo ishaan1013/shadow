@@ -15,6 +15,9 @@
  */
 
 import { logger } from "./logger";
+import PineconeHandler from "./embedding/pineconeService";
+import { GraphNode } from "./graph";
+import { getNamespaceFromRepo } from "./utils/namespace";
 
 type EmbeddingProvider = "jina-api" | "local-transformers" | "cheap-hash";
 const EMBEDDING_MODEL = "jinaai/jina-embeddings-v2-base-code";
@@ -233,7 +236,7 @@ async function embedTexts(
 // ------------------------------
 
 async function embedGraphChunks(
-  chunks: ChunkNode[],
+  chunks: GraphNode[],
   opts: EmbedTextsOptions = {}
 ): Promise<number> {
   // gather codes
@@ -241,8 +244,8 @@ async function embedGraphChunks(
   const { embeddings, dim } = await embedTexts(texts, opts);
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    if (chunk) {
-      chunk.embedding = embeddings[i];
+    if (chunk && embeddings[i]) {
+      chunk.embedding = Array.from(embeddings[i]!);
       // record dim in meta for persistence
       if (chunk.meta) {
         chunk.meta.embedding_dim = dim;
@@ -254,10 +257,49 @@ async function embedGraphChunks(
   return dim;
 }
 
+async function embedAndUpsertToPinecone(
+  nodes: GraphNode[],
+  repo: string,
+  opts: EmbedTextsOptions = {}
+): Promise<number> {
+  const pinecone = new PineconeHandler();
+  const namespace = getNamespaceFromRepo(repo);
+
+  console.log('nodes[10]', nodes[10]);
+  // Chunk by line ranges and upload
+  const recordChunks: GraphNode[][] = await pinecone.chunkRecords(nodes);
+
+
+
+  let totalUploaded = 0;
+  for (const recordChunk of recordChunks) {
+    // Convert each chunk to Pinecone format
+    const batchRecords = recordChunk.map((chunk) => ({
+      id: chunk.id,
+      metadata: {
+        code: chunk.code || "",
+        path: chunk.path,
+        name: chunk.name,
+        lang: chunk.lang,
+        line_start: chunk.loc?.startLine || 0,
+        line_end: chunk.loc?.endLine || 0,
+        kind: chunk.kind,
+      }
+    }));
+    
+    const uploaded = await pinecone.upsertRecords(batchRecords, namespace);
+    totalUploaded += uploaded;
+  }
+  
+  logger.info(`Embedded and uploaded ${totalUploaded} chunks to Pinecone`);
+  return totalUploaded;
+}
+
 export {
   cheapHashEmbedding,
   embedGraphChunks,
   embedTexts,
   embedViaJinaAPI,
   embedViaLocalTransformers,
+  embedAndUpsertToPinecone,
 };
