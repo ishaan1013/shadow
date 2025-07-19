@@ -10,9 +10,11 @@ import { ListDirTool } from "./list-dir";
 import { ReadFileTool } from "./read-file";
 import { RunTerminalCmdTool } from "./run-terminal-cmd";
 import { SearchReplaceTool } from "./search-replace";
+import { TodoWriteTool } from "./todo-write";
 
 // Tool component registry
 const TOOL_COMPONENTS = {
+  todo_write: TodoWriteTool,
   codebase_search: CodebaseSearchTool,
   read_file: ReadFileTool,
   run_terminal_cmd: RunTerminalCmdTool,
@@ -81,4 +83,5 @@ export {
   ReadFileTool,
   RunTerminalCmdTool,
   SearchReplaceTool,
+  TodoWriteTool,
 };

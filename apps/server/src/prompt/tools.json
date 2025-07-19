@@ -1,5 +1,46 @@
 [
   {
+    "description": "Create and manage a structured task list during coding sessions. Use this to track progress on complex multi-step tasks and demonstrate thoroughness. Use proactively for complex tasks (3+ steps), when users request todo lists, after receiving instructions, after completing tasks, or when starting new work. Only ONE task should be in_progress at a time. Update status in real-time as work progresses.",
+    "name": "todo_write",
+    "parameters": {
+      "properties": {
+        "explanation": {
+          "description": "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+          "type": "string"
+        },
+        "merge": {
+          "description": "Whether to merge with existing todos (true) or replace them (false). Use false when creating a new todo list, true when updating existing todos.",
+          "type": "boolean"
+        },
+        "todos": {
+          "description": "Array of todo items to create or update. Each item needs id, content, and status.",
+          "items": {
+            "properties": {
+              "content": {
+                "description": "Descriptive content of the todo item - should be specific and actionable",
+                "type": "string"
+              },
+              "id": {
+                "description": "Unique identifier for the todo item - use descriptive names like 'setup', 'auth', 'api'",
+                "type": "string"
+              },
+              "status": {
+                "description": "Current status of the todo item",
+                "enum": ["pending", "in_progress", "completed", "cancelled"],
+                "type": "string"
+              }
+            },
+            "required": ["id", "content", "status"],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["merge", "todos", "explanation"],
+      "type": "object"
+    }
+  },
+  {
     "description": "Find snippets of code from the codebase most relevant to the search query.\nThis is a semantic search tool, so the query should ask for something semantically matching what is needed.\nIf it makes sense to only search in particular directories, please specify them in the target_directories field.\nUnless there is a clear reason to use your own search query, please just reuse the user's exact query with their wording.\nTheir exact wording/phrasing can often be helpful for the semantic search query. Keeping the same exact question format can also be helpful.",
     "name": "codebase_search",
     "parameters": {

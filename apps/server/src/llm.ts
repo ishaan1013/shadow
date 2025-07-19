@@ -10,7 +10,9 @@ import {
 import { CoreMessage, LanguageModel, generateText, streamText } from "ai";
 import { DEFAULT_MODEL } from "./chat";
 import config from "./config";
-import { tools } from "./tools";
+import { createTools } from "./tools";
+
+const MAX_STEPS = 20;
 
 export class LLMService {
   private getModel(modelId: ModelType): LanguageModel {
@@ -38,7 +40,8 @@ export class LLMService {
     systemPrompt: string,
     messages: Message[],
     model: ModelType = DEFAULT_MODEL,
-    enableTools: boolean = true
+    enableTools: boolean = true,
+    taskId?: string
   ): AsyncGenerator<StreamChunk> {
     try {
       const modelInstance = this.getModel(model);
@@ -48,14 +51,17 @@ export class LLMService {
 
       console.log("coreMessages", coreMessages);
 
+      // Create tools with task context if taskId is provided
+      const tools = taskId ? createTools(taskId) : undefined;
+
       const streamConfig = {
         model: modelInstance,
         system: systemPrompt,
         messages: coreMessages,
         maxTokens: 4096,
         temperature: 0.7,
-        maxSteps: 5, // Enable multi-step tool calls
-        ...(enableTools && { tools }),
+        maxSteps: MAX_STEPS,
+        ...(enableTools && tools && { tools }),
       };
 
       const result = streamText(streamConfig);
@@ -137,8 +143,7 @@ export class LLMService {
       console.error("LLM Service Error:", error);
       yield {
         type: "error",
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
+        error: error instanceof Error ? error.message : "Unknown error",
         finishReason: "error",
       };
     }
@@ -149,11 +154,15 @@ export class LLMService {
     systemPrompt: string,
     messages: Message[],
     model: ModelType = DEFAULT_MODEL,
-    enableTools: boolean = true
+    enableTools: boolean = true,
+    taskId?: string
   ) {
     try {
       const modelInstance = this.getModel(model);
       const coreMessages: CoreMessage[] = messages.map(toCoreMessage);
+
+      // Create tools with task context if taskId is provided
+      const tools = taskId ? createTools(taskId) : undefined;
 
       const config = {
         model: modelInstance,
@@ -161,8 +170,8 @@ export class LLMService {
         messages: coreMessages,
         maxTokens: 4096,
         temperature: 0.7,
-        maxSteps: 5, // Enable multi-step tool calls
-        ...(enableTools && { tools }),
+        maxSteps: MAX_STEPS,
+        ...(enableTools && tools && { tools }),
       };
 
       const result = await generateText(config);

@@ -52,7 +52,7 @@ GITHUB_CLIENT_SECRET=
 ```
 
 **apps/server/.env**
-Note: The database and direct URL are only needed here if you want to run the terminal agent for local workspace testing. Use the same values as the DB package, see the next section for more details.
+Note: The database URL is only needed here if you want to run the terminal agent for local workspace testing. Use the same values as the DB package, see the next section for more details.
 
 ```
 ANTHROPIC_API_KEY=
@@ -62,15 +62,12 @@ WORKSPACE_DIR=
 DEBUG=
 
 DATABASE_URL=
-DIRECT_URL=
 ```
 
 **packages/db/.env**
-Note: the direct URL is for non-pooling connections like when running migrate or studio.
 
 ```
 DATABASE_URL=
-DIRECT_URL=
 ```
 
 To develop all apps and packages, ensure you have [turbo installed globally](<(https://turborepo.com/docs/getting-started/installation#global-installation)>).
@@ -101,7 +98,25 @@ npm run format
 
 ### Database
 
-Our database is PostgreSQL hosted on [Neon](https://neon.tech/) (for now), might move elsewhere later. We're using [Prisma](https://www.prisma.io/) as our ORM.
+Set up a local Postgres database for development. Ensure you have Postgres installed and running ([Postgres.app on Mac](https://postgresapp.com/) is easy).
+
+```bash
+psql -U postgres -c "CREATE DATABASE shadow_dev;"
+```
+
+Then update your `packages/db/.env` with:
+
+```
+DATABASE_URL="postgres://postgres:@127.0.0.1:5432/shadow_dev"
+```
+
+To re-set up the database, run:
+
+```
+psql "DROP DATABASE shadow_dev; CREATE DATABASE shadow_dev;"
+```
+
+We're using [Prisma](https://www.prisma.io/) as our ORM.
 
 To generate types from the schema, run:
 

@@ -181,7 +181,8 @@ export class ChatService {
         systemPrompt,
         messages,
         llmModel,
-        enableTools
+        enableTools,
+        taskId // Pass taskId to enable todo tool context
       )) {
         // Emit the chunk directly to clients
         emitStreamChunk(chunk);

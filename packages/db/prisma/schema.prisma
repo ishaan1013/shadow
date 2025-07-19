@@ -4,9 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -96,6 +95,25 @@ model Task {
   fileChanges FileChange[]
   artifacts   Artifact[]
   sessions    TaskSession[]
+  todos       Todo[]
+}
+
+model Todo {
+  id      String     @id @default(cuid())
+  content String
+  status  TodoStatus @default(PENDING)
+
+  // Ordering within task
+  sequence Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, sequence])
+  @@index([taskId, status])
 }
 
 model ChatMessage {
@@ -233,4 +251,11 @@ enum ArtifactType {
   TEST_REPORT // Test results
   BUILD_OUTPUT // Compiled artifacts
   BINARY // Executables, images, etc
+}
+
+enum TodoStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
