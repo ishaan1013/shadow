@@ -32,47 +32,48 @@ async function fetchRepoFiles(
   repo: string,
   path: string = ""
 ): Promise<Array<{ path: string; content: string; type: string }>> {
-  const { Octokit } = await import("@octokit/rest");
-  const octokit = new Octokit({
-    auth: process.env.GITHUB_API_KEY,
-  });
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
+  const url = path ? `${baseUrl}/${path}` : baseUrl;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'shadow-indexer'
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`;
+  }
 
   try {
-    const response = await octokit.repos.getContent({
-      owner,
-      repo,
-      path,
-      ref: "main",
-    });
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    const files: Array<{ path: string; content: string; type: string }> = [];
 
-    if (Array.isArray(response.data)) {
+    if (Array.isArray(data)) {
       // Directory
-      const files: Array<{ path: string; content: string; type: string }> = [];
-      for (const item of response.data) {
+      for (const item of data) {
         if (item.type === "file") {
-          const fileResponse = await octokit.repos.getContent({
-            owner,
-            repo,
-            path: item.path,
-          });
-          // Type assertion to handle the content property
-          const fileData = fileResponse.data as FileContentResponse;
-          const content = Buffer.from(fileData.content, "base64").toString(
-            "utf8"
-          );
+          const fileResponse = await fetch(item.url, { headers });
+          const fileData = await fileResponse.json();
+          const content = Buffer.from(fileData.content, "base64").toString("utf8");
           files.push({ path: fileData.path, content, type: "file" });
         } else if (item.type === "dir") {
           const subFiles = await fetchRepoFiles(owner, repo, item.path);
           files.push(...subFiles);
         }
       }
-      return files;
     } else {
       // Single file
-      const fileData = response.data as FileContentResponse;
-      const content = Buffer.from(fileData.content, "base64").toString("utf8");
-      return [{ path: fileData.path, content, type: "file" }];
+      const content = Buffer.from(data.content, "base64").toString("utf8");
+      files.push({ path: data.path, content, type: "file" });
     }
+
+    return files;
   } catch (error) {
     logger.error(`Error fetching ${owner}/${repo}: ${error}`);
     return [];

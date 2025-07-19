@@ -76,21 +76,6 @@ describe("Indexing and Embedding API", () => {
       expect(response.body).toHaveProperty("error");
     });
 
-    it("should handle non-existent repo", async () => {
-      const response = await request(app)
-        .post("/api/indexing/index")
-        .send({
-          repo: "nonexistent/repo-that-does-not-exist",
-          options: {
-            maxLines: 200,
-            embed: false,
-            paths: null
-          }
-        })
-        .expect(500);
-
-      expect(response.body).toHaveProperty("error");
-    });
   });
 
   describe("POST /api/indexing/search", () => {

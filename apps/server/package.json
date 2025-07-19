@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/server.ts",
+    "dev": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/server.ts",
     "agent": "tsx src/agent.ts",
     "validate": "tsx src/validate-setup.ts",
     "lint": "eslint 'src/**/*.ts'",
