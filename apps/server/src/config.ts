@@ -14,7 +14,10 @@ const configSchema = z
     ANTHROPIC_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     WORKSPACE_DIR: z.string().default("/workspace"),
-    DEBUG: z.string().optional().transform(val => val === "true"),
+    DEBUG: z
+      .string()
+      .optional()
+      .transform((val) => val === "true"),
   })
   .refine((data) => data.ANTHROPIC_API_KEY || data.OPENAI_API_KEY, {
     message:

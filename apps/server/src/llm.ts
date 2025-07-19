@@ -17,7 +17,7 @@ export class LLMService {
     if (!workspaceDir) {
       return tools;
     }
-    
+
     // Create tools with workspace directory context
     // This will be passed to individual tools that need workspace context
     return Object.fromEntries(

@@ -1,3 +1,4 @@
+import { router as IndexingRouter } from "@/indexing/index";
 import { prisma } from "@repo/db";
 import { ModelInfos } from "@repo/types";
 import cors from "cors";
@@ -7,7 +8,6 @@ import { ChatService } from "./chat";
 import { errorHandler } from "./middleware/error-handler";
 import { GitHubCloneService } from "./services/github-clone";
 import { createSocketServer, emitCloneProgress } from "./socket";
-import { router as IndexingRouter } from "@/indexing/index";
 
 const app = express();
 const chatService = new ChatService();
@@ -91,38 +91,49 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
         data: { status: "INITIALIZING" },
       });
 
+      // TODO: Frontend requests should include an auth token
       // Get GitHub access token
       const githubAccount = task.user.accounts.find(
         (account) => account.providerId === "github"
       );
 
       if (!githubAccount?.accessToken) {
-        return res.status(400).json({ 
-          error: "GitHub account not connected or access token not available" 
+        return res.status(400).json({
+          error: "GitHub account not connected or access token not available",
         });
       }
 
       try {
         // Clone the repository
         const cloneService = new GitHubCloneService(githubAccount.accessToken);
-        
+
         // Check if already cloned
-        const isAlreadyCloned = await cloneService.isRepositoryCloned(taskId, task.repoUrl);
-        
+        const isAlreadyCloned = await cloneService.isRepositoryCloned(
+          taskId,
+          task.repoUrl
+        );
+
         if (!isAlreadyCloned) {
-          console.log(`[TASK_INIT] Cloning repository for task ${taskId}: ${task.repoUrl} (${task.branch})`);
-          
-          await cloneService.cloneRepository({
-            repoUrl: task.repoUrl,
-            branch: task.branch,
-            taskId,
-            accessToken: githubAccount.accessToken,
-          }, (progress) => {
-            // Stream clone progress to frontend
-            emitCloneProgress(taskId, progress);
-          });
+          console.log(
+            `[TASK_INIT] Cloning repository for task ${taskId}: ${task.repoUrl} (${task.branch})`
+          );
+
+          await cloneService.cloneRepository(
+            {
+              repoUrl: task.repoUrl,
+              branch: task.branch,
+              taskId,
+              accessToken: githubAccount.accessToken,
+            },
+            (progress) => {
+              // Stream clone progress to frontend
+              emitCloneProgress(taskId, progress);
+            }
+          );
         } else {
-          console.log(`[TASK_INIT] Repository already cloned for task ${taskId}`);
+          console.log(
+            `[TASK_INIT] Repository already cloned for task ${taskId}`
+          );
           emitCloneProgress(taskId, {
             status: "completed",
             message: "Repository already available",
@@ -135,18 +146,17 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
           where: { id: taskId },
           data: { status: "RUNNING" },
         });
-
       } catch (cloneError) {
         console.error("Error cloning repository:", cloneError);
-        
+
         // Update task status to failed
         await prisma.task.update({
           where: { id: taskId },
           data: { status: "FAILED" },
         });
-        
-        return res.status(500).json({ 
-          error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}` 
+
+        return res.status(500).json({
+          error: `Failed to clone repository: ${cloneError instanceof Error ? cloneError.message : "Unknown error"}`,
         });
       }
     }
@@ -172,34 +182,37 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 app.post("/api/test-clone", async (req, res) => {
   try {
     const { repoUrl, branch, accessToken } = req.body;
-    
+
     if (!repoUrl || !branch || !accessToken) {
-      return res.status(400).json({ 
-        error: "repoUrl, branch, and accessToken are required" 
+      return res.status(400).json({
+        error: "repoUrl, branch, and accessToken are required",
       });
     }
 
     const testTaskId = `test-${Date.now()}`;
     const cloneService = new GitHubCloneService(accessToken);
-    
-    const clonedPath = await cloneService.cloneRepository({
-      repoUrl,
-      branch,
-      taskId: testTaskId,
-      accessToken,
-    }, (progress) => {
-      console.log(`Test clone progress: ${progress.message}`);
-    });
 
-    res.json({ 
-      success: true, 
+    const clonedPath = await cloneService.cloneRepository(
+      {
+        repoUrl,
+        branch,
+        taskId: testTaskId,
+        accessToken,
+      },
+      (progress) => {
+        console.log(`Test clone progress: ${progress.message}`);
+      }
+    );
+
+    res.json({
+      success: true,
       clonedPath,
-      message: `Successfully cloned ${repoUrl} (${branch}) to ${clonedPath}` 
+      message: `Successfully cloned ${repoUrl} (${branch}) to ${clonedPath}`,
     });
   } catch (error) {
     console.error("Test clone error:", error);
-    res.status(500).json({ 
-      error: error instanceof Error ? error.message : "Unknown error" 
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });

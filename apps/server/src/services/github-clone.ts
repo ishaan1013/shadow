@@ -39,7 +39,10 @@ export class GitHubCloneService {
   /**
    * Parse GitHub repo URL or owner/repo format
    */
-  private parseRepoIdentifier(repoUrl: string): { owner: string; repo: string } {
+  private parseRepoIdentifier(repoUrl: string): {
+    owner: string;
+    repo: string;
+  } {
     // Handle both "owner/repo" format and full GitHub URLs
     if (repoUrl.includes("github.com")) {
       const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
@@ -50,7 +53,9 @@ export class GitHubCloneService {
     } else if (repoUrl.includes("/")) {
       const [owner, repo] = repoUrl.split("/");
       if (!owner || !repo) {
-        throw new Error(`Invalid repo format. Expected 'owner/repo': ${repoUrl}`);
+        throw new Error(
+          `Invalid repo format. Expected 'owner/repo': ${repoUrl}`
+        );
       }
       return { owner, repo };
     } else {
@@ -117,7 +122,9 @@ export class GitHubCloneService {
       }
 
       if (!branchExists) {
-        throw new Error(`Branch '${branch}' not found in repository: ${repoUrl}`);
+        throw new Error(
+          `Branch '${branch}' not found in repository: ${repoUrl}`
+        );
       }
 
       onProgress?.({
@@ -147,7 +154,7 @@ export class GitHubCloneService {
 
       // Clone the repository with authentication
       const cloneUrl = `https://${accessToken}@github.com/${owner}/${repo}.git`;
-      
+
       // Check if git is available
       try {
         await execAsync("git --version", { timeout: 5000 });
@@ -157,9 +164,11 @@ export class GitHubCloneService {
 
       // Use git clone with specific branch
       const cloneCommand = `git clone --branch ${branch} --single-branch --depth 1 "${cloneUrl}" "${repo}"`;
-      
-      console.log(`[CLONE] Executing: git clone --branch ${branch} --single-branch --depth 1 <repo> ${repo}`);
-      
+
+      console.log(
+        `[CLONE] Executing: git clone --branch ${branch} --single-branch --depth 1 <repo> ${repo}`
+      );
+
       const { stdout, stderr } = await execAsync(cloneCommand, {
         cwd: taskWorkspaceDir,
         timeout: 60000, // 60 second timeout
@@ -193,12 +202,14 @@ export class GitHubCloneService {
         progress: 100,
       });
 
-      console.log(`[CLONE] Successfully cloned ${owner}/${repo} to ${clonedRepoPath}`);
+      console.log(
+        `[CLONE] Successfully cloned ${owner}/${repo} to ${clonedRepoPath}`
+      );
       return clonedRepoPath;
-
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+
       onProgress?.({
         status: "error",
         message: `Failed to clone repository: ${errorMessage}`,

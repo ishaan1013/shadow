@@ -1,6 +1,6 @@
-import { app } from "../app";
+import { describe, expect, it } from "@jest/globals";
 import request from "supertest";
-import { expect, describe, it } from "@jest/globals";
+import { app } from "../app";
 
 describe("Indexing API", () => {
   describe("GET /api/indexing/", () => {
