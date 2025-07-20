@@ -38,8 +38,10 @@ export interface MessageMetadata {
   tool?: {
     name: string;
     args: Record<string, any>;
-    status: ToolStatusType;
+    status: "RUNNING" | "COMPLETED" | "FAILED"; // Tool-specific status subset
     result?: any;
+    error?: string; // Error message if failed
+    changes?: any; // For tools that make changes (like file edits)
   };
 
   // For structured assistant messages - required for chronological tool call ordering
@@ -168,25 +170,15 @@ export interface StreamChunk {
   };
 }
 
-// === Database Enums ===
+// === Re-export database types for convenience ===
+// Note: Import these from @repo/db instead of redefining
+export type { 
+  MessageRole, 
+  TaskStatus as ToolStatusType  // Alias for backwards compatibility
+} from "@repo/db";
 
-export const MessageRole = {
-  USER: "USER",
-  ASSISTANT: "ASSISTANT",
-  TOOL: "TOOL",
-  SYSTEM: "SYSTEM",
-} as const;
-
-export type MessageRoleType = (typeof MessageRole)[keyof typeof MessageRole];
-
-// Tool status that aligns with database TaskStatus
-export const ToolStatus = {
-  RUNNING: "RUNNING",
-  COMPLETED: "COMPLETED",
-  FAILED: "FAILED",
-} as const;
-
-export type ToolStatusType = (typeof ToolStatus)[keyof typeof ToolStatus];
+// Tool execution status - subset of TaskStatus that's relevant for UI components
+export type ToolExecutionStatus = "RUNNING" | "COMPLETED" | "FAILED";
 
 // === LLM Integration Types ===
 

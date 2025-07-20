@@ -1,8 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { prisma, Task } from "@repo/db";
-import { MessageRole } from "@repo/types";
+import { prisma, Task, MessageRole } from "@repo/db";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { after } from "next/server";

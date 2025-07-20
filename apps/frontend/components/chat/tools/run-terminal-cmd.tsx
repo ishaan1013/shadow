@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { Message, ToolStatusType } from "@repo/types";
+import type { Message, ToolExecutionStatus } from "@repo/types";
 import { CheckIcon, Loader, Terminal, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { CollapsibleTool } from "./collapsible-tool";
@@ -48,7 +48,7 @@ function TerminalOutput({ output, isRunning, error }: TerminalOutputProps) {
   );
 }
 
-function StatusBadge({ status }: { status: ToolStatusType }) {
+function StatusBadge({ status }: { status: ToolExecutionStatus }) {
   const config = {
     RUNNING: {
       icon: Loader,

@@ -15,7 +15,7 @@ import type {
   StreamChunk,
   TextPart,
   ToolCallPart,
-  ToolStatusType,
+  ToolExecutionStatus,
 } from "@repo/types";
 import { useEffect, useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
@@ -25,7 +25,7 @@ interface StreamingToolCall {
   id: string;
   name: string;
   args: Record<string, any>;
-  status: ToolStatusType;
+  status: ToolExecutionStatus;
   result?: string;
   error?: string;
 }
