@@ -14,7 +14,14 @@ const configSchema = z
     ANTHROPIC_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     WORKSPACE_DIR: z.string().default("/workspace"),
-    DEBUG: z.string().optional().transform(val => val === "true"),
+    MAX_REPO_SIZE_MB: z.coerce.number().default(500),
+    PINECONE_API_KEY: z.string().optional(),
+    PINECONE_INDEX_NAME: z.string().default("shadow"),
+    EMBEDDING_MODEL: z.string().default("llama-text-embed-v2"),
+    DEBUG: z
+      .string()
+      .optional()
+      .transform((val) => val === "true"),
   })
   .refine((data) => data.ANTHROPIC_API_KEY || data.OPENAI_API_KEY, {
     message:
@@ -37,6 +44,10 @@ const config = {
   anthropicApiKey: parsed.data.ANTHROPIC_API_KEY,
   openaiApiKey: parsed.data.OPENAI_API_KEY,
   workspaceDir: parsed.data.WORKSPACE_DIR,
+  maxRepoSizeMB: parsed.data.MAX_REPO_SIZE_MB,
+  pineconeApiKey: parsed.data.PINECONE_API_KEY,
+  pineconeIndexName: parsed.data.PINECONE_INDEX_NAME,
+  embeddingModel: parsed.data.EMBEDDING_MODEL,
   debug: parsed.data.DEBUG,
 };
 

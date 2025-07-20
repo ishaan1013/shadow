@@ -68,6 +68,7 @@ export async function createTask(formData: FormData) {
             body: JSON.stringify({
               message,
               model,
+              userId: session.user.id, // Pass userId to backend
             }),
           }
         );
