@@ -49,7 +49,7 @@ export default async function TaskPage({
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <TaskPageLayout initialLayout={initialLayout} />
+      <TaskPageLayout initialLayout={initialLayout} task={task} />
     </HydrationBoundary>
   );
 }

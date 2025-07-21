@@ -5,6 +5,7 @@ import { PromptForm } from "@/components/chat/prompt-form";
 import { ScrollToBottom } from "@/hooks/use-is-at-top";
 import { useSendMessage } from "@/hooks/use-send-message";
 import { useTaskMessages } from "@/hooks/use-task-messages";
+import type { Task } from "@/lib/db-operations/get-task";
 import { socket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 import type {
@@ -17,8 +18,9 @@ import type {
 } from "@repo/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
+import { ConversationHeader } from "./conversation-header";
 
 // Types for streaming tool calls
 interface StreamingToolCall {
@@ -30,7 +32,13 @@ interface StreamingToolCall {
   error?: string;
 }
 
-export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
+export function TaskPageContent({
+  isAtTop,
+  task,
+}: {
+  isAtTop: boolean;
+  task: Task;
+}) {
   const { taskId } = useParams<{ taskId: string }>();
 
   const queryClient = useQueryClient();
@@ -245,6 +253,19 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
   // Combine real messages with current streaming content
   const displayMessages = [...messages];
 
+  const { added, removed } = useMemo(() => {
+    let added = 0;
+    let removed = 0;
+    for (const msg of messages) {
+      const changes = msg.metadata?.tool?.changes;
+      if (changes) {
+        added += changes.linesAdded || 0;
+        removed += changes.linesRemoved || 0;
+      }
+    }
+    return { added, removed };
+  }, [messages]);
+
   // Add streaming assistant message with structured parts if present
   if (streamingAssistantParts.length > 0 || isStreaming) {
     displayMessages.push({
@@ -267,6 +288,8 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
           isAtTop ? "opacity-0" : "opacity-100"
         )}
       />
+
+      <ConversationHeader task={task} added={added} removed={removed} />
 
       <Messages messages={displayMessages} />
 
