@@ -25,7 +25,7 @@ function filterRepositoryData(repo: UserRepository): FilteredRepository {
       login: repo.owner?.login || "",
       type: repo.owner?.type || "User",
     },
-    pushed_at: repo.pushed_at ? formatTimeAgo(repo.pushed_at) : null,
+    pushed_at: repo.pushed_at,
   };
 }
 
@@ -53,8 +53,22 @@ function groupReposByOrg(
     }
   });
 
-  // Build ordered groups array: user first, then orgs alphabetically
+  // Build ordered groups array: sort groups by most recent activity within each group
   const groups: GroupedRepos["groups"] = [];
+
+  // Explicitly sort repositories within each owner bucket by pushed_at (newest first)
+  Object.values(userGroups).forEach((repos) =>
+    repos.sort(
+      (a, b) =>
+        new Date(b.pushed_at || 0).getTime() - new Date(a.pushed_at || 0).getTime()
+    )
+  );
+  Object.values(orgGroups).forEach((repos) =>
+    repos.sort(
+      (a, b) =>
+        new Date(b.pushed_at || 0).getTime() - new Date(a.pushed_at || 0).getTime()
+    )
+  );
 
   // Add user groups first
   Object.keys(userGroups).forEach((name) => {
@@ -212,18 +226,33 @@ export async function getGitHubRepositories(
     );
 
     // Fetch repositories from GitHub API sorted by most recently pushed
-    const { data: repositories } =
-      await octokit.rest.apps.listReposAccessibleToInstallation({
-        per_page: 100,
+    const allRepositories: UserRepository[] = [];
+    let page = 1;
+    const perPage = 100;
+
+    while (true) {
+      const { data } = await octokit.rest.apps.listReposAccessibleToInstallation({
+        per_page: perPage,
+        page,
+        sort: "pushed",
       });
 
-    // Sort repositories by pushed_at date
-    const sortedRepos = repositories.repositories.sort((a, b) => {
+      allRepositories.push(...data.repositories);
+
+      if (data.repositories.length < perPage) {
+        break;
+      }
+      page++;
+    }
+
+    const sortedRepositories = allRepositories.sort((a, b) => {
       if (!a.pushed_at || !b.pushed_at) return 0;
       return new Date(b.pushed_at).getTime() - new Date(a.pushed_at).getTime();
     });
 
-    const filteredRepos = sortedRepos.map(filterRepositoryData);
+    const filteredRepos = sortedRepositories.map((repo) =>
+      filterRepositoryData(repo)
+    );
     const groupedRepos = groupReposByOrg(filteredRepos, account.accountId);
 
     return groupedRepos;
