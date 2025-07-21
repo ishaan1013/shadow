@@ -35,7 +35,11 @@ export function useGitHubSelection() {
         repo: selectedRepo,
         branch: selectedBranch,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(selection));
+      const currentStored = localStorage.getItem(STORAGE_KEY);
+      const isDifferent = currentStored !== JSON.stringify(selection);
+      if (isDifferent) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(selection));
+      }
     } catch (error) {
       console.error("Failed to save GitHub selection to localStorage:", error);
     }
