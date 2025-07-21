@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/popover";
 import { useGitHubBranches } from "@/hooks/use-github-branches";
 import { useGitHubRepositories } from "@/hooks/use-github-repositories";
+import { useGitHubSelection } from "@/hooks/use-github-selection";
 import { useGitHubStatus } from "@/hooks/use-github-status";
 import { cn } from "@/lib/utils";
 import {
@@ -35,8 +36,7 @@ export function GithubConnection({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<"repos" | "branches">("repos");
-  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+  const { selectedRepo, selectedBranch, setRepoAndBranch } = useGitHubSelection();
   const [repoSearch, setRepoSearch] = useState("");
   const [branchSearch, setBranchSearch] = useState("");
   const [collapsedOrgs, setCollapsedOrgs] = useState<Set<string>>(new Set());
@@ -122,24 +122,23 @@ export function GithubConnection({
   };
 
   const handleRepoSelect = (repo: Repository) => {
-    setSelectedRepo(repo);
+    setRepoAndBranch(repo, selectedBranch || "");
     setMode("branches");
     setBranchSearch("");
   };
 
   const handleBranchSelect = (branchName: string) => {
-    setSelectedBranch(branchName);
-    setIsOpen(false);
+    if (selectedRepo) {
+      setRepoAndBranch(selectedRepo, branchName);
+      setIsOpen(false);
 
-    // Notify parent component of the selection
-    if (selectedRepo && onSelect) {
-      onSelect(selectedRepo.full_name, branchName);
+      // Notify parent component of the selection
+      onSelect?.(selectedRepo.full_name, branchName);
     }
   };
 
   const handleBackToRepos = () => {
     setMode("repos");
-    setSelectedRepo(null);
     setRepoSearch("");
   };
 

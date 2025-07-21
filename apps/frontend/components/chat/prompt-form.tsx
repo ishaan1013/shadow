@@ -7,6 +7,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { useGitHubSelection } from "@/hooks/use-github-selection";
 import { createTask } from "@/lib/actions/create-task";
 import { cn } from "@/lib/utils";
 import {
@@ -36,8 +37,7 @@ export function PromptForm({
   const [selectedModel, setSelectedModel] = useState<ModelType>(
     AvailableModels.GPT_4O
   );
-  const [repoUrl, setRepoUrl] = useState<string | null>(null);
-  const [branch, setBranch] = useState<string | null>(null);
+  const { selectedRepo, selectedBranch } = useGitHubSelection();
   const [isPending, startTransition] = useTransition();
 
   const queryClient = useQueryClient();
@@ -66,18 +66,18 @@ export function PromptForm({
 
     if (isHome) {
       // Require repo and branch selection before creating a task
-      if (!repoUrl || !branch) {
+      if (!selectedRepo || !selectedBranch) {
         toast.error("Select a repository and branch first");
         return;
       }
 
-      const completeRepoUrl = `https://github.com/${repoUrl}`;
+      const completeRepoUrl = `https://github.com/${selectedRepo.full_name}`;
 
       const formData = new FormData();
       formData.append("message", message);
       formData.append("model", selectedModel);
       formData.append("repoUrl", completeRepoUrl);
-      formData.append("branch", branch);
+      formData.append("branch", selectedBranch);
 
       startTransition(async () => {
         let taskId: string | null = null;
@@ -173,14 +173,7 @@ export function PromptForm({
           </Popover>
 
           <div className="flex items-center gap-2">
-            {isHome && (
-              <GithubConnection
-                onSelect={(repo, br) => {
-                  setRepoUrl(repo);
-                  setBranch(br);
-                }}
-              />
-            )}
+            {isHome && <GithubConnection />}
             <Button
               type="submit"
               size="iconSm"
@@ -189,7 +182,7 @@ export function PromptForm({
                 isPending ||
                 !message.trim() ||
                 !selectedModel ||
-                (isHome && (!repoUrl || !branch))
+                (isHome && (!selectedRepo || !selectedBranch))
               }
               className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
             >
