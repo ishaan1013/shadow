@@ -29,11 +29,7 @@ import { toast } from "sonner";
 
 import type { FilteredRepository as Repository } from "@/lib/github/types";
 
-export function GithubConnection({
-  onSelect,
-}: {
-  onSelect?: (repoUrl: string, branch: string) => void;
-}) {
+export function GithubConnection() {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<"repos" | "branches">("repos");
   const { selectedRepo, selectedBranch, setRepoAndBranch } = useGitHubSelection();
@@ -122,7 +118,7 @@ export function GithubConnection({
   };
 
   const handleRepoSelect = (repo: Repository) => {
-    setRepoAndBranch(repo, selectedBranch ?? null);
+    setRepoAndBranch(repo, selectedBranch ?? "");
     setMode("branches");
     setBranchSearch("");
   };
@@ -131,9 +127,6 @@ export function GithubConnection({
     if (selectedRepo) {
       setRepoAndBranch(selectedRepo, branchName);
       setIsOpen(false);
-
-      // Notify parent component of the selection
-      onSelect?.(selectedRepo.full_name, branchName);
     }
   };
 
