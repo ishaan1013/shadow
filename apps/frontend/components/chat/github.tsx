@@ -122,7 +122,7 @@ export function GithubConnection({
   };
 
   const handleRepoSelect = (repo: Repository) => {
-    setRepoAndBranch(repo, selectedBranch || "");
+    setRepoAndBranch(repo, selectedBranch ?? null);
     setMode("branches");
     setBranchSearch("");
   };
