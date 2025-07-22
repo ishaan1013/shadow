@@ -170,8 +170,11 @@ export class ChatService {
       `[CHAT] Using model: ${llmModel}, Tools enabled: ${enableTools}`
     );
 
+    // Create abort controller for this stream
+    const abortController = new AbortController();
+    
     // Start streaming
-    startStream();
+    startStream(abortController);
 
     // Track structured assistant message parts in chronological order
     let assistantSequence: number | null = null;
@@ -190,7 +193,8 @@ export class ChatService {
         llmModel,
         enableTools,
         taskId, // Pass taskId to enable todo tool context
-        workspacePath // Pass workspace path for tool operations
+        workspacePath, // Pass workspace path for tool operations
+        abortController.signal // Pass abort signal to enable stopping
       )) {
         // Emit the chunk directly to clients
         emitStreamChunk(chunk);

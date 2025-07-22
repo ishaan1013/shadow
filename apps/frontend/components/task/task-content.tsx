@@ -224,6 +224,12 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
       setStreamingAssistantParts((prev) => [...prev, errorTextPart]);
     }
 
+    function onStreamStopped() {
+      setIsStreaming(false);
+      console.log("Stream stopped by user");
+      socket.emit("get-chat-history", { taskId });
+    }
+
     function onMessageError(data: { error: string }) {
       console.error("Message error:", data.error);
       setIsStreaming(false);
@@ -236,6 +242,7 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
     socket.on("stream-chunk", onStreamChunk);
     socket.on("stream-complete", onStreamComplete);
     socket.on("stream-error", onStreamError);
+    socket.on("stream-stopped", onStreamStopped);
     socket.on("message-error", onMessageError);
 
     if (!socket.connected) {
@@ -250,6 +257,7 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
       socket.off("stream-chunk", onStreamChunk);
       socket.off("stream-complete", onStreamComplete);
       socket.off("stream-error", onStreamError);
+      socket.off("stream-stopped", onStreamStopped);
       socket.off("message-error", onMessageError);
     };
   }, [taskId]);
@@ -266,6 +274,13 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
       message: message.trim(),
       llmModel: model,
     });
+  };
+
+  const handleStopStream = () => {
+    if (isStreaming) {
+      console.log("Stopping stream");
+      socket.emit("stop-stream");
+    }
   };
 
   if (taskMessagesError) {
@@ -310,6 +325,7 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
 
       <PromptForm
         onSubmit={handleSendMessage}
+        onStop={handleStopStream}
         isStreaming={isStreaming || sendMessageMutation.isPending}
       />
     </StickToBottom.Content>

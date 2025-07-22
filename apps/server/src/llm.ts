@@ -42,7 +42,8 @@ export class LLMService {
     model: ModelType = DEFAULT_MODEL,
     enableTools: boolean = true,
     taskId?: string,
-    workspacePath?: string
+    workspacePath?: string,
+    abortSignal?: AbortSignal
   ): AsyncGenerator<StreamChunk> {
     try {
       const modelInstance = this.getModel(model);
@@ -63,6 +64,7 @@ export class LLMService {
         temperature: 0.7,
         maxSteps: MAX_STEPS,
         ...(enableTools && tools && { tools }),
+        ...(abortSignal && { abortSignal }),
       };
 
       const result = streamText(streamConfig);
@@ -141,6 +143,16 @@ export class LLMService {
         }
       }
     } catch (error) {
+      // Handle abort errors specifically
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log("Stream aborted by user");
+        yield {
+          type: "complete",
+          finishReason: "stop",
+        };
+        return;
+      }
+      
       console.error("LLM Service Error:", error);
       yield {
         type: "error",

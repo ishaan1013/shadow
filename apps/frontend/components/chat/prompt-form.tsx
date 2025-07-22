@@ -24,10 +24,12 @@ import { GithubConnection } from "./github";
 
 export function PromptForm({
   onSubmit,
+  onStop,
   isStreaming = false,
   isHome = false,
 }: {
   onSubmit?: (message: string, model: ModelType) => void;
+  onStop?: () => void;
   isStreaming?: boolean;
   isHome?: boolean;
 }) {
@@ -181,24 +183,35 @@ export function PromptForm({
                 }}
               />
             )}
-            <Button
-              type="submit"
-              size="iconSm"
-              disabled={
-                isStreaming ||
-                isPending ||
-                !message.trim() ||
-                !selectedModel ||
-                (isHome && (!repoUrl || !branch))
-              }
-              className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
-            >
-              {isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </Button>
+            {isStreaming && !isHome ? (
+              <Button
+                type="button"
+                size="iconSm"
+                onClick={onStop}
+                className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2 bg-destructive hover:bg-destructive/90"
+              >
+                <Square className="size-4 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                size="iconSm"
+                disabled={
+                  isStreaming ||
+                  isPending ||
+                  !message.trim() ||
+                  !selectedModel ||
+                  (isHome && (!repoUrl || !branch))
+                }
+                className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
+              >
+                {isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>

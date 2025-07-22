@@ -8,6 +8,7 @@ import config from "./config";
 // In-memory stream state
 let currentStreamContent = "";
 let isStreaming = false;
+let currentAbortController: AbortController | null = null;
 let io: Server;
 let chatService: ChatService;
 
@@ -82,6 +83,21 @@ export function createSocketServer(server: http.Server): Server {
       }
     });
 
+    // Handle stop stream request
+    socket.on("stop-stream", () => {
+      try {
+        console.log("Received stop stream request");
+        if (currentAbortController && isStreaming) {
+          currentAbortController.abort();
+          currentAbortController = null;
+          isStreaming = false;
+          io.emit("stream-stopped");
+        }
+      } catch (error) {
+        console.error("Error stopping stream:", error);
+      }
+    });
+
     socket.on("disconnect", () => {
       console.log("a user disconnected");
     });
@@ -90,13 +106,15 @@ export function createSocketServer(server: http.Server): Server {
   return io;
 }
 
-export function startStream() {
+export function startStream(abortController?: AbortController) {
   currentStreamContent = "";
   isStreaming = true;
+  currentAbortController = abortController || null;
 }
 
 export function endStream() {
   isStreaming = false;
+  currentAbortController = null;
   // Only emit if socket server is initialized (not in terminal mode)
   if (io) {
     io.emit("stream-complete");
@@ -105,6 +123,7 @@ export function endStream() {
 
 export function handleStreamError(error: any) {
   isStreaming = false;
+  currentAbortController = null;
   // Only emit if socket server is initialized (not in terminal mode)
   if (io) {
     io.emit("stream-error", error);
