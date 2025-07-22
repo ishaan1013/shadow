@@ -12,7 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useIsAtTop } from "@/hooks/use-is-at-top";
+
 import { saveLayoutCookie } from "@/lib/actions/save-sidebar-cookie";
 import { cn } from "@/lib/utils";
 import { AppWindowMac } from "lucide-react";
@@ -38,7 +38,6 @@ export function TaskPageLayout({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const stickToBottomContextRef = useRef<StickToBottomContext>(null);
-  const { isAtTop } = useIsAtTop(0, stickToBottomContextRef.current?.scrollRef);
 
   /* 
   Resizable panel state
@@ -193,7 +192,7 @@ export function TaskPageLayout({
               </TooltipContent>
             </Tooltip>
           </div>
-          <TaskPageContent isAtTop={isAtTop} />
+          <TaskPageContent />
         </StickToBottom>
       </ResizablePanel>
       <ResizableHandle />

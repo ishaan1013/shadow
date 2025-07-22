@@ -6,7 +6,7 @@ import { ScrollToBottom } from "@/hooks/use-is-at-top";
 import { useSendMessage } from "@/hooks/use-send-message";
 import { useTaskMessages } from "@/hooks/use-task-messages";
 import { socket } from "@/lib/socket";
-import { cn } from "@/lib/utils";
+
 import type { FileChange } from "@repo/db";
 import type {
   AssistantMessagePart,
@@ -32,7 +32,7 @@ interface StreamingToolCall {
   error?: string;
 }
 
-export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
+export function TaskPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
 
   const queryClient = useQueryClient();
@@ -329,13 +329,6 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
 
   return (
     <StickToBottom.Content className="relative z-0 mx-auto flex min-h-full w-full max-w-lg flex-col items-center px-4 sm:px-6">
-      <div
-        className={cn(
-          "from-background via-background/60 pointer-events-none sticky top-0 -left-px z-10 h-16 w-[calc(100%+2px)] -translate-y-px bg-gradient-to-b to-transparent transition-opacity",
-          isAtTop ? "opacity-0" : "opacity-100"
-        )}
-      />
-
       <Messages messages={displayMessages} />
 
       <ScrollToBottom />

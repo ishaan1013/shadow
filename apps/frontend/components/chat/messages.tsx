@@ -10,23 +10,29 @@ export function Messages({ messages }: { messages: Message[] }) {
     (message) => !isToolMessage(message)
   );
 
+  // Separate user and assistant messages
+  const userMessages = filteredMessages.filter(isUserMessage);
+  const assistantMessages = filteredMessages.filter(isAssistantMessage);
+
   return (
     <div className="-mt-12 mb-24 flex w-full grow flex-col gap-3">
-      {filteredMessages.map((message, index) => {
-        if (isUserMessage(message)) {
-          return (
+      {/* Sticky user messages at the top */}
+      {userMessages.length > 0 && (
+        <div className="sticky top-0 z-10 bg-background pb-2">
+          {userMessages.map((message, index) => (
             <UserMessage
               key={message.id}
               message={message}
-              className={cn("mb-4", index !== 0 && "mt-4")}
+              className={cn("mb-2", index !== 0 && "mt-2")}
             />
-          );
-        }
-        if (isAssistantMessage(message)) {
-          return <AssistantMessage key={message.id} message={message} />;
-        }
-        return null;
-      })}
+          ))}
+        </div>
+      )}
+
+      {/* Assistant messages below */}
+      {assistantMessages.map((message) => (
+        <AssistantMessage key={message.id} message={message} />
+      ))}
     </div>
   );
 }
