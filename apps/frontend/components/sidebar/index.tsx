@@ -14,12 +14,11 @@ import {
 import { useTasks } from "@/hooks/use-tasks";
 import { FileChange, Task, Todo } from "@repo/db";
 import {
-  AlertTriangle,
+  Archive,
   CheckCircle2,
   CircleDashed,
-  Clock,
   Pause,
-  Play,
+  PlayCircle,
   XCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -28,26 +27,24 @@ import { SidebarNavigation } from "./navigation";
 import { SidebarTasksView } from "./tasks-view";
 
 export const statusOrder = {
-  RUNNING: 0,
-  PAUSED: 1,
-  PENDING: 2,
-  QUEUED: 3,
-  INITIALIZING: 4,
-  COMPLETED: 5,
-  FAILED: 6,
-  CANCELLED: 7,
+  COMPLETED: 0,
+  RUNNING: 1,
+  INITIALIZING: 2,
+  STOPPED: 3,
+  FAILED: 4,
+  ARCHIVED: 5,
+  CANCELLED: 6,
 };
 
 // Status icons and colors
 export const statusColorsConfig = {
-  PENDING: { icon: Clock, className: "text-yellow-500" },
-  QUEUED: { icon: Clock, className: "text-yellow-400" },
-  INITIALIZING: { icon: CircleDashed, className: "text-blue-500" },
-  RUNNING: { icon: Play, className: "text-green-500" },
-  PAUSED: { icon: Pause, className: "text-orange-500" },
   COMPLETED: { icon: CheckCircle2, className: "text-green-600" },
+  STOPPED: { icon: Pause, className: "text-gray-600" },
+  RUNNING: { icon: PlayCircle, className: "text-blue-500" },
+  INITIALIZING: { icon: CircleDashed, className: "text-yellow-500" },
   FAILED: { icon: XCircle, className: "text-red-500" },
-  CANCELLED: { icon: AlertTriangle, className: "text-gray-500" },
+  ARCHIVED: { icon: Archive, className: "text-gray-500" },
+  CANCELLED: { icon: XCircle, className: "text-orange-500" },
 };
 
 export type SidebarView = "tasks" | "agent";

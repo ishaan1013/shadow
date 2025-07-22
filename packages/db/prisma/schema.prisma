@@ -77,7 +77,7 @@ model Task {
   id          String     @id @default(cuid())
   title       String?
   description String?
-  status      TaskStatus @default(PENDING)
+  status      TaskStatus @default(INITIALIZING)
 
   // Git repo config
   repoUrl       String
@@ -232,9 +232,9 @@ model TaskSession {
 
 // Enums
 enum TaskStatus {
-  PENDING
+  STOPPED
   INITIALIZING
-  QUEUED
+  ARCHIVED
   RUNNING
   COMPLETED
   FAILED

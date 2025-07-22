@@ -38,7 +38,7 @@ export async function createTask(formData: FormData) {
         repoUrl: repoUrl || "",
         branch,
         userId: session.user.id,
-        status: "PENDING",
+        status: "INITIALIZING",
         mode: "FULL_AUTO",
       },
     });

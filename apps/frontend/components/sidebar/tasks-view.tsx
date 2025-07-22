@@ -129,8 +129,8 @@ export function SidebarTasksView({
 
       {!loading && !error && Object.keys(groupedTasks).length === 0 && (
         <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground">
-            No tasks found
+          <SidebarGroupLabel className="text-muted-foreground hover:text-muted-foreground px-0">
+            No active tasks.
           </SidebarGroupLabel>
         </SidebarGroup>
       )}

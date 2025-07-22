@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
       },
       data: {
         githubInstallationId: installationId,
-        githubAppConnected: setupAction === "install",
+        githubAppConnected:
+          setupAction === "install" || setupAction === "update",
       },
     });
 

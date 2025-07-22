@@ -34,7 +34,7 @@ export function SidebarNavigation({
             className={cn(
               "border",
               sidebarView === "agent" && open
-                ? "text-foreground bg-sidebar-accent border-sidebar-border hover:opacity-80"
+                ? "text-foreground bg-sidebar-accent border-sidebar-border hover:bg-sidebar-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent border-transparent"
             )}
             onClick={() => {
@@ -81,7 +81,7 @@ export function SidebarNavigation({
                 className={cn(
                   "border",
                   sidebarView === "tasks" && open
-                    ? "text-foreground bg-sidebar-accent border-sidebar-border hover:opacity-80"
+                    ? "text-foreground bg-sidebar-accent border-sidebar-border hover:bg-sidebar-border"
                     : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent border-transparent"
                 )}
                 onClick={() => {

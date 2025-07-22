@@ -230,6 +230,8 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
 
       // Also invalidate file changes to ensure consistency with DB
       queryClient.invalidateQueries({ queryKey: ["file-changes", taskId] });
+      queryClient.invalidateQueries({ queryKey: ["task", taskId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     }
 
     function onStreamError(error: any) {

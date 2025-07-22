@@ -413,6 +413,9 @@ export class ChatService {
         }
       }
 
+      // Check if stream was stopped early
+      const wasStoppedEarly = this.stopRequested.has(taskId);
+
       // Update final assistant message with complete metadata
       if (assistantMessageId && usageMetadata) {
         const fullContent = assistantParts
@@ -444,12 +447,38 @@ export class ChatService {
       console.log(`[CHAT] Assistant parts: ${assistantParts.length}`);
       console.log(`[CHAT] Tool calls executed: ${toolCallSequences.size}`);
 
+      // Update task status based on how stream ended
+      if (wasStoppedEarly) {
+        await prisma.task.update({
+          where: { id: taskId },
+          data: { status: "STOPPED" },
+        });
+        console.log(
+          `[CHAT] Task ${taskId} status updated to STOPPED (early termination)`
+        );
+      } else {
+        await prisma.task.update({
+          where: { id: taskId },
+          data: { status: "COMPLETED" },
+        });
+        console.log(`[CHAT] Task ${taskId} status updated to COMPLETED`);
+      }
+
       // Clean up stream tracking
       this.activeStreams.delete(taskId);
       this.stopRequested.delete(taskId);
       endStream();
     } catch (error) {
       console.error("Error processing user message:", error);
+
+      // Update task status to failed when stream processing fails
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { status: "FAILED" },
+      });
+      console.log(
+        `[CHAT] Task ${taskId} status updated to FAILED due to error`
+      );
 
       // Emit error chunk
       emitStreamChunk({
@@ -482,6 +511,13 @@ export class ChatService {
     console.log(`[CODING_TASK] Starting coding task for ${taskId}`);
     console.log(`[CODING_TASK] Task: ${userMessage.substring(0, 100)}...`);
 
+    // Update task status to running when processing a coding task
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { status: "RUNNING" },
+    });
+    console.log(`[CODING_TASK] Task ${taskId} status updated to RUNNING`);
+
     return this.processUserMessage({
       taskId,
       userMessage,
@@ -503,5 +539,12 @@ export class ChatService {
       this.activeStreams.delete(taskId);
       console.log(`[CHAT] Stream stopped for task ${taskId}`);
     }
+
+    // Update task status to stopped when manually stopped by user
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { status: "STOPPED" },
+    });
+    console.log(`[CHAT] Task ${taskId} status updated to STOPPED`);
   }
 }

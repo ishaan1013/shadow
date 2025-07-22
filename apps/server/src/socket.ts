@@ -50,6 +50,13 @@ export function createSocketServer(server: http.Server): Server {
         try {
           console.log("Received user message:", data);
 
+          // Update task status to running when user sends a new message
+          await prisma.task.update({
+            where: { id: data.taskId },
+            data: { status: "RUNNING" },
+          });
+          console.log(`[SOCKET] Task ${data.taskId} status updated to RUNNING`);
+
           // Get task workspace path from database
           const task = await prisma.task.findUnique({
             where: { id: data.taskId },
