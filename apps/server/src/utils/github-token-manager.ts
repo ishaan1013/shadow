@@ -1,5 +1,6 @@
 import { prisma } from "@repo/db";
 import { URLSearchParams } from "url";
+import config from "../config";
 
 export interface TokenRefreshResult {
   success: boolean;
@@ -136,8 +137,8 @@ export class GitHubTokenManager {
       }
 
       // Get GitHub OAuth app credentials from environment
-      const clientId = process.env.GITHUB_CLIENT_ID;
-      const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+      const clientId = config.githubClientId;
+      const clientSecret = config.githubClientSecret;
 
       if (!clientId || !clientSecret) {
         return {

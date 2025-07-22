@@ -1,7 +1,7 @@
-import type { Task } from "@/lib/db-operations/get-task";
+import { Task } from "@repo/db";
 import { useQuery } from "@tanstack/react-query";
 
-export function useTask(taskId: string, initialData?: Task | null) {
+export function useTask(taskId: string, initialData?: Task) {
   return useQuery({
     queryKey: ["task", taskId],
     queryFn: async () => {
@@ -10,6 +10,5 @@ export function useTask(taskId: string, initialData?: Task | null) {
       return res.json() as Promise<Task>;
     },
     initialData,
-    enabled: !!taskId,
   });
 }

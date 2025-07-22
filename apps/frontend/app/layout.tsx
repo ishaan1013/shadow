@@ -1,10 +1,7 @@
 import { SessionProvider } from "@/components/auth/session-provider";
 import { QueryClientProvider } from "@/components/layout/query-client-provider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { SidebarComponent } from "@/components/sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { getUser } from "@/lib/auth/get-user";
-import { getTasks } from "@/lib/db-operations/get-tasks";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
@@ -47,9 +44,6 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
 
-  const user = await getUser();
-  const initialTasks = user ? await getTasks(user.id) : [];
-
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -64,7 +58,7 @@ export default async function RootLayout({
             <SessionProvider>
               {/* SidebarProvider also provides a TooltipProvider inside */}
               <SidebarProvider defaultOpen={defaultOpen}>
-                <SidebarComponent initialTasks={initialTasks} />
+                {/* Don't render the sidebar here; we have individual layouts for route groups to render different variants of the sidebar */}
                 {children}
                 <Toaster />
               </SidebarProvider>

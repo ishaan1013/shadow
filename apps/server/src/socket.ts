@@ -82,6 +82,25 @@ export function createSocketServer(server: http.Server): Server {
       }
     });
 
+    // Handle stop stream request
+    socket.on("stop-stream", async (data: { taskId: string }) => {
+      try {
+        console.log("Received stop stream request for task:", data.taskId);
+        
+        // Stop the current streaming operation
+        await chatService.stopStream(data.taskId);
+        
+        // Update stream state
+        endStream();
+        
+        // Notify all clients that the stream has been stopped
+        io.emit("stream-complete");
+      } catch (error) {
+        console.error("Error stopping stream:", error);
+        socket.emit("stream-error", { error: "Failed to stop stream" });
+      }
+    });
+
     socket.on("disconnect", () => {
       console.log("a user disconnected");
     });
@@ -133,6 +152,13 @@ export function emitStreamChunk(chunk: StreamChunk) {
     } else if (chunk.type === "tool-result" && chunk.toolResult) {
       console.log(`\n✅ [TOOL_RESULT] ${chunk.toolResult.id}:`);
       console.log(`   ${chunk.toolResult.result}`);
+    } else if (chunk.type === "file-change" && chunk.fileChange) {
+      console.log(
+        `\n📝 [FILE_CHANGE] ${chunk.fileChange.operation} ${chunk.fileChange.filePath}`
+      );
+      console.log(
+        `   Changes: +${chunk.fileChange.additions} -${chunk.fileChange.deletions}`
+      );
     } else if (chunk.type === "usage" && chunk.usage) {
       console.log(
         `\n📊 [USAGE] Tokens: ${chunk.usage.totalTokens} (${chunk.usage.promptTokens} prompt + ${chunk.usage.completionTokens} completion)`

@@ -135,14 +135,50 @@ export function GithubConnection() {
     setRepoSearch("");
   };
 
+  const truncateBranchName = (branchName: string, maxLength: number = 20) => {
+    if (branchName.length <= maxLength) {
+      return branchName;
+    }
+    
+    // For very short limits, just use ellipsis
+    if (maxLength <= 6) {
+      return branchName.substring(0, maxLength - 3) + "...";
+    }
+    
+    // Try to keep meaningful parts of the branch name
+    // Common patterns: feature/branch-name, fix/issue-123, main, develop
+    const parts = branchName.split('/');
+    
+    if (parts.length > 1) {
+      const prefix = parts[0] || '';
+      const suffix = parts.slice(1).join('/');
+      
+      // If prefix + suffix + separator is still too long
+      if (prefix.length + suffix.length + 1 > maxLength) {
+        const availableForSuffix = maxLength - prefix.length - 4; // 4 for "/..."
+        if (availableForSuffix > 0) {
+          return `${prefix}/${suffix.substring(0, availableForSuffix)}...`;
+        }
+      }
+    }
+    
+    // Fallback: truncate from the end
+    return branchName.substring(0, maxLength - 3) + "...";
+  };
+
   const getButtonText = () => {
     if (selectedRepo && selectedBranch) {
+      // Calculate available space for branch name
+      // Estimate: repo name takes priority, branch gets remaining space
+      const repoNameLength = selectedRepo.full_name.length;
+      const maxBranchLength = Math.max(15, 40 - Math.min(repoNameLength, 25));
+      
       return (
         <>
           <Folder className="size-4" />
           <span>{selectedRepo.full_name}</span>
           <GitBranch className="size-4" />
-          <span>{selectedBranch}</span>
+          <span title={selectedBranch}>{truncateBranchName(selectedBranch, maxBranchLength)}</span>
         </>
       );
     }

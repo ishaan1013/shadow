@@ -8,7 +8,6 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "tsx src/seed.ts",
     "db:studio": "prisma studio",
     "dev": "tsup src/* --watch",
     "lint": "eslint 'src/**/*.ts'",

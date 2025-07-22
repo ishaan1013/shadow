@@ -4,6 +4,7 @@ import {
   Message,
   ModelType,
   StreamChunk,
+  AIStreamChunk,
   getModelProvider,
   toCoreMessage,
 } from "@repo/types";
@@ -42,7 +43,8 @@ export class LLMService {
     model: ModelType = DEFAULT_MODEL,
     enableTools: boolean = true,
     taskId?: string,
-    workspacePath?: string
+    workspacePath?: string,
+    abortSignal?: AbortSignal
   ): AsyncGenerator<StreamChunk> {
     try {
       const modelInstance = this.getModel(model);
@@ -55,7 +57,7 @@ export class LLMService {
       // Create tools with task context if taskId is provided
       const tools = taskId ? createTools(taskId, workspacePath) : undefined;
 
-      const streamConfig = {
+      const streamConfig: any = {
         model: modelInstance,
         system: systemPrompt,
         messages: coreMessages,
@@ -64,13 +66,16 @@ export class LLMService {
         maxSteps: MAX_STEPS,
         ...(enableTools && tools && { tools }),
       };
+      if (abortSignal) {
+        streamConfig.signal = abortSignal;
+      }
 
       const result = streamText(streamConfig);
 
       // Use fullStream to get real-time tool calls and results
-      for await (const chunk of result.fullStream) {
+      for await (const chunk of result.fullStream as AsyncIterable<AIStreamChunk>) {
         switch (chunk.type) {
-          case "text-delta":
+          case "text-delta": {
             if (chunk.textDelta) {
               yield {
                 type: "content",
@@ -78,6 +83,7 @@ export class LLMService {
               };
             }
             break;
+          }
 
           case "tool-call":
             yield {

@@ -1,0 +1,17 @@
+import { SidebarComponent } from "@/components/sidebar";
+import { getUser } from "@/lib/auth/get-user";
+import { getTasks } from "@/lib/db-operations/get-tasks";
+
+export default async function SettingsLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  const user = await getUser();
+  const initialTasks = user ? await getTasks(user.id) : [];
+
+  return (
+    <>
+      <SidebarComponent initialTasks={initialTasks} currentTask={null} />
+      {children}
+    </>
+  );
+}

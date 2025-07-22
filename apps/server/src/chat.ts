@@ -22,6 +22,8 @@ export const DEFAULT_MODEL: ModelType = "gpt-4o";
 
 export class ChatService {
   private llmService: LLMService;
+  private activeStreams: Map<string, AbortController> = new Map();
+  private stopRequested: Set<string> = new Set();
 
   constructor() {
     this.llmService = new LLMService();
@@ -173,6 +175,10 @@ export class ChatService {
     // Start streaming
     startStream();
 
+    // Create AbortController for this stream
+    const abortController = new AbortController();
+    this.activeStreams.set(taskId, abortController);
+
     // Track structured assistant message parts in chronological order
     let assistantSequence: number | null = null;
     let assistantMessageId: string | null = null;
@@ -190,8 +196,15 @@ export class ChatService {
         llmModel,
         enableTools,
         taskId, // Pass taskId to enable todo tool context
-        workspacePath // Pass workspace path for tool operations
+        workspacePath, // Pass workspace path for tool operations
+        abortController.signal
       )) {
+        // If a stop was requested, break out of the loop immediately
+        if (this.stopRequested.has(taskId)) {
+          console.log(`[CHAT] Stop requested during stream for task ${taskId}`);
+          break;
+        }
+
         // Emit the chunk directly to clients
         emitStreamChunk(chunk);
 
@@ -391,6 +404,9 @@ export class ChatService {
       console.log(`[CHAT] Assistant parts: ${assistantParts.length}`);
       console.log(`[CHAT] Tool calls executed: ${toolCallSequences.size}`);
 
+      // Clean up stream tracking
+      this.activeStreams.delete(taskId);
+      this.stopRequested.delete(taskId);
       endStream();
     } catch (error) {
       console.error("Error processing user message:", error);
@@ -403,6 +419,9 @@ export class ChatService {
         finishReason: "error",
       });
 
+      // Clean up stream tracking on error
+      this.activeStreams.delete(taskId);
+      this.stopRequested.delete(taskId);
       handleStreamError(error);
       throw error;
     }
@@ -430,5 +449,20 @@ export class ChatService {
       enableTools: true,
       workspacePath,
     });
+  }
+
+  async stopStream(taskId: string): Promise<void> {
+    // Mark stop requested so generator exits early
+    this.stopRequested.add(taskId);
+
+    console.log(`[CHAT] Stopping stream for task ${taskId}`);
+    
+    const abortController = this.activeStreams.get(taskId);
+    if (abortController) {
+      abortController.abort();
+      this.activeStreams.delete(taskId);
+      console.log(`[CHAT] Stream stopped for task ${taskId}`);
+    }
+
   }
 }

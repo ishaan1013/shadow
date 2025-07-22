@@ -56,8 +56,8 @@ model Account {
   updatedAt             DateTime
 
   // GitHub App installation data
-  githubInstallationId  String?   // GitHub App installation ID
-  githubAppConnected    Boolean   @default(false) // Whether GitHub App is installed
+  githubInstallationId String? // GitHub App installation ID
+  githubAppConnected   Boolean @default(false) // Whether GitHub App is installed
 
   @@map("account")
 }
@@ -179,6 +179,10 @@ model FileChange {
   oldContent String? // For edits/deletes
   newContent String? // For creates/edits
   diffPatch  String? // Git-style diff
+
+  // Efficient diff stats (calculated once on server)
+  additions Int @default(0) // Lines added
+  deletions Int @default(0) // Lines deleted
 
   createdAt DateTime @default(now())
 

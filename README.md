@@ -130,12 +130,6 @@ Since we're constantly making schema changes, you can just directly push to the 
 npm run db:push
 ```
 
-We have a seed script at `packages/db/src/seed.ts`. It may be out of date since our app is now mostly integrated and you don't really need synthetic data. If you still do, just check with AI that the data is the correct shape then run:
-
-```
-npm run db:seed
-```
-
 To run the Prisma Studio GUI, you can run:
 
 ```

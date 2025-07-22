@@ -39,11 +39,7 @@ export function AssistantMessage({ message }: { message: Message }) {
 
   // Render structured parts in chronological order
   if (!message.metadata?.parts || message.metadata.parts.length === 0) {
-    return (
-      <div className="text-sm text-red-500">
-        Error: Assistant message missing structured parts
-      </div>
-    );
+    return null;
   }
 
   // Group consecutive text parts together for better rendering

@@ -1,10 +1,12 @@
 import { prisma } from "@repo/db";
 import { tool } from "ai";
 import { exec } from "child_process";
+import { createPatch } from "diff";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { z } from "zod";
 import config from "../config";
+import { emitStreamChunk } from "../socket";
 import { execAsync } from "../utils/exec";
 
 // Configuration flag for terminal command approval
@@ -19,6 +21,85 @@ const pendingCommands = new Map<
     reject: (error: any) => void;
   }
 >();
+
+// Helper function to save file changes to database
+async function saveFileChange(
+  taskId: string,
+  filePath: string,
+  operation: "CREATE" | "UPDATE" | "DELETE" | "RENAME" | "MOVE",
+  oldContent?: string,
+  newContent?: string
+): Promise<void> {
+  try {
+    // Generate git-style diff if both old and new content exist
+    let diffPatch: string | undefined;
+    let additions = 0;
+    let deletions = 0;
+
+    if (oldContent !== undefined && newContent !== undefined) {
+      diffPatch = createPatch(
+        filePath,
+        oldContent,
+        newContent,
+        undefined, // oldHeader
+        undefined, // newHeader
+        { context: 3 } // 3 lines of context like git
+      );
+
+      // Calculate diff stats efficiently on server
+      const lines = diffPatch.split("\n");
+      lines.forEach((line) => {
+        if (line.startsWith("+") && !line.startsWith("+++")) {
+          additions++;
+        } else if (line.startsWith("-") && !line.startsWith("---")) {
+          deletions++;
+        }
+      });
+    } else if (operation === "CREATE" && newContent) {
+      // New file: count all lines as additions
+      additions = newContent.split("\n").length;
+    } else if (operation === "DELETE" && oldContent) {
+      // Deleted file: count all lines as deletions
+      deletions = oldContent.split("\n").length;
+    }
+
+    const savedFileChange = await prisma.fileChange.create({
+      data: {
+        taskId,
+        filePath,
+        operation,
+        oldContent,
+        newContent,
+        diffPatch,
+        additions,
+        deletions,
+      },
+    });
+
+    console.log(
+      `[FILE_CHANGE] Recorded ${operation} for ${filePath} (+${additions} -${deletions})`
+    );
+
+    // Stream the file change in real-time
+    emitStreamChunk({
+      type: "file-change",
+      fileChange: {
+        id: savedFileChange.id,
+        filePath,
+        operation,
+        oldContent,
+        newContent,
+        diffPatch,
+        additions,
+        deletions,
+        createdAt: savedFileChange.createdAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error(`[FILE_CHANGE_ERROR] Failed to save file change:`, error);
+    // Don't throw error - file operation succeeded, logging is secondary
+  }
+}
 
 // Factory function to create tools with task context
 export function createTools(taskId: string, workspacePath?: string) {
@@ -533,15 +614,27 @@ export function createTools(taskId: string, workspacePath?: string) {
 
           // Check if this is a new file or editing existing
           let isNewFile = false;
+          let existingContent = "";
+
           try {
-            await fs.access(filePath);
+            existingContent = await fs.readFile(filePath, "utf-8");
           } catch {
             isNewFile = true;
           }
 
+          // Write the new content
+          await fs.writeFile(filePath, code_edit);
+
+          // Save file change to database
+          await saveFileChange(
+            taskId,
+            target_file,
+            isNewFile ? "CREATE" : "UPDATE",
+            isNewFile ? undefined : existingContent,
+            code_edit
+          );
+
           if (isNewFile) {
-            // Create new file
-            await fs.writeFile(filePath, code_edit);
             return {
               success: true,
               isNewFile: true,
@@ -549,15 +642,7 @@ export function createTools(taskId: string, workspacePath?: string) {
               linesAdded: code_edit.split("\n").length,
             };
           } else {
-            // For existing files, this is a simplified implementation
-            // In a real system, you'd want to apply the edit more intelligently
-            const existingContent = await fs.readFile(filePath, "utf-8");
             const existingLines = existingContent.split("\n").length;
-
-            // For now, we'll replace the entire file content
-            // A more sophisticated implementation would parse the edit instructions
-            await fs.writeFile(filePath, code_edit);
-
             const newLines = code_edit.split("\n").length;
 
             return {
@@ -598,9 +683,9 @@ export function createTools(taskId: string, workspacePath?: string) {
           console.log(`[SEARCH_REPLACE] Replacing text in ${file_path}`);
 
           const filePath = path.resolve(toolWorkspacePath, file_path);
-          const content = await fs.readFile(filePath, "utf-8");
+          const existingContent = await fs.readFile(filePath, "utf-8");
 
-          const occurrences = content.split(old_string).length - 1;
+          const occurrences = existingContent.split(old_string).length - 1;
 
           if (occurrences === 0) {
             return {
@@ -622,8 +707,17 @@ export function createTools(taskId: string, workspacePath?: string) {
             };
           }
 
-          const newContent = content.replace(old_string, new_string);
+          const newContent = existingContent.replace(old_string, new_string);
           await fs.writeFile(filePath, newContent);
+
+          // Save file change to database
+          await saveFileChange(
+            taskId,
+            file_path,
+            "UPDATE",
+            existingContent,
+            newContent
+          );
 
           return {
             success: true,
@@ -698,7 +792,25 @@ export function createTools(taskId: string, workspacePath?: string) {
           console.log(`[DELETE_FILE] ${explanation}`);
 
           const filePath = path.resolve(toolWorkspacePath, target_file);
+
+          // Get existing content before deletion for database record
+          let existingContent: string | undefined;
+          try {
+            existingContent = await fs.readFile(filePath, "utf-8");
+          } catch {
+            // File doesn't exist, that's fine
+          }
+
           await fs.unlink(filePath);
+
+          // Save file change to database
+          await saveFileChange(
+            taskId,
+            target_file,
+            "DELETE",
+            existingContent,
+            undefined
+          );
 
           return {
             success: true,

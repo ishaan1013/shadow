@@ -127,7 +127,8 @@ export interface StreamChunk {
     | "error"
     | "tool-call"
     | "tool-result"
-    | "init-progress";
+    | "init-progress"
+    | "file-change";
 
   // For content chunks
   content?: string;
@@ -170,6 +171,19 @@ export interface StreamChunk {
 
   // For initialization progress
   initProgress?: InitializationProgress;
+
+  // For file changes
+  fileChange?: {
+    id: string;
+    filePath: string;
+    operation: "CREATE" | "UPDATE" | "DELETE" | "RENAME" | "MOVE";
+    oldContent?: string;
+    newContent?: string;
+    diffPatch?: string;
+    additions: number;
+    deletions: number;
+    createdAt: string;
+  };
 }
 
 // Initialization progress tracking
@@ -334,7 +348,46 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
   },
 };
 
-// === AI SDK Integration Types ===
+export interface TextDeltaChunk {
+  type: "text-delta";
+  textDelta: string;
+}
+
+export interface ToolCallChunk {
+  type: "tool-call";
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+}
+
+export interface ToolResultChunk {
+  type: "tool-result";
+  toolCallId: string;
+  result: unknown;
+}
+
+export interface FinishChunk {
+  type: "finish";
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  finishReason: "stop" | "length" | "content-filter" | "tool-calls" | string;
+}
+
+export interface ErrorChunk {
+  type: "error";
+  error: unknown;
+}
+
+// Discriminated-union representing every chunk variant we care about.
+export type AIStreamChunk =
+  | TextDeltaChunk
+  | ToolCallChunk
+  | ToolResultChunk
+  | FinishChunk
+  | ErrorChunk;
 
 // Helper to get model provider
 export function getModelProvider(model: ModelType): "anthropic" | "openai" {

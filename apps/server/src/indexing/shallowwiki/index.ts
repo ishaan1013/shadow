@@ -1,69 +1,37 @@
 import fs from "fs";
 import path from "path";
-import glob from "fast-glob";
+import chalk from "chalk";
+import fg from "fast-glob";
+import ignore from "ignore";
 import readline from "readline";
 import { OpenAI } from "openai";
-import chalk from "chalk";
-import { config } from "dotenv";
 
-config();
-
-// ───────── configuration ────────────────────────────────────────────────────
+/*────────── config you might tweak ─────────────────────────────────────────*/
 const ROOT = path.resolve(process.argv[2] || ".");
 const OUT_DIR = path.join(ROOT, ".shadow");
-const MAX_FILE_BYTES = 80_000;        // skip >80 KB blobs entirely
-const MAX_SNIPPET_CHARS = 800;        // per‑file snippet budget
-const MAX_GLOBAL_CHARS = 60_000;      // repo‑wide snippet budget
-const OVERVIEW_TOKEN_LIMIT = 150;     // token budget for overview
-const SECTION_TOKEN_LIMIT = 150;      // token budget for each section
 const MODEL = process.env.MODEL || "gpt-4o-mini";
 
-// ignore rules (similar to .gitignore)
-const IGNORE_GLOBS = [
-  "**/node_modules/**",
-  "**/.git/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/*.png","**/*.jpg","**/*.jpeg","**/*.gif","**/*.svg","**/*.ico",
-  "**/*.lock","**/*.min.*","**/*.map","**/*.woff*","**/*.eot",
-  "**/*.class","**/*.exe",
-  "**/.shadow/**",
-];
+const FILES_PER_CHUNK = 12;      // leaf prompt granularity
+const MAX_SNIPPET_CHARS = 600;     // per‑file snippet
+const MAX_LEAF_CONTEXT = 7_000;   // tokens (≈ chars) per leaf prompt
+const OVERVIEW_TOKENS = 160;     // repo overview budget
+const SECTION_TOKENS = 160;     // section budget
 
-// ───────── helper functions ─────────────────────────────────────────────────
+/*────────── tiny helpers ───────────────────────────────────────────────────*/
 const bold = (s: string) => chalk.bold.cyan(s);
+const pad4 = (n: number) => n.toString().padStart(4, " ");
 
-function readSnippets(absPath: string): string {
-  const buf = fs.readFileSync(absPath);
-  if (buf.length === 0 || buf.length > MAX_FILE_BYTES) return "";
-
-  const content = buf.toString("utf8");
-  const lines = content.split(/\r?\n/);
-  const start = lines.slice(0, 15).join("\n");
-  const midIndex = Math.floor(lines.length / 2);
-  const mid = lines.slice(Math.max(0, midIndex - 7), midIndex + 8).join("\n");
-
-  let snippet = start;
-  if (mid && mid !== start) snippet += "\n...\n" + mid;
-  return snippet.slice(0, MAX_SNIPPET_CHARS);
-}
-
-async function promptYesNo(question: string) {
+async function yesNo(q: string): Promise<boolean> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise<boolean>((resolve) => {
-    rl.question(question + " (y/N) ", (ans) => {
-      rl.close();
-      resolve(/^y(es)?$/i.test(ans.trim()));
-    });
-  });
+  return new Promise(r => rl.question(q + " (y/N) ", a => { rl.close(); r(/^y(es)?$/i.test(a.trim())); }));
 }
 
-// ───────── openai wrapper ───────────────────────────────────────────────────
+/*────────── OpenAI wrapper ─────────────────────────────────────────────────*/
 const openai = new OpenAI();
 
 async function chat(
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  expectJson = false,
+  expectJson = false
 ) {
   const res = await openai.chat.completions.create({
     model: MODEL,
@@ -74,165 +42,189 @@ async function chat(
   return res.choices[0]?.message?.content?.trim() || "";
 }
 
-// ───────── main generation logic ────────────────────────────────────────────
-(async () => {
-  if (!process.env.OPENAI_API_KEY) {
-    console.error("OPENAI_API_KEY env var not set");
-    process.exit(1);
+/*────────── repo scanning utilities ────────────────────────────────────────*/
+interface FileMeta {
+  rel: string;  // path relative to ROOT
+  snip: string;  // line‑numbered snippet
+  deps: string[];// relative import targets
+}
+
+function numberedSnippet(abs: string): string {
+  const srcBuf = fs.readFileSync(abs);
+  if (!srcBuf.length) return "";
+  const lines = srcBuf.toString("utf8").split(/\r?\n/);
+
+  const first = lines.slice(0, 15);
+  const midIdx = Math.floor(lines.length / 2);
+  const middle = lines.slice(Math.max(0, midIdx - 7), midIdx + 8);
+
+  const num = (chunk: string[], base: number) =>
+    chunk.map((l, i) => `${pad4(base + i)}│ ${l}`).join("\n");
+
+  let out = num(first, 1);
+  if (midIdx > 15) out += "\n…\n" + num(middle, midIdx - 6);
+  return out.slice(0, MAX_SNIPPET_CHARS);
+}
+
+function extractDeps(src: string): string[] {
+  const re = /\bimport\s+(?:.+?\s+from\s+)?["']([^"']+)["']|require\(\s*["']([^"']+)["']\s*\)/g;
+  const deps: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) {
+    const spec = (m[1] || m[2] || "").trim();
+    if (spec.startsWith(".")) deps.push(spec);
   }
-  console.log(bold(`📚 DeepWiki‑LLM: scanning ${ROOT} …`));
+  return deps;
+}
 
-  // Gather file list
-  const entries = await glob("**/*", {
-    cwd: ROOT,
-    absolute: true,
-    dot: true,
-    ignore: IGNORE_GLOBS,
-  });
+/*────────── hierarchial summary engine ─────────────────────────────────────*/
+interface DirSum { id: string; md: string; }
 
-  // Read snippets
-  const fileMeta: { rel: string; snippet: string }[] = [];
-  for (const abs of entries) {
-    if (!fs.statSync(abs).isFile()) continue;
-    const rel = path.relative(ROOT, abs);
-    const snippet = readSnippets(abs);
-    fileMeta.push({ rel, snippet });
+async function buildDeepWiki() {
+  console.log(bold(`📚 Indexing ${ROOT}`));
+
+  /* ── 1. honour .gitignore ───────────────────────────────────────────────*/
+  const ig = ignore();
+  ig.add([".git/", "node_modules/"]);            // always ignore
+  const gitIgnoreFile = path.join(ROOT, ".gitignore");
+  if (fs.existsSync(gitIgnoreFile)) ig.add(fs.readFileSync(gitIgnoreFile, "utf8"));
+
+  const allFiles = await fg("**/*", { cwd: ROOT, dot: true, absolute: true });
+
+  const metas: FileMeta[] = [];
+  const importGraph: Record<string, string[]> = {};
+
+  for (const abs of allFiles) {
+    const rel = path.relative(ROOT, abs).replace(/\\/g, "/");
+    if (ig.ignores(rel) || fs.statSync(abs).isDirectory()) continue;
+
+    const snip = numberedSnippet(abs);
+    const deps = /\.[jt]sx?$/.test(abs)
+      ? extractDeps(fs.readFileSync(abs, "utf8").slice(0, 20_000))
+      : [];
+
+    if (deps.length) importGraph[rel] = deps;
+    metas.push({ rel, snip, deps });
   }
 
-  // Manifest shown to the LLM
-  let manifest = "# Repository Manifest\n\n";
-  manifest += "| File | Size (bytes) |\n|------|--------------|\n" +
-    fileMeta.map((f) => {
-      const size = fs.statSync(path.join(ROOT, f.rel)).size;
-      return `| ${f.rel} | ${size} |`;
-    }).join("\n") + "\n";
+  /* ── 2. leaf‑level summaries (≤ FILES_PER_CHUNK each) ──────────────────*/
+  const dirSums: Record<string, DirSum> = {};
 
-  // Concatenate snippets with global cap
-  let allSnips = "";
-  for (const f of fileMeta) {
-    allSnips += `\n// ===== ${f.rel} =====\n${f.snippet}\n`;
-    if (allSnips.length > MAX_GLOBAL_CHARS) break;
+  async function summariseChunk(dir: string, chunk: FileMeta[]) {
+    const ctx = chunk
+      .map(m => `// ===== ${m.rel} =====\n${m.snip}`)
+      .join("\n\n")
+      .slice(0, MAX_LEAF_CONTEXT);
+
+    const relTxt = chunk
+      .filter(m => importGraph[m.rel])
+      .map(m => `${m.rel} -> ${importGraph[m.rel]?.join(", ") || ""}`)
+      .join("\n") || "(no deps)";
+
+    const md = await chat([
+      {
+        role: "system", content:
+          `You are DeepWiki‑LLM. Summarise the following code chunk in ≤8 crisp bullets.
+Mention standout identifiers and import relations. Use wiki‑links [[file.ts]].`},
+      { role: "user", content: `\`\`\`txt\n${ctx}\n\`\`\`\n\n## RELATIONS\n\`\`\`txt\n${relTxt}\n\`\`\`` }
+    ]);
+    return md.trim();
   }
 
-  // ───── 1️⃣ Decide wiki structure ──────────────────────────────────────────
-  console.log(bold("🧠  Step 1: generating TOC & overview …"));
-  const tocPrompt: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+  async function recurse(dirRel: string): Promise<DirSum> {
+    const absDir = path.join(ROOT, dirRel || ".");
+    const children = fs.readdirSync(absDir, { withFileTypes: true });
+
+    const localFiles = metas.filter(m => path.dirname(m.rel) === dirRel);
+    const chunks: FileMeta[][] = [];
+    for (let i = 0; i < localFiles.length; i += FILES_PER_CHUNK)
+      chunks.push(localFiles.slice(i, i + FILES_PER_CHUNK));
+
+    const leafMd: string[] = [];
+    for (const ch of chunks) if (ch.length)
+      leafMd.push(await summariseChunk(dirRel, ch));
+
+    const subMd: string[] = [];
+    for (const child of children) if (child.isDirectory()) {
+      const subDirRel = path.posix.join(dirRel, child.name);
+      subMd.push((await recurse(subDirRel)).md);
+    }
+
+    const md = [
+      `### ${dirRel || "./"}`,
+      ...leafMd,
+      ...subMd,
+    ].join("\n\n");
+
+    const id = (dirRel || "root").replace(/[\\/]/g, "_") || "root";
+    return dirSums[dirRel] = { id, md };
+  }
+
+  await recurse("");     // build summaries bottom‑up
+
+  /* ── 3. repo‑wide overview & TOC from only dir summaries ────────────────*/
+  const dirsFlatMd = Object.values(dirSums)
+    .map(s => `[[${s.id}]]\n${s.md}`).join("\n\n");
+
+  const tocJSON = await chat([
     {
-      role: "system",
-      content:
-        `You are DeepWiki‑LLM, master of crystal‑clear DeepWiki documentation.\n` +
-        `Output MUST be valid JSON with keys: overview_md (string) and sections (array {id,title,file_globs}).\n` +
-        `• overview_md: ≤ ${OVERVIEW_TOKEN_LIMIT} tokens, use bullet lists, embed wiki‑links ([[ ]]) to each section id.\n` +
-        `• sections: choose precise, conceptually clean titles, no \"Misc\".\n` +
-        `• file_globs: glob patterns or comma‑separated rel paths most relevant to section.\n`,
-    },
-    {
-      role: "user",
-      content:
-        manifest +
-        "\n\n## CODE SNIPPETS (truncated):\n```txt\n" +
-        allSnips +
-        "\n```",
-    },
-  ];
+      role: "system", content:
+        `You are DeepWiki-LLM. Craft: 
+  • overview_md (≤${OVERVIEW_TOKENS} tokens, start with a bullet diagram of subsystems)
+  • sections (array of {id,title,file_globs})  
+Respond **only** with JSON.`},
+    { role: "user", content: dirsFlatMd }
+  ], true);
 
-  const tocJsonRaw = await chat(tocPrompt, true);
-  let toc: {
-    overview_md: string;
-    sections: { id: string; title: string; file_globs: string }[];
-  };
+  let toc: { overview_md: string; sections: { id: string; title: string; file_globs: string }[] };
+  try { toc = JSON.parse(tocJSON); } catch { throw new Error("LLM returned bad JSON:\n" + tocJSON); }
 
-  try {
-    toc = JSON.parse(tocJsonRaw);
-  } catch {
-    console.error("❌ Failed to parse LLM JSON:\n", tocJsonRaw);
-    process.exit(1);
-  }
-
-  console.log(bold("📑  Sections:"));
-  toc.sections.forEach((s, i) =>
-    console.log(`  ${i + 1}. ${s.title}  [${s.file_globs}]`),
-  );
-
-  if (!(await promptYesNo("Proceed with these sections?"))) process.exit(0);
+  console.log(bold("📑 Sections")); toc.sections.forEach((s, i) => console.log(`  ${i + 1}.`, s.title));
+  if (!(await yesNo("Generate wiki now?"))) return;
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const nowIso = new Date().toISOString();
+  const nowISO = new Date().toISOString();
 
-  // ───── Write overview page ───────────────────────────────────────────────
-  const overviewFrontMatter =
-    `---\n` +
-    `id: overview\n` +
-    `title: Overview\n` +
-    `generated: ${nowIso}\n` +
-    `model: ${MODEL}\n` +
-    `---\n\n`;
+  /* ── 4. write overview ──────────────────────────────────────────────────*/
+  fs.writeFileSync(path.join(OUT_DIR, "00_OVERVIEW.md"),
+    `---\nid: overview\ntitle: Overview\ngenerated: ${nowISO}\nmodel: ${MODEL}\n---\n\n${toc.overview_md.trim()}\n`);
 
-  const overviewLinks =
-    "## Sections\n" + toc.sections.map((s) => `- [[${s.id}]] ${s.title}`).join("\n") + "\n";
-
-  fs.writeFileSync(
-    path.join(OUT_DIR, "00_OVERVIEW.md"),
-    overviewFrontMatter + toc.overview_md.trim() + "\n\n" + overviewLinks,
-  );
-  console.log(bold("✅  00_OVERVIEW.md written"));
-
-  // ───── 2️⃣ Generate each section page ────────────────────────────────────
+  /* ── 5. section pages ───────────────────────────────────────────────────*/
   for (const sec of toc.sections) {
-    const matchedFiles = await glob(
-      sec.file_globs.split(/[;,]/).map((g) => g.trim()),
-      { cwd: ROOT, absolute: true },
-    );
+    const globs = sec.file_globs.split(/[,;]/).map(s => s.trim());
+    const rels = (await fg(globs, { cwd: ROOT, absolute: false })).map(f => f.replace(/\\/g, "/"));
 
-    let context = "";
-    matchedFiles.forEach((mf) => {
-      const rel = path.relative(ROOT, mf);
-      const snip = fileMeta.find((m) => m.rel === rel)?.snippet || readSnippets(mf);
-      context += `\n// >>> ${rel}\n${snip}\n`;
-    });
-    if (!context.trim()) context = "\n(No direct snippets matched; rely on manifest.)";
+    /* compress context further: stitch directory summaries of matching files */
+    const ctx = rels
+      .map(r => dirSums[path.dirname(r)]?.md)
+      .filter(Boolean).join("\n\n") || "(no summary)";
 
-    console.log(bold(`🧠  Generating «${sec.title}» …`));
-    const secPrompt: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    const mdBody = await chat([
       {
-        role: "system",
-        content:
-          `You are DeepWiki‑LLM. Produce ONE Markdown doc body (no front‑matter).\n` +
-          `Follow DeepWiki style: terse bullet lists, internal links with [[ ]], no fluff.\n` +
-          `Structure:\n` +
-          `# ${sec.title}\n` +
-          `## Purpose  (≤2 bullets)\n` +
-          `## Details  (≤4 bullets)\n` +
-          `## Key Files  (wiki‑link each rel path)\n` +
-          `## Links  (omit if none)\n` +
-          `Length ≤ ${SECTION_TOKEN_LIMIT} tokens.\n`,
+        role: "system", content:
+          `DeepWiki‑LLM. Produce a section doc with YAML front‑matter.
+Headings:
+# ${sec.title}
+## Purpose  (≤2 bullets)
+## Architecture Highlights (≤4 bullets, reference deps / lines)
+## Key Snippets (• file: Lx‑Ly → summary)
+## Further Reading (omit if none)
+≤${SECTION_TOKENS} tokens, use [[wikilinks]].`
       },
-      {
-        role: "user",
-        content:
-          manifest +
-          "\n\n### SNIPPETS SELECTED\n```txt\n" +
-          context.slice(0, MAX_GLOBAL_CHARS) +
-          "\n```\n",
-      },
-    ];
+      { role: "user", content: ctx }
+    ]);
 
-    const bodyMd = await chat(secPrompt);
-    const frontMatter =
-      `---\n` +
-      `id: ${sec.id}\n` +
-      `title: ${sec.title}\n` +
-      `generated: ${nowIso}\n` +
-      `model: ${MODEL}\n` +
-      `---\n\n`;
-
-    const fname = `${sec.id.replace(/[^a-z0-9\-]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase()}.md`;
-    fs.writeFileSync(path.join(OUT_DIR, fname), frontMatter + bodyMd.trim() + "\n");
-    console.log(bold(`✅  ${fname} written`));
+    const fn = sec.id.replace(/[^a-z0-9\-]+/gi, "_").toLowerCase() + ".md";
+    fs.writeFileSync(path.join(OUT_DIR, fn),
+      `---\nid:${sec.id}\ntitle:${sec.title}\ngenerated:${nowISO}\n---\n\n${mdBody.trim()}\n`);
+    console.log("  ✍️ ", fn);
   }
 
-  console.log(bold("\n🎉  DeepWiki‑LLM docs generated at:"), OUT_DIR);
-})().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+  console.log(bold("\n🎉  DeepWiki ready in"), OUT_DIR);
+}
+
+/*────────── main entry (CJS‑safe) ──────────────────────────────────────────*/
+(async () => {
+  try { await buildDeepWiki(); }
+  catch (err) { console.error(err); process.exit(1); }
+})();
