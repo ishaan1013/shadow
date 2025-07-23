@@ -7,12 +7,12 @@ import {
 } from "@/components/ui/sidebar";
 import { Task } from "@repo/db";
 import { ChevronDown, Folder, GitBranch } from "lucide-react";
-import { statusColorsConfig, statusOrder } from ".";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import { statusColorsConfig, statusOrder } from "./status";
 
 type GroupedTasks = {
   [repoUrl: string]: {
