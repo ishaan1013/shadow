@@ -7,30 +7,20 @@ import { useSendMessage } from "@/hooks/use-send-message";
 import { useTaskMessages } from "@/hooks/use-task-messages";
 import { socket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
-import type { FileChange } from "@repo/db";
+import type { FileChange, Task } from "@repo/db";
 import type {
   AssistantMessagePart,
   Message,
   StreamChunk,
+  TaskStatusUpdateEvent,
   TextPart,
   ToolCallPart,
-  ToolExecutionStatusType,
   ToolResultPart,
 } from "@repo/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
-
-// Types for streaming tool calls
-interface StreamingToolCall {
-  id: string;
-  name: string;
-  args: Record<string, any>;
-  status: ToolExecutionStatusType;
-  result?: string;
-  error?: string;
-}
 
 export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
   const { taskId } = useParams<{ taskId: string }>();
@@ -46,9 +36,6 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
     AssistantMessagePart[]
   >([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingToolCalls, setStreamingToolCalls] = useState<
-    StreamingToolCall[]
-  >([]);
 
   useEffect(() => {
     function onConnect() {
@@ -70,9 +57,6 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
         // Clear streaming state when we have the updated chat history
         setStreamingAssistantParts([]);
         setIsStreaming(false);
-
-        // Clear state
-        setStreamingToolCalls([]);
       }
     }
 
@@ -109,15 +93,6 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
               args: chunk.toolCall.args,
             };
             setStreamingAssistantParts((prev) => [...prev, toolCallPart]);
-
-            // Keep old behavior for now during transition
-            const newToolCall: StreamingToolCall = {
-              id: chunk.toolCall.id,
-              name: chunk.toolCall.name,
-              args: chunk.toolCall.args,
-              status: "RUNNING",
-            };
-            setStreamingToolCalls((prev) => [...prev, newToolCall]);
           }
           break;
 
@@ -145,19 +120,6 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
               }
               return [...prev, toolResultPart];
             });
-
-            // Keep old behavior for now during transition
-            setStreamingToolCalls((prev) =>
-              prev.map((toolCall) =>
-                toolCall.id === chunk.toolResult!.id
-                  ? {
-                      ...toolCall,
-                      status: "COMPLETED" as const,
-                      result: chunk.toolResult!.result,
-                    }
-                  : toolCall
-              )
-            );
           }
           break;
 
@@ -228,7 +190,6 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
       // Refresh messages when stream is complete
       socket.emit("get-chat-history", { taskId });
 
-      // Also invalidate file changes to ensure consistency with DB
       queryClient.invalidateQueries({ queryKey: ["file-changes", taskId] });
       queryClient.invalidateQueries({ queryKey: ["task", taskId] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -251,6 +212,36 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
       setIsStreaming(false);
     }
 
+    function onTaskStatusUpdate(data: TaskStatusUpdateEvent) {
+      if (data.taskId === taskId) {
+        // Optimistically update the task status in React Query cache
+        queryClient.setQueryData(
+          ["task", taskId],
+          (oldData: Task | undefined) => {
+            if (oldData) {
+              return {
+                ...oldData,
+                status: data.status,
+                updatedAt: data.timestamp,
+              };
+            }
+            return oldData;
+          }
+        );
+
+        queryClient.setQueryData(["tasks"], (oldTasks: Task[]) => {
+          if (oldTasks) {
+            return oldTasks.map((task: Task) =>
+              task.id === taskId
+                ? { ...task, status: data.status, updatedAt: data.timestamp }
+                : task
+            );
+          }
+          return oldTasks;
+        });
+      }
+    }
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("chat-history", onChatHistory);
@@ -259,6 +250,7 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
     socket.on("stream-complete", onStreamComplete);
     socket.on("stream-error", onStreamError);
     socket.on("message-error", onMessageError);
+    socket.on("task-status-updated", onTaskStatusUpdate);
 
     if (!socket.connected) {
       socket.connect();
@@ -273,6 +265,7 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
       socket.off("stream-complete", onStreamComplete);
       socket.off("stream-error", onStreamError);
       socket.off("message-error", onMessageError);
+      socket.off("task-status-updated", onTaskStatusUpdate);
     };
   }, [taskId]);
 
@@ -299,7 +292,6 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
     // Immediately update local state
     setIsStreaming(false);
     setStreamingAssistantParts([]);
-    setStreamingToolCalls([]);
   };
 
   if (taskMessagesError) {

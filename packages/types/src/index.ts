@@ -406,3 +406,10 @@ export function getModelProvider(model: ModelType): "anthropic" | "openai" {
 export function getModelInfo(model: ModelType): ModelInfo {
   return ModelInfos[model];
 }
+
+// === Real-time Updates ===
+export interface TaskStatusUpdateEvent {
+  taskId: string;
+  status: string; // Will match TaskStatus from database
+  timestamp: string;
+}

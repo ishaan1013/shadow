@@ -67,7 +67,7 @@ export function SidebarTasksView({
 
       {error && (
         <SidebarGroup>
-          <SidebarGroupLabel className="text-red-500">
+          <SidebarGroupLabel className="text-red-400">
             Error: {error instanceof Error ? error.message : String(error)}
           </SidebarGroupLabel>
         </SidebarGroup>

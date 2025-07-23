@@ -14,9 +14,9 @@ function StatusIcon({ status }: { status: TodoItem["status"] }) {
     case "in_progress":
       return <Clock className="size-4 text-blue-500" />;
     case "completed":
-      return <CheckCircle className="size-4 text-green-500" />;
+      return <CheckCircle className="size-4 text-green-400" />;
     case "cancelled":
-      return <X className="size-4 text-red-500" />;
+      return <X className="size-4 text-red-400" />;
   }
 }
 
@@ -46,13 +46,13 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
         )}
         {statusCounts.completed && (
           <span className="flex items-center gap-1">
-            <CheckCircle className="size-3 text-green-500" />
+            <CheckCircle className="size-3 text-green-400" />
             {statusCounts.completed} completed
           </span>
         )}
         {statusCounts.cancelled && (
           <span className="flex items-center gap-1">
-            <X className="size-3 text-red-500" />
+            <X className="size-3 text-red-400" />
             {statusCounts.cancelled} cancelled
           </span>
         )}
@@ -69,7 +69,7 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
                     todo.status === "completed"
                       ? "text-muted-foreground line-through"
                       : todo.status === "cancelled"
-                        ? "text-red-500/70 line-through"
+                        ? "text-red-400/70 line-through"
                         : ""
                   }`}
                 >

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { TaskStatus } from "@repo/db";
 import { LayoutGrid, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { SidebarView } from ".";
@@ -7,23 +8,36 @@ import { UserMenu } from "../auth/user-menu";
 import { Button } from "../ui/button";
 import { useSidebar } from "../ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { statusColorsConfig } from "./status";
 
 export function SidebarNavigation({
   sidebarView,
   setSidebarView,
   doesCurrentTaskExist,
+  currentTaskStatus,
 }: {
   sidebarView: SidebarView;
   setSidebarView: (view: SidebarView) => void;
   doesCurrentTaskExist: boolean;
+  currentTaskStatus: TaskStatus | null;
 }) {
   const { open, toggleSidebar } = useSidebar();
+
+  // Get status color from config, default to blue if no current task
+  const statusColor = currentTaskStatus
+    ? statusColorsConfig[currentTaskStatus].bg
+    : "";
 
   const agentViewTrigger = (
     <div className="relative z-0 h-7">
       <div className="bg-card pointer-events-none absolute -top-1.5 -right-1.5 z-10 rounded-full p-1">
-        <div className="relative size-2 rounded-full bg-green-400">
-          <div className="absolute -top-px -left-px size-2.5 animate-ping rounded-full bg-green-400 opacity-25" />
+        <div className={cn("relative size-2 rounded-full", statusColor)}>
+          <div
+            className={cn(
+              "absolute -top-px -left-px size-2.5 animate-ping rounded-full opacity-25",
+              statusColor
+            )}
+          />
         </div>
       </div>
       <Tooltip>

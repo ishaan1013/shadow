@@ -56,12 +56,12 @@ function StatusBadge({ status }: { status: ToolExecutionStatusType }) {
     },
     COMPLETED: {
       icon: CheckIcon,
-      className: "text-green-500 bg-green-500/10 border-green-500/20",
+      className: "text-green-400 bg-green-500/10 border-green-500/20",
       text: "Success",
     },
     FAILED: {
       icon: X,
-      className: "text-red-500 bg-red-500/10 border-red-500/20",
+      className: "text-red-400 bg-red-500/10 border-red-500/20",
       text: "Error",
     },
   };

@@ -24,14 +24,14 @@ import {
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { statusColorsConfig } from ".";
+import { statusColorsConfig } from "./status";
 
-// Todo status config
+// Todo status config - aligned with main status colors
 const todoStatusConfig = {
-  PENDING: { icon: Square, className: "text-gray-400" },
-  IN_PROGRESS: { icon: CircleDashed, className: "text-blue-500" },
-  COMPLETED: { icon: SquareCheck, className: "text-green-500" },
-  CANCELLED: { icon: XCircle, className: "text-gray-500" },
+  PENDING: { icon: Square, className: "text-neutral-500" },
+  IN_PROGRESS: { icon: CircleDashed, className: "text-blue-400" },
+  COMPLETED: { icon: SquareCheck, className: "text-green-400" },
+  CANCELLED: { icon: XCircle, className: "text-red-400" },
 };
 
 // Create file tree structure from file paths
@@ -96,11 +96,11 @@ function FileNode({
       case "CREATE":
         return "text-green-400";
       case "UPDATE":
-        return "text-yellow-400";
+        return "text-blue-400";
       case "DELETE":
         return "text-red-400";
       default:
-        return "text-blue-400";
+        return "text-neutral-500";
     }
   };
 
@@ -241,19 +241,21 @@ export function SidebarAgentView({
           </SidebarMenuItem>
 
           {/* Task total diff */}
-          <SidebarMenuItem>
-            <div className="flex h-8 items-center gap-2 px-2 text-sm">
-              <FileDiff className="size-4" />
-              <div className="flex items-center gap-1">
-                <span className="text-green-400">+{diffStats.additions}</span>
-                <span className="text-red-400">-{diffStats.deletions}</span>
+          {diffStats.totalFiles > 0 && (
+            <SidebarMenuItem>
+              <div className="flex h-8 items-center gap-2 px-2 text-sm">
+                <FileDiff className="size-4" />
+                <div className="flex items-center gap-1">
+                  <span className="text-green-400">+{diffStats.additions}</span>
+                  <span className="text-red-400">-{diffStats.deletions}</span>
+                </div>
               </div>
-            </div>
-          </SidebarMenuItem>
+            </SidebarMenuItem>
+          )}
         </SidebarGroupContent>
       </SidebarGroup>
 
-      {/* Task List (Todos) - Only show if todos exist */}
+      {/* Task List (Todos) */}
       {todos.length > 0 && (
         <SidebarGroup>
           <SidebarGroupLabel className="hover:text-muted-foreground">

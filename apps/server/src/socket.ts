@@ -4,6 +4,7 @@ import http from "http";
 import { Server } from "socket.io";
 import { ChatService, DEFAULT_MODEL } from "./chat";
 import config from "./config";
+import { updateTaskStatus } from "./utils/task-status";
 
 // In-memory stream state
 let currentStreamContent = "";
@@ -51,11 +52,7 @@ export function createSocketServer(server: http.Server): Server {
           console.log("Received user message:", data);
 
           // Update task status to running when user sends a new message
-          await prisma.task.update({
-            where: { id: data.taskId },
-            data: { status: "RUNNING" },
-          });
-          console.log(`[SOCKET] Task ${data.taskId} status updated to RUNNING`);
+          await updateTaskStatus(data.taskId, "RUNNING", "SOCKET");
 
           // Get task workspace path from database
           const task = await prisma.task.findUnique({
@@ -134,6 +131,20 @@ export function handleStreamError(error: any) {
   // Only emit if socket server is initialized (not in terminal mode)
   if (io) {
     io.emit("stream-error", error);
+  }
+}
+
+export function emitTaskStatusUpdate(taskId: string, status: string) {
+  // Only emit if socket server is initialized (not in terminal mode)
+  if (io) {
+    const statusUpdateEvent = {
+      taskId,
+      status,
+      timestamp: new Date().toISOString(),
+    };
+
+    console.log(`[SOCKET] Emitting task status update:`, statusUpdateEvent);
+    io.emit("task-status-updated", statusUpdateEvent);
   }
 }
 

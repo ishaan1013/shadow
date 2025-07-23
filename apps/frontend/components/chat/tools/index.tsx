@@ -42,9 +42,9 @@ export type ToolName = keyof typeof TOOL_COMPONENTS;
 //     case "RUNNING":
 //       return <Loader className="size-3.5 text-blue-500 animate-spin" />;
 //     case "COMPLETED":
-//       return <CheckIcon className="size-3.5 text-green-500 opacity-60" />;
+//       return <CheckIcon className="size-3.5 text-green-400 opacity-60" />;
 //     case "FAILED":
-//       return <X className="size-3.5 text-red-500" />;
+//       return <X className="size-3.5 text-red-400" />;
 //     default:
 //       return <div>Status: {status}</div>;
 //   }

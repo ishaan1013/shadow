@@ -9,6 +9,7 @@ import { TaskInitializationEngine } from "./initialization";
 import { errorHandler } from "./middleware/error-handler";
 import { createSocketServer } from "./socket";
 import { getGitHubAccessToken } from "./utils/github-account";
+import { updateTaskStatus } from "./utils/task-status";
 import { WorkspaceManager } from "./workspace";
 
 const app = express();
@@ -97,10 +98,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
         );
 
         // Update task status to failed
-        await prisma.task.update({
-          where: { id: taskId },
-          data: { status: "FAILED" },
-        });
+        await updateTaskStatus(taskId, "FAILED", "INIT");
 
         return res.status(400).json({
           error: "GitHub access token required",
@@ -109,10 +107,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       }
 
       // Update task status to initializing
-      await prisma.task.update({
-        where: { id: taskId },
-        data: { status: "INITIALIZING" },
-      });
+      await updateTaskStatus(taskId, "INITIALIZING", "INIT");
 
       // Run initialization steps using userId (token management is handled internally)
       const initSteps = initializationEngine.getDefaultStepsForTask("simple");
@@ -125,10 +120,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       });
 
       // Update task status to running
-      await prisma.task.update({
-        where: { id: taskId },
-        data: { status: "RUNNING" },
-      });
+      await updateTaskStatus(taskId, "RUNNING", "INIT");
 
       console.log(`[TASK_INITIATE] Successfully initialized task ${taskId}`);
 
@@ -154,18 +146,20 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       );
 
       // Update task status to failed with specific error message
-      await prisma.task.update({
-        where: { id: taskId },
-        data: {
-          status: "FAILED",
-          // Store error in description if it's an auth error
-          description:
-            initError instanceof Error &&
-            initError.message.includes("authentication")
-              ? `${task.description}\n\nError: ${initError.message}`
-              : task.description,
-        },
-      });
+      await updateTaskStatus(taskId, "FAILED", "INIT");
+
+      // Update description if it's an auth error
+      if (
+        initError instanceof Error &&
+        initError.message.includes("authentication")
+      ) {
+        await prisma.task.update({
+          where: { id: taskId },
+          data: {
+            description: `${task.description}\n\nError: ${initError.message}`,
+          },
+        });
+      }
 
       // Return appropriate error response
       if (

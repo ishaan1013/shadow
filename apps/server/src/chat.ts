@@ -18,6 +18,7 @@ import {
   handleStreamError,
   startStream,
 } from "./socket";
+import { updateTaskStatus } from "./utils/task-status";
 
 export const DEFAULT_MODEL: ModelType = "gpt-4o";
 
@@ -449,19 +450,9 @@ export class ChatService {
 
       // Update task status based on how stream ended
       if (wasStoppedEarly) {
-        await prisma.task.update({
-          where: { id: taskId },
-          data: { status: "STOPPED" },
-        });
-        console.log(
-          `[CHAT] Task ${taskId} status updated to STOPPED (early termination)`
-        );
+        await updateTaskStatus(taskId, "STOPPED", "CHAT");
       } else {
-        await prisma.task.update({
-          where: { id: taskId },
-          data: { status: "COMPLETED" },
-        });
-        console.log(`[CHAT] Task ${taskId} status updated to COMPLETED`);
+        await updateTaskStatus(taskId, "COMPLETED", "CHAT");
       }
 
       // Clean up stream tracking
@@ -472,13 +463,7 @@ export class ChatService {
       console.error("Error processing user message:", error);
 
       // Update task status to failed when stream processing fails
-      await prisma.task.update({
-        where: { id: taskId },
-        data: { status: "FAILED" },
-      });
-      console.log(
-        `[CHAT] Task ${taskId} status updated to FAILED due to error`
-      );
+      await updateTaskStatus(taskId, "FAILED", "CHAT");
 
       // Emit error chunk
       emitStreamChunk({
@@ -512,11 +497,7 @@ export class ChatService {
     console.log(`[CODING_TASK] Task: ${userMessage.substring(0, 100)}...`);
 
     // Update task status to running when processing a coding task
-    await prisma.task.update({
-      where: { id: taskId },
-      data: { status: "RUNNING" },
-    });
-    console.log(`[CODING_TASK] Task ${taskId} status updated to RUNNING`);
+    await updateTaskStatus(taskId, "RUNNING", "CODING");
 
     return this.processUserMessage({
       taskId,
@@ -541,10 +522,6 @@ export class ChatService {
     }
 
     // Update task status to stopped when manually stopped by user
-    await prisma.task.update({
-      where: { id: taskId },
-      data: { status: "STOPPED" },
-    });
-    console.log(`[CHAT] Task ${taskId} status updated to STOPPED`);
+    await updateTaskStatus(taskId, "STOPPED", "CHAT");
   }
 }
