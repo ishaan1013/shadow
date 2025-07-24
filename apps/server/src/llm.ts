@@ -37,6 +37,46 @@ export class LLMService {
     }
   }
 
+  /**
+   * Creates messages with prompt caching optimization.
+   * For Anthropic: Uses cache control on system message for prompts >= 1024 tokens
+   * For OpenAI: Automatic caching for prompts >= 1024 tokens
+   */
+  private createCachedMessages(
+    systemPrompt: string,
+    messages: CoreMessage[],
+    modelId: ModelType
+  ): CoreMessage[] {
+    const provider = getModelProvider(modelId);
+    
+    // Estimate tokens (rough approximation: 4 characters per token)
+    const estimatedTokens = Math.round(systemPrompt.length / 4);
+    
+    if (provider === "anthropic" && estimatedTokens >= 1024) {
+      // For Anthropic, we need to structure system messages at the head of messages array
+      // with cache control on the system prompt
+      console.log(`Enabling Anthropic prompt caching for ${estimatedTokens} estimated tokens`);
+      return [
+        {
+          role: 'system',
+          content: systemPrompt,
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        },
+        ...messages,
+      ];
+    }
+    
+    // For OpenAI or short prompts, return messages as-is
+    // OpenAI handles caching automatically for prompts >= 1024 tokens
+    if (provider === "openai" && estimatedTokens >= 1024) {
+      console.log(`OpenAI automatic prompt caching will be available for ${estimatedTokens} estimated tokens`);
+    }
+    
+    return messages;
+  }
+
   async *createMessageStream(
     systemPrompt: string,
     messages: Message[],
@@ -48,6 +88,7 @@ export class LLMService {
   ): AsyncGenerator<StreamChunk> {
     try {
       const modelInstance = this.getModel(model);
+      const provider = getModelProvider(model);
 
       // Convert our messages to AI SDK CoreMessage format
       const coreMessages: CoreMessage[] = messages.map(toCoreMessage);
@@ -57,15 +98,33 @@ export class LLMService {
       // Create tools with task context if taskId is provided
       const tools = taskId ? createTools(taskId, workspacePath) : undefined;
 
-      const streamConfig: any = {
-        model: modelInstance,
-        system: systemPrompt,
-        messages: coreMessages,
-        maxTokens: 4096,
-        temperature: 0.7,
-        maxSteps: MAX_STEPS,
-        ...(enableTools && tools && { tools }),
-      };
+      let streamConfig: any;
+      const estimatedTokens = Math.round(systemPrompt.length / 4);
+
+      if (provider === "anthropic" && estimatedTokens >= 1024) {
+        // For Anthropic with caching, use cached messages structure
+        const cachedMessages = this.createCachedMessages(systemPrompt, coreMessages, model);
+        streamConfig = {
+          model: modelInstance,
+          messages: cachedMessages,
+          maxTokens: 4096,
+          temperature: 0.7,
+          maxSteps: MAX_STEPS,
+          ...(enableTools && tools && { tools }),
+        };
+      } else {
+        // Standard configuration for OpenAI or short prompts
+        streamConfig = {
+          model: modelInstance,
+          system: systemPrompt,
+          messages: coreMessages,
+          maxTokens: 4096,
+          temperature: 0.7,
+          maxSteps: MAX_STEPS,
+          ...(enableTools && tools && { tools }),
+        };
+      }
+
       if (abortSignal) {
         streamConfig.signal = abortSignal;
       }
@@ -109,13 +168,23 @@ export class LLMService {
           case "finish":
             // Emit final usage and completion
             if (chunk.usage) {
+              const usage = {
+                promptTokens: chunk.usage.promptTokens,
+                completionTokens: chunk.usage.completionTokens,
+                totalTokens: chunk.usage.totalTokens,
+              };
+
+              // Add cache-specific metadata if available
+              const providerMetadata = (chunk as any).providerMetadata;
+              if (provider === "anthropic" && providerMetadata?.anthropic?.cacheCreationInputTokens) {
+                console.log(`Anthropic cache created: ${providerMetadata.anthropic.cacheCreationInputTokens} tokens`);
+              } else if (provider === "openai" && providerMetadata?.openai?.cachedPromptTokens) {
+                console.log(`OpenAI cache hit: ${providerMetadata.openai.cachedPromptTokens} tokens`);
+              }
+
               yield {
                 type: "usage",
-                usage: {
-                  promptTokens: chunk.usage.promptTokens,
-                  completionTokens: chunk.usage.completionTokens,
-                  totalTokens: chunk.usage.totalTokens,
-                },
+                usage,
               };
             }
 
@@ -167,22 +236,48 @@ export class LLMService {
   ) {
     try {
       const modelInstance = this.getModel(model);
+      const provider = getModelProvider(model);
       const coreMessages: CoreMessage[] = messages.map(toCoreMessage);
 
       // Create tools with task context if taskId is provided
       const tools = taskId ? createTools(taskId, workspacePath) : undefined;
 
-      const config = {
-        model: modelInstance,
-        system: systemPrompt,
-        messages: coreMessages,
-        maxTokens: 4096,
-        temperature: 0.7,
-        maxSteps: MAX_STEPS,
-        ...(enableTools && tools && { tools }),
-      };
+      let config: any;
+      const estimatedTokens = Math.round(systemPrompt.length / 4);
+
+      if (provider === "anthropic" && estimatedTokens >= 1024) {
+        // For Anthropic with caching, use cached messages structure
+        const cachedMessages = this.createCachedMessages(systemPrompt, coreMessages, model);
+        config = {
+          model: modelInstance,
+          messages: cachedMessages,
+          maxTokens: 4096,
+          temperature: 0.7,
+          maxSteps: MAX_STEPS,
+          ...(enableTools && tools && { tools }),
+        };
+      } else {
+        // Standard configuration for OpenAI or short prompts
+        config = {
+          model: modelInstance,
+          system: systemPrompt,
+          messages: coreMessages,
+          maxTokens: 4096,
+          temperature: 0.7,
+          maxSteps: MAX_STEPS,
+          ...(enableTools && tools && { tools }),
+        };
+      }
 
       const result = await generateText(config);
+
+      // Log cache usage information
+      const providerMetadata = result.providerMetadata as any;
+      if (provider === "anthropic" && providerMetadata?.anthropic?.cacheCreationInputTokens) {
+        console.log(`Anthropic cache created: ${providerMetadata.anthropic.cacheCreationInputTokens} tokens`);
+      } else if (provider === "openai" && providerMetadata?.openai?.cachedPromptTokens) {
+        console.log(`OpenAI cache hit: ${providerMetadata.openai.cachedPromptTokens} tokens`);
+      }
 
       return {
         text: result.text,
