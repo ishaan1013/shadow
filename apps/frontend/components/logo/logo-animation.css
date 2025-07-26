@@ -1,56 +1,16 @@
-.logo-container {
-  background-image: url('/shadow.svg');
-  background-size: cover;
-  background-position: 0 center;
-  background-repeat: no-repeat;
-}
-
-.logo-container[data-animate="true"] {
-  background-image: url('/shadow-logo-hover.svg');
-  background-position: 0 center;
-  background-repeat: no-repeat;
-}
-
 @keyframes logo-slideshow {
   0% { transform: translateX(0%); }
   100% { transform: translateX(-100%); }
 }
 
-/* Slightly offset for smoother transition between states */
-/* @keyframes logo-slideshow {
-  0% { transform: translateX(-0.13%); }
-  100% { transform: translateX(-99.8%); }
-} */
-
-.logo-sm {
-  width: 16px;
-  height: 16px;
-}
-
 .logo-sm[data-animate="true"] {
-  width: 240px;
-  height: 16px;
   animation: logo-slideshow 1.5s steps(15) infinite;
-}
-
-.logo-md {
-  width: 20px;
-  height: 20px;
 }
 
 .logo-md[data-animate="true"] {
-  width: 300px;
-  height: 20px;
   animation: logo-slideshow 1.5s steps(15) infinite;
 }
 
-.logo-lg {
-  width: 25px;
-  height: 25px;
-}
-
 .logo-lg[data-animate="true"] {
-  width: 375px;
-  height: 25px;
   animation: logo-slideshow 2s steps(15) infinite;
 }
