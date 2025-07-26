@@ -56,6 +56,9 @@ export interface ServerToClientEvents {
 
   // Task events
   'task-status-updated': (data: TaskStatusUpdateEvent) => void;
+  
+  // Indexing events
+  'indexing-state': (data: import('../chat/streaming').IndexingState) => void;
 }
 
 export interface ClientToServerEvents {

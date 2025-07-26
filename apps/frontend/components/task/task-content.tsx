@@ -9,6 +9,7 @@ import { useTaskSocket } from "@/hooks/socket";
 import { cn } from "@/lib/utils";
 import { useParams } from "next/navigation";
 import { StickToBottom } from "use-stick-to-bottom";
+import { Loader2, Database, Brain, FileCode } from "lucide-react";
 
 export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
   const { taskId } = useParams<{ taskId: string }>();
@@ -22,6 +23,7 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
     isConnected,
     streamingAssistantParts,
     isStreaming,
+    indexingState,
     sendMessage,
     stopStream,
   } = useTaskSocket(taskId);
@@ -76,7 +78,41 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
         )}
       />
 
-      <Messages messages={displayMessages} />
+      <div className="relative w-full">
+        <Messages messages={displayMessages} />
+        
+        {/* Repository indexing overlay */}
+        {indexingState?.isIndexing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10">
+            <div className="bg-card border rounded-lg shadow-lg p-6 max-w-md text-center">
+              <h3 className="text-xl font-semibold mb-4">Understanding your repository</h3>
+              <div className="flex flex-col items-center justify-center space-y-6 mb-6">
+                {indexingState.phase === "preparing" && (
+                  <div className="flex items-center space-x-3">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <span>Preparing files...</span>
+                  </div>
+                )}
+                {indexingState.phase === "embeddings" && (
+                  <div className="flex items-center space-x-3">
+                    <Database className="h-6 w-6 text-blue-600" />
+                    <span>Indexing code embeddings...</span>
+                  </div>
+                )}
+                {indexingState.phase === "understanding" && (
+                  <div className="flex items-center space-x-3">
+                    <Brain className="h-6 w-6 text-green-600" />
+                    <span>Analyzing repository structure...</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-muted-foreground text-sm">
+                This helps me provide more accurate and context-aware responses for your codebase.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <ScrollToBottom />
 
@@ -84,6 +120,7 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
         onSubmit={handleSendMessage}
         onStopStream={handleStopStream}
         isStreaming={isStreaming || sendMessageMutation.isPending}
+        isIndexing={indexingState?.isIndexing || false}
       />
     </StickToBottom.Content>
   );

@@ -24,6 +24,7 @@ export function PromptForm({
   onStopStream,
   isStreaming = false,
   isHome = false,
+  isIndexing = false,
   onFocus,
   onBlur,
 }: {
@@ -31,6 +32,7 @@ export function PromptForm({
   onStopStream?: () => void;
   isStreaming?: boolean;
   isHome?: boolean;
+  isIndexing?: boolean;
   onFocus?: () => void;
   onBlur?: () => void;
 }) {
@@ -50,7 +52,7 @@ export function PromptForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || isStreaming || !selectedModel) return;
+    if (!message.trim() || isStreaming || isIndexing || !selectedModel) return;
 
     if (isHome) {
       // Require repo and branch selection before creating a task
@@ -173,22 +175,23 @@ export function PromptForm({
               />
             )}
             <Button
-              type={isStreaming ? "button" : "submit"}
-              size="iconSm"
-              disabled={
-                !isStreaming &&
-                (isPending ||
-                  !message.trim() ||
-                  !selectedModel ||
-                  (isHome && (!repo || !branch)))
-              }
-              onClick={isStreaming ? onStopStream : undefined}
-              className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
+              type="submit"
+              variant="ghost"
+              size="icon"
+              disabled={isPending || isStreaming || isIndexing || !message.trim()}
+              className="size-9 rounded-lg"
+              title={isIndexing ? "Understanding repository..." : ""}
             >
-              {isPending ? (
+              {isStreaming ? (
+                <Square
+                  className="size-4 transition-opacity hover:opacity-80"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onStopStream) onStopStream();
+                  }}
+                />
+              ) : isPending || isIndexing ? (
                 <Loader2 className="size-4 animate-spin" />
-              ) : isStreaming ? (
-                <Square className="fill-primary-foreground size-3.5" />
               ) : (
                 <ArrowUp className="size-4" />
               )}

@@ -5,6 +5,13 @@ import type { InitStepType } from "@repo/db";
 import { ToolResultTypes } from "../tools/results";
 import { CompletionTokenUsage } from "./messages";
 
+export interface IndexingState {
+  taskId: string;
+  state: "started" | "in-progress" | "completed" | "error";
+  phase: "preparing" | "embeddings" | "understanding" | "complete" | "error";
+  error?: string;
+}
+
 export interface StreamChunk {
   type:
   | "content"
@@ -16,7 +23,8 @@ export interface StreamChunk {
   | "tool-result"
   | "init-progress"
   | "fs-change"
-  | "todo-update";
+  | "todo-update"
+  | "indexing";
 
   // For content chunks
   content?: string;
@@ -72,6 +80,9 @@ export interface StreamChunk {
     totalTodos?: number;
     completedTodos?: number;
   };
+  
+  // For indexing state updates
+  indexingState?: IndexingState;
 }
 
 // Initialization progress tracking
