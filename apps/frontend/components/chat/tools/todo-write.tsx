@@ -1,5 +1,14 @@
 import type { Message } from "@repo/types";
-import { CheckCircle, Circle, Clock, X } from "lucide-react";
+import {
+  CheckSquare2,
+  CircleDashed,
+  ListTodo,
+  Square,
+  SquareX,
+  X,
+} from "lucide-react";
+import { CollapsibleTool, ToolType } from "./collapsible-tool";
+import { cn } from "@/lib/utils";
 
 interface TodoItem {
   id: string;
@@ -10,18 +19,18 @@ interface TodoItem {
 function StatusIcon({ status }: { status: TodoItem["status"] }) {
   switch (status) {
     case "pending":
-      return <Circle className="size-4 text-gray-400" />;
+      return <Square className="size-4 shrink-0" />;
     case "in_progress":
-      return <Clock className="size-4 text-blue-500" />;
+      return <CircleDashed className="size-4 shrink-0" />;
     case "completed":
-      return <CheckCircle className="size-4 text-green-400" />;
+      return <CheckSquare2 className="size-4 shrink-0" />;
     case "cancelled":
-      return <X className="size-4 text-red-400" />;
+      return <SquareX className="size-4 shrink-0 text-red-400" />;
   }
 }
 
 function TodoList({ todos }: { todos: TodoItem[] }) {
-  const statusCounts = todos.reduce(
+  const _statusCounts = todos.reduce(
     (acc, todo) => {
       acc[todo.status] = (acc[todo.status] || 0) + 1;
       return acc;
@@ -31,7 +40,7 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="text-muted-foreground flex items-center gap-4 text-xs">
+      {/* <div className="text-muted-foreground flex items-center gap-4 text-xs">
         {statusCounts.pending && (
           <span className="flex items-center gap-1">
             <Circle className="size-3" />
@@ -56,29 +65,23 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
             {statusCounts.cancelled} cancelled
           </span>
         )}
-      </div>
+      </div> */}
 
-      <div className="space-y-2">
-        {todos.map((todo, index) => (
-          <div key={todo.id} className="flex items-start gap-2">
+      <div className="flex flex-col gap-2 pb-1.5">
+        {todos.map((todo) => (
+          <div key={todo.id} className="flex items-start gap-1.5">
             <StatusIcon status={todo.status} />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm">
-                <span
-                  className={`${
-                    todo.status === "completed"
-                      ? "text-muted-foreground line-through"
-                      : todo.status === "cancelled"
-                        ? "text-red-400/70 line-through"
-                        : ""
-                  }`}
-                >
-                  {todo.content}
-                </span>
-              </div>
-            </div>
-            <div className="text-muted-foreground font-mono text-xs">
-              {index + 1}
+            <div
+              className={cn(
+                "line-clamp-2 leading-4",
+                todo.status === "completed"
+                  ? "line-through"
+                  : todo.status === "cancelled"
+                    ? "text-red-400/70 line-through"
+                    : ""
+              )}
+            >
+              {todo.content}
             </div>
           </div>
         ))}
@@ -91,10 +94,11 @@ export function TodoWriteTool({ message }: { message: Message }) {
   const toolMeta = message.metadata?.tool;
   if (!toolMeta) return null;
 
-  const { args, status, result } = toolMeta;
+  const { args, result } = toolMeta;
   const merge = args.merge as boolean;
   const todos = args.todos as TodoItem[];
 
+  // Parse result to get totalTodos for merge operations
   let parsedResult;
   try {
     parsedResult = typeof result === "string" ? JSON.parse(result) : result;
@@ -102,31 +106,26 @@ export function TodoWriteTool({ message }: { message: Message }) {
     parsedResult = null;
   }
 
-  const title = `${merge ? "Merge" : "Replace"} todos (${todos.length} items)`;
+  // Calculate title based on operation type
+  const title =
+    merge && parsedResult?.totalTodos
+      ? `(${parsedResult.completedTodos ?? todos.filter((t) => t.status === "completed").length}/${parsedResult.totalTodos})`
+      : `(${todos.length} item${todos.length === 1 ? "" : "s"})`;
 
   return (
-    <div className="todo-tool flex flex-col gap-2">
-      {/* Header */}
-      <div className="text-muted-foreground flex items-center gap-2 text-[13px] [&_svg:not([class*='size-'])]:size-3.5">
-        <CheckCircle />
-        <span>{title}</span>
-      </div>
-
-      <div className="flex flex-col gap-2 pl-6">
-        {status === "COMPLETED" && parsedResult?.success && (
-          <div className="mb-2 text-xs text-green-600 dark:text-green-400">
-            {parsedResult.message}
-          </div>
-        )}
-
-        {status === "FAILED" && (
+    <CollapsibleTool
+      icon={<ListTodo />}
+      type={ToolType.TODO_WRITE}
+      title={title}
+      prefix={merge ? "Updated todo list" : "Created todo list"}
+    >
+      {/* {status === "FAILED" && (
           <div className="mb-2 text-xs text-red-600 dark:text-red-400">
             {parsedResult?.error || "Failed to manage todos"}
           </div>
-        )}
+        )} */}
 
-        <TodoList todos={todos} />
-      </div>
-    </div>
+      <TodoList todos={todos} />
+    </CollapsibleTool>
   );
 }

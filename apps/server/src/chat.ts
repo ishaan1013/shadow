@@ -4,23 +4,22 @@ import {
   Message,
   MessageMetadata,
   ModelType,
-  TextPart,
-  ToolCallPart,
-  ToolResultPart,
 } from "@repo/types";
+import { TextPart, ToolCallPart, ToolResultPart } from "ai";
 import { randomUUID } from "crypto";
 import { type ChatMessage } from "../../../packages/db/src/client";
 import { LLMService } from "./llm";
-import { systemPrompt } from "./prompt/system";
+import { systemPrompt } from "./prompt/system-prompt";
+import { GitManager } from "./services/git-manager";
 import {
   emitStreamChunk,
   endStream,
   handleStreamError,
   startStream,
 } from "./socket";
-import { GitManager } from "./services/git-manager";
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
+import { SidecarClient } from "./execution/remote/sidecar-client";
 
 export const DEFAULT_MODEL: ModelType = "gpt-4o";
 
@@ -169,14 +168,86 @@ export class ChatService {
           console.log(`[CHAT] Successfully committed changes for task ${taskId}`);
         }
       } else {
-        console.log(`[CHAT] Git commits for remote mode not yet implemented`);
-        // TODO: Implement remote mode git commits via sidecar API
+        // Remote mode: Use sidecar git APIs instead of direct git operations
+        await this.commitChangesRemoteMode(taskId, task);
       }
     } catch (error) {
       console.error(`[CHAT] Failed to commit changes for task ${taskId}:`, error);
       throw error;
     }
   }
+
+  /**
+   * Commit changes in remote mode using sidecar git APIs
+   */
+  private async commitChangesRemoteMode(taskId: string, task: { user: { name: string; email: string }; shadowBranch: string | null }): Promise<void> {
+    try {
+      console.log(`[CHAT] Checking for changes to commit in remote mode for task ${taskId}`);
+
+      // Create sidecar client for this task
+      const sidecarClient = new SidecarClient(taskId);
+
+      // Check if there are any uncommitted changes
+      const statusResponse = await sidecarClient.getGitStatus();
+
+      if (!statusResponse.success) {
+        console.error(`[CHAT] Failed to check git status for task ${taskId}: ${statusResponse.message}`);
+        return;
+      }
+
+      if (!statusResponse.hasChanges) {
+        console.log(`[CHAT] No changes to commit for task ${taskId} in remote mode`);
+        return;
+      }
+
+      // Get diff from sidecar to generate commit message on server side
+      const diffResponse = await sidecarClient.getGitDiff();
+
+      let commitMessage = "Update code via Shadow agent";
+      if (diffResponse.success && diffResponse.diff) {
+        // Generate commit message using server-side GitManager (which has AI integration)
+        const tempGitManager = new GitManager("", taskId);
+        commitMessage = await tempGitManager.generateCommitMessage(diffResponse.diff);
+      }
+
+      // Commit changes with user and Shadow co-author
+      const commitResponse = await sidecarClient.commitChanges(
+        {
+          name: task.user.name,
+          email: task.user.email,
+        },
+        {
+          name: "Shadow",
+          email: "noreply@shadow.ai",
+        },
+        commitMessage
+      );
+
+      if (!commitResponse.success) {
+        console.error(`[CHAT] Failed to commit changes for task ${taskId}: ${commitResponse.message}`);
+        return;
+      }
+
+      // Push the commit
+      if (!task.shadowBranch) {
+        console.warn(`[CHAT] No shadow branch configured for task ${taskId}, skipping push`);
+        return;
+      }
+
+      const pushResponse = await sidecarClient.pushBranch(task.shadowBranch, false);
+
+      if (!pushResponse.success) {
+        console.warn(`[CHAT] Failed to push changes for task ${taskId}: ${pushResponse.message}`);
+        // Don't throw here - commit succeeded even if push failed
+      }
+
+      console.log(`[CHAT] Successfully committed changes for task ${taskId} in remote mode`);
+    } catch (error) {
+      console.error(`[CHAT] Error in remote mode git commit for task ${taskId}:`, error);
+      // Don't throw here - we don't want git failures to break the chat flow
+    }
+  }
+
 
   async getChatHistory(taskId: string): Promise<Message[]> {
     const dbMessages = await prisma.chatMessage.findMany({
@@ -432,16 +503,21 @@ export class ChatService {
             });
 
             if (toolMessage) {
+              // Convert result to string for content field, keep object in metadata
+              const resultString = typeof chunk.toolResult.result === 'string'
+                ? chunk.toolResult.result
+                : JSON.stringify(chunk.toolResult.result);
+
               await prisma.chatMessage.update({
                 where: { id: toolMessage.id },
                 data: {
-                  content: chunk.toolResult.result,
+                  content: resultString,
                   metadata: {
                     ...(toolMessage.metadata as any),
                     tool: {
                       ...(toolMessage.metadata as any)?.tool,
                       status: "COMPLETED",
-                      result: chunk.toolResult.result,
+                      result: chunk.toolResult.result, // Keep as object for type safety
                     },
                     isStreaming: false,
                   },
@@ -463,21 +539,6 @@ export class ChatService {
             completionTokens: chunk.usage.completionTokens,
             totalTokens: chunk.usage.totalTokens,
           };
-        }
-
-        // Track finish reason
-        if (
-          chunk.type === "complete" &&
-          chunk.finishReason &&
-          chunk.finishReason !== "error"
-        ) {
-          // Map finish reason to our type system
-          finishReason =
-            chunk.finishReason === "content-filter"
-              ? "content_filter"
-              : chunk.finishReason === "function_call"
-                ? "tool_calls"
-                : chunk.finishReason;
         }
       }
 
@@ -520,7 +581,7 @@ export class ChatService {
         await updateTaskStatus(taskId, "STOPPED", "CHAT");
       } else {
         await updateTaskStatus(taskId, "COMPLETED", "CHAT");
-        
+
         // Commit changes if there are any (only for successfully completed responses)
         try {
           await this.commitChangesIfAny(taskId, workspacePath);

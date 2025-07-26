@@ -1,15 +1,18 @@
-import { prisma } from "@repo/db";
-import { exec } from "child_process";
-import { createPatch } from "diff";
+import {
+  validateCommand,
+  parseCommand,
+  CommandSecurityLevel,
+  SecurityLogger
+} from "@repo/command-security";
+import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import * as path from "path";
+import fetch from "node-fetch";
 import config from "../../config";
-import { emitStreamChunk } from "../../socket";
 import { execAsync } from "../../utils/exec";
 import { ToolExecutor } from "../interfaces/tool-executor";
 import {
   CommandOptions,
-  CommandResult,
   DeleteResult,
   DirectoryListing,
   FileResult,
@@ -19,12 +22,13 @@ import {
   GrepResult,
   ReadFileOptions,
   WriteResult,
-  CodebaseSearchResult,
+  CodebaseSearchToolResult,
   SearchOptions,
-} from "../interfaces/types";
+  WebSearchResult,
+} from "@repo/types";
+import { EmbeddingSearchResult } from "../../indexing/embedding/types";
+import { CommandResult } from "../interfaces/types";
 
-// Configuration flag for terminal command approval
-export const REQUIRE_TERMINAL_APPROVAL = false; // Set to true to require approval
 
 /**
  * LocalToolExecutor implements tool operations for local filesystem execution
@@ -32,10 +36,20 @@ export const REQUIRE_TERMINAL_APPROVAL = false; // Set to true to require approv
 export class LocalToolExecutor implements ToolExecutor {
   private taskId: string;
   private workspacePath: string;
+  private securityLogger: SecurityLogger;
 
   constructor(taskId: string, workspacePath?: string) {
     this.taskId = taskId;
     this.workspacePath = workspacePath || config.workspaceDir;
+    // Console logger for local execution
+    this.securityLogger = {
+      warn: (message: string, details?: Record<string, unknown>) => {
+        console.warn(`[LOCAL_SECURITY] ${message}`, details);
+      },
+      info: (message: string, details?: Record<string, unknown>) => {
+        console.log(`[LOCAL_SECURITY] ${message}`, details);
+      },
+    };
   }
 
   async readFile(
@@ -134,13 +148,6 @@ export class LocalToolExecutor implements ToolExecutor {
       // Write the new content
       await fs.writeFile(filePath, content);
 
-      // Save file change to database
-      await this.saveFileChange(
-        targetFile,
-        isNewFile ? "CREATE" : "UPDATE",
-        isNewFile ? undefined : existingContent,
-        content
-      );
 
       if (isNewFile) {
         return {
@@ -174,23 +181,9 @@ export class LocalToolExecutor implements ToolExecutor {
     try {
       const filePath = path.resolve(this.workspacePath, targetFile);
 
-      // Get existing content before deletion for database record
-      let existingContent: string | undefined;
-      try {
-        existingContent = await fs.readFile(filePath, "utf-8");
-      } catch {
-        // File doesn't exist, that's fine
-      }
 
       await fs.unlink(filePath);
 
-      // Save file change to database
-      await this.saveFileChange(
-        targetFile,
-        "DELETE",
-        existingContent,
-        undefined
-      );
 
       return {
         success: true,
@@ -241,8 +234,6 @@ export class LocalToolExecutor implements ToolExecutor {
       const newContent = existingContent.replace(oldString, newString);
       await fs.writeFile(resolvedPath, newContent);
 
-      // Save file change to database
-      await this.saveFileChange(filePath, "UPDATE", existingContent, newContent);
 
       return {
         success: true,
@@ -386,7 +377,7 @@ export class LocalToolExecutor implements ToolExecutor {
   async codebaseSearch(
     query: string,
     options?: SearchOptions
-  ): Promise<CodebaseSearchResult> {
+  ): Promise<CodebaseSearchToolResult> {
     try {
       // Use ripgrep for a basic semantic-like search with multiple patterns
       const searchTerms = query.split(" ").filter((term) => term.length > 2);
@@ -423,7 +414,7 @@ export class LocalToolExecutor implements ToolExecutor {
           query,
           searchTerms,
         };
-      } catch (error) {
+      } catch (_error) {
         // If ripgrep fails (no matches), return empty results
         return {
           success: true,
@@ -445,57 +436,271 @@ export class LocalToolExecutor implements ToolExecutor {
     }
   }
 
+  async semanticSearch(query: string, repo: string, options?: SearchOptions): Promise<CodebaseSearchToolResult> {
+    if (!config.useSemanticSearch) {
+      console.log("semanticSearch disabled, falling back to codebaseSearch");
+      return this.codebaseSearch(query, options);
+    }
+    try {
+      console.log("semanticSearch enabled");
+      console.log("semanticSearchParams", query, repo);
+      const response = await fetch(`${config.apiUrl}/api/indexing/search`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          namespace: repo,
+          topK: 5,
+          fields: ["content", "filePath", "language"]
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Indexing service error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as { matches: EmbeddingSearchResult[] };
+      const matches = data.matches;
+
+      const parsedData = {
+        success: !!matches,
+        results: matches.map((match: EmbeddingSearchResult, i: number) => ({
+          id: i + 1,
+          content: match?.fields?.code || match?.fields?.text || "",
+          relevance: typeof match?._score === "number" ? match._score : 0.8,
+        })),
+        query,
+        searchTerms: query.split(/\s+/),
+        message: matches?.length
+          ? `Found ${matches.length} relevant code snippets for "${query}"`
+          : `No relevant code found for "${query}"`,
+      }
+      console.log("semanticSearch", parsedData);
+
+      return parsedData;
+    } catch (error) {
+      console.error(`[SEMANTIC_SEARCH_ERROR] Failed to query indexing service:`, error);
+
+      // Fallback to ripgrep if indexing service is unavailable
+      return this.codebaseSearch(query, options);
+    }
+  }
+
+  async webSearch(query: string, domain?: string): Promise<WebSearchResult> {
+    try {
+      if (!config.exaApiKey) {
+        throw new Error("EXA_API_KEY is not configured");
+      }
+
+      interface ExaApiRequestBody {
+        query: string;
+        type: "fast" | "auto" | "keyword" | "neural";
+        contents: {
+          text: boolean;
+        };
+        num_results: number;
+        include_domains?: string[];
+      }
+
+      const requestBody: ExaApiRequestBody = {
+        query,
+        type: "fast",
+        contents: {
+          text: true
+        },
+        num_results: 5
+      };
+
+      if (domain) {
+        requestBody.include_domains = [domain];
+      }
+
+      // Use node-fetch to make the API call
+      const response = await fetch("https://api.exa.ai/search", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": config.exaApiKey
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Exa API error (${response.status}): ${errorText}`);
+      }
+
+      interface ExaSearchResult {
+        text: string;
+        url: string;
+        title?: string;
+      }
+
+      const data = await response.json() as { results?: ExaSearchResult[] };
+
+      const results = data.results?.map((result: ExaSearchResult) => ({
+        text: result.text || "",
+        url: result.url || "",
+        title: result.title || undefined
+      })) || [];
+
+      return {
+        success: true,
+        results,
+        query,
+        domain,
+        message: `Found ${results.length} web search results for query: ${query}`
+      };
+    } catch (error) {
+      console.error("Web search error:", error);
+      return {
+        success: false,
+        results: [],
+        query,
+        domain,
+        message: `Failed to perform web search: ${query}`,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  }
+
   async executeCommand(
     command: string,
     options?: CommandOptions
   ): Promise<CommandResult> {
-    if (REQUIRE_TERMINAL_APPROVAL) {
+    console.log(`[LOCAL] Executing command: ${command}`);
+
+    // Parse and validate command
+    const { command: baseCommand, args } = parseCommand(command);
+    const validation = validateCommand(baseCommand, args, this.workspacePath, this.securityLogger);
+
+    if (!validation.isValid) {
       return {
         success: false,
-        requiresApproval: true,
-        message: `Command "${command}" requires user approval before execution.`,
-        command,
+        error: validation.error,
+        message: `Security validation failed: ${validation.error}`,
+        securityLevel: validation.securityLevel,
       };
     }
 
-    try {
-      const execOptions = {
-        cwd: this.workspacePath,
-        timeout: options?.isBackground ? undefined : 30000, // 30 second timeout for non-background commands
-      };
+    // Log potentially dangerous commands
+    if (validation.securityLevel === CommandSecurityLevel.APPROVAL_REQUIRED) {
+      console.log(`[LOCAL] Executing potentially dangerous command: ${baseCommand}`, { args });
+    }
 
+    const sanitizedCommand = validation.sanitizedCommand!;
+    const sanitizedArgs = validation.sanitizedArgs!;
+
+    try {
       if (options?.isBackground) {
-        // For background commands, start and don't wait
-        exec(command, execOptions, (error, stdout, stderr) => {
-          if (error) {
-            console.error(`[BACKGROUND_CMD_ERROR] ${error.message}`);
-          } else {
-            console.log(`[BACKGROUND_CMD_OUTPUT] ${stdout}`);
-            if (stderr) console.error(`[BACKGROUND_CMD_STDERR] ${stderr}`);
-          }
+        // For background commands, use spawn for better security
+        const child = spawn(sanitizedCommand, sanitizedArgs, {
+          cwd: this.workspacePath,
+          detached: true,
+          stdio: "ignore",
         });
 
+        child.unref(); // Allow parent to exit
+
+        console.log(`[LOCAL] Background command started: ${sanitizedCommand}`);
+
         return {
           success: true,
-          message: `Background command started: ${command}`,
+          message: `Background command started: ${sanitizedCommand}`,
           isBackground: true,
+          securityLevel: validation.securityLevel,
         };
       } else {
-        const { stdout, stderr } = await execAsync(command, execOptions);
+        // For foreground commands, use secure spawn with timeout
+        const result = await this.executeSecureCommand(
+          sanitizedCommand,
+          sanitizedArgs,
+          30000 // 30 second timeout
+        );
+
         return {
           success: true,
-          stdout: stdout.trim(),
-          stderr: stderr.trim(),
-          message: `Command executed successfully: ${command}`,
+          stdout: result.stdout.trim(),
+          stderr: result.stderr.trim(),
+          message: `Command executed successfully: ${sanitizedCommand}`,
+          securityLevel: validation.securityLevel,
         };
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        message: `Failed to execute command: ${command}`,
+        error: errorMessage,
+        message: `Failed to execute command: ${sanitizedCommand}`,
+        securityLevel: validation.securityLevel,
       };
     }
+  }
+
+  /**
+   * Execute command securely using spawn with timeout
+   */
+  private async executeSecureCommand(
+    command: string,
+    args: string[],
+    timeout: number
+  ): Promise<{ stdout: string; stderr: string }> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(command, args, {
+        cwd: this.workspacePath,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      let stdout = "";
+      let stderr = "";
+      let timeoutId: NodeJS.Timeout | null = null;
+
+      // Set up timeout
+      if (timeout > 0) {
+        timeoutId = setTimeout(() => {
+          child.kill("SIGKILL");
+          reject(new Error(`Command timed out after ${timeout}ms`));
+        }, timeout);
+      }
+
+      child.stdout?.on("data", (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr?.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      // Handle process exit
+      child.on("close", (code) => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+
+        if (code === 0) {
+          resolve({ stdout, stderr });
+        } else {
+          const error = new Error(`Command failed with exit code ${code}: ${stderr || stdout}`) as Error & {
+            stdout: string;
+            stderr: string;
+          };
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+        }
+      });
+
+      // Handle process errors
+      child.on("error", (error) => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        reject(error);
+      });
+    });
   }
 
   getWorkspacePath(): string {
@@ -510,83 +715,4 @@ export class LocalToolExecutor implements ToolExecutor {
     return this.taskId;
   }
 
-  /**
-   * Save file change to database (same as original implementation)
-   */
-  private async saveFileChange(
-    filePath: string,
-    operation: "CREATE" | "UPDATE" | "DELETE" | "RENAME" | "MOVE",
-    oldContent?: string,
-    newContent?: string
-  ): Promise<void> {
-    try {
-      // Generate git-style diff if both old and new content exist
-      let diffPatch: string | undefined;
-      let additions = 0;
-      let deletions = 0;
-
-      if (oldContent !== undefined && newContent !== undefined) {
-        diffPatch = createPatch(
-          filePath,
-          oldContent,
-          newContent,
-          undefined, // oldHeader
-          undefined, // newHeader
-          { context: 3 } // 3 lines of context like git
-        );
-
-        // Calculate diff stats efficiently on server
-        const lines = diffPatch.split("\n");
-        lines.forEach((line) => {
-          if (line.startsWith("+") && !line.startsWith("+++")) {
-            additions++;
-          } else if (line.startsWith("-") && !line.startsWith("---")) {
-            deletions++;
-          }
-        });
-      } else if (operation === "CREATE" && newContent) {
-        // New file: count all lines as additions
-        additions = newContent.split("\n").length;
-      } else if (operation === "DELETE" && oldContent) {
-        // Deleted file: count all lines as deletions
-        deletions = oldContent.split("\n").length;
-      }
-
-      const savedFileChange = await prisma.fileChange.create({
-        data: {
-          taskId: this.taskId,
-          filePath,
-          operation,
-          oldContent,
-          newContent,
-          diffPatch,
-          additions,
-          deletions,
-        },
-      });
-
-      console.log(
-        `[FILE_CHANGE] Recorded ${operation} for ${filePath} (+${additions} -${deletions})`
-      );
-
-      // Stream the file change in real-time
-      emitStreamChunk({
-        type: "file-change",
-        fileChange: {
-          id: savedFileChange.id,
-          filePath,
-          operation,
-          oldContent,
-          newContent,
-          diffPatch,
-          additions,
-          deletions,
-          createdAt: savedFileChange.createdAt.toISOString(),
-        },
-      });
-    } catch (error) {
-      console.error(`[FILE_CHANGE_ERROR] Failed to save file change:`, error);
-      // Don't throw error - file operation succeeded, logging is secondary
-    }
-  }
 }

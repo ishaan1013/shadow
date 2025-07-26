@@ -30,7 +30,7 @@ export function AgentEnvironment() {
   const {
     selectedFilePath,
     selectedFileWithContent,
-    setSelectedFilePath,
+    updateSelectedFilePath,
     isLoadingContent,
     contentError,
   } = useAgentEnvironment();
@@ -98,7 +98,7 @@ export function AgentEnvironment() {
     <div className="flex size-full max-h-svh">
       <FileExplorer
         files={treeQuery.data?.tree || []}
-        onFileSelect={(file) => setSelectedFilePath(file.path)}
+        onFileSelect={(file) => updateSelectedFilePath(file.path)}
         selectedFilePath={selectedFilePath}
         isCollapsed={isExplorerCollapsed}
         onToggleCollapse={() => setIsExplorerCollapsed(!isExplorerCollapsed)}

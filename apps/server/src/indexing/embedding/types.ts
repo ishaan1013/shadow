@@ -14,6 +14,21 @@ type EmbeddingProvider = "jina-api" | "local-transformers" | "cheap-hash";
 // === CONSTANTS === //
 export const EMBEDDING_MODEL = "jinaai/jina-embeddings-v2-base-code";
 
+export interface EmbeddingSearchResult {
+  _id: string;
+  _score: number;
+  fields: {
+    code: string;
+    kind: string;
+    lang: string;
+    lin_end: number;
+    lin_start: number;
+    name: string;
+    path: string;
+    text: string;
+  };
+}
+
 interface EmbedTextsOptions {
   model: string;
   quantized: boolean;

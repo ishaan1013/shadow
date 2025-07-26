@@ -8,6 +8,9 @@ import {
 } from "../interfaces/types";
 import config from "../../config";
 import { prisma } from "@repo/db";
+import { GitManager } from "../../services/git-manager";
+import { getGitHubAccessToken } from "../../utils/github-account";
+import { SidecarClient } from "./sidecar-client";
 
 /**
  * RemoteWorkspaceManager manages Kubernetes pods for remote agent execution
@@ -32,12 +35,26 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
   }
 
   /**
+   * Get SidecarClient instance for a specific task
+   */
+  private getSidecarClient(taskId: string): SidecarClient {
+    return new SidecarClient({
+      taskId,
+      namespace: this.namespace,
+      port: config.sidecarPort || 8080,
+      timeout: 30000, // 30 second timeout for sidecar operations
+      maxRetries: 3,
+      retryDelay: 1000,
+    });
+  }
+
+  /**
    * Get Kubernetes API server URL from environment
    */
   private getK8sApiUrl(): string {
     // When running in-cluster, this is typically available
-    return process.env.KUBERNETES_SERVICE_HOST && process.env.KUBERNETES_SERVICE_PORT
-      ? `https://${process.env.KUBERNETES_SERVICE_HOST}:${process.env.KUBERNETES_SERVICE_PORT}`
+    return config.kubernetesServiceHost && config.kubernetesServicePort
+      ? `https://${config.kubernetesServiceHost}:${config.kubernetesServicePort}`
       : "https://kubernetes.default.svc";
   }
 
@@ -46,7 +63,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
    */
   private getServiceAccountToken(): string {
     // In a real implementation, read from mounted service account token
-    return process.env.K8S_SERVICE_ACCOUNT_TOKEN || "mock-token";
+    return config.k8sServiceAccountToken || "mock-token";
   }
 
   /**
@@ -70,7 +87,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
         },
         signal: controller.signal,
         // Skip TLS verification in dev (in prod, proper certs should be configured)
-        ...(process.env.NODE_ENV === "development" && { 
+        ...(config.nodeEnv === "development" && {
           // Note: fetch doesn't support rejectUnauthorized, this would need node-fetch or similar
         }),
       });
@@ -87,7 +104,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
       return await response.json();
     } catch (error) {
       clearTimeout(timeoutId);
-      
+
       if (error instanceof Error) {
         if (error.name === "AbortError") {
           throw new Error(`Kubernetes API request timeout after ${this.timeout}ms`);
@@ -100,20 +117,13 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
 
   async prepareWorkspace(taskConfig: TaskConfig): Promise<WorkspaceInfo> {
     const { id: taskId, repoUrl, baseBranch, shadowBranch, userId } = taskConfig;
-    
+
     try {
       console.log(`[REMOTE_WORKSPACE] Preparing workspace for task ${taskId}`);
 
-      // Create EFS PVC if using persistent storage
       await this.createWorkspacePVC(taskId);
-      
-      // Ensure shared cache PVC exists
       await this.ensureSharedCachePVC();
-
-      // Create pod specification for the agent
       const podSpec = this.createAgentPodSpec(taskId, repoUrl, baseBranch, shadowBranch, userId);
-
-      // Create the pod in Kubernetes
       const pod = await this.makeK8sRequest<any>(`/api/v1/namespaces/${this.namespace}/pods`, {
         method: "POST",
         body: JSON.stringify(podSpec),
@@ -121,21 +131,45 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
 
       console.log(`[REMOTE_WORKSPACE] Created pod ${pod.metadata.name} for task ${taskId}`);
 
-      // Wait for pod to be ready
       await this.waitForPodReady(taskId);
-
-      // Create service for pod communication
       const service = await this.createPodService(taskId);
 
       console.log(`[REMOTE_WORKSPACE] Created service ${service.metadata.name} for task ${taskId}`);
 
-      // Set up git branch tracking in database
-      // Note: Actual git operations happen in the pod via sidecar
+      // Step 1: Clone repository to pod workspace
+      const sidecarClient = this.getSidecarClient(taskId);
+      try {
+        const githubToken = await getGitHubAccessToken(userId);
+        if (!githubToken) {
+          throw new Error("No valid GitHub access token found for user");
+        }
+
+        const cloneResponse = await sidecarClient.cloneRepository(repoUrl, baseBranch, githubToken);
+
+        if (!cloneResponse.success) {
+          throw new Error(`Repository clone failed: ${cloneResponse.message}`);
+        }
+
+        console.log(`[REMOTE_WORKSPACE] Repository cloned successfully for task ${taskId}`);
+      } catch (error) {
+        console.error(`[REMOTE_WORKSPACE] Failed to clone repository for task ${taskId}:`, error);
+        return {
+          success: false,
+          workspacePath: "",
+          error: `Repository clone failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        };
+      }
+
+      // Step 2: Set up git configuration and shadow branch
       try {
         await this.setupGitBranchTracking(taskId, baseBranch, shadowBranch, userId);
       } catch (error) {
-        console.error(`[REMOTE_WORKSPACE] Failed to setup git branch tracking for task ${taskId}:`, error);
-        // Don't fail the workspace preparation for this
+        console.error(`[REMOTE_WORKSPACE] Failed to setup git for task ${taskId}:`, error);
+        return {
+          success: false,
+          workspacePath: "",
+          error: `Git setup failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        };
       }
 
       return {
@@ -152,7 +186,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
       };
     } catch (error) {
       console.error(`[REMOTE_WORKSPACE] Failed to prepare workspace for task ${taskId}:`, error);
-      
+
       return {
         success: false,
         workspacePath: "",
@@ -164,22 +198,21 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
   async getWorkspaceStatus(taskId: string): Promise<WorkspaceStatus> {
     try {
       const podName = `shadow-agent-${taskId}`;
-      
+
       const pod = await this.makeK8sRequest<any>(
         `/api/v1/namespaces/${this.namespace}/pods/${podName}`
       );
 
-      const isReady = pod.status?.phase === "Running" && 
+      const isReady = pod.status?.phase === "Running" &&
         pod.status?.conditions?.some((c: any) => c.type === "Ready" && c.status === "True");
 
       return {
         exists: true,
         path: "/workspace",
         isReady,
-        sizeBytes: undefined, // K8s doesn't provide easy disk usage
+        sizeBytes: undefined,
       };
     } catch (error) {
-      // Pod not found or API error
       return {
         exists: false,
         path: "",
@@ -196,7 +229,14 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
       const podName = `shadow-agent-${taskId}`;
       const serviceName = `shadow-agent-${taskId}`;
 
-      // Delete the service first
+      // Step 1: Commit any final changes before destroying the pod
+      try {
+        await this.commitFinalChanges(taskId);
+      } catch (error) {
+        console.warn(`[REMOTE_WORKSPACE] Failed to commit final changes for task ${taskId}:`, error);
+      }
+
+      // Step 2: Delete the service first
       try {
         await this.makeK8sRequest(`/api/v1/namespaces/${this.namespace}/services/${serviceName}`, {
           method: "DELETE",
@@ -206,7 +246,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
         console.warn(`[REMOTE_WORKSPACE] Failed to delete service ${serviceName}:`, error);
       }
 
-      // Delete the pod
+      // Step 3: Delete the pod
       try {
         await this.makeK8sRequest(`/api/v1/namespaces/${this.namespace}/pods/${podName}`, {
           method: "DELETE",
@@ -216,7 +256,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
         console.warn(`[REMOTE_WORKSPACE] Failed to delete pod ${podName}:`, error);
       }
 
-      // Delete workspace PVC if using EFS
+      // Step 4: Delete workspace PVC if using EFS
       await this.cleanupWorkspacePVC(taskId);
 
       return {
@@ -226,17 +266,82 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
     } catch (error) {
       return {
         success: false,
-        message: `Failed to cleanup workspace for task ${taskId}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        message: `Failed to cleanup workspace for task ${taskId}: ${error instanceof Error ? error.message : "Unknown error"
+          }`,
       };
+    }
+  }
+
+  /**
+   * Commit any final changes before pod termination
+   */
+  private async commitFinalChanges(taskId: string): Promise<void> {
+    try {
+      const sidecarClient = this.getSidecarClient(taskId);
+
+      // Check if there are any uncommitted changes
+      const statusResponse = await sidecarClient.getGitStatus();
+
+      if (!statusResponse.success || !statusResponse.hasChanges) {
+        console.log(`[REMOTE_WORKSPACE] No final changes to commit for task ${taskId}`);
+        return;
+      }
+
+      // Get user information for the commit
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        include: { user: true },
+      });
+
+      if (!task || !task.user) {
+        console.warn(`[REMOTE_WORKSPACE] Cannot find user for final commit of task ${taskId}`);
+        return;
+      }
+
+      // Get diff from sidecar to generate commit message on server side
+      const diffResponse = await sidecarClient.getGitDiff();
+
+      let commitMessage = "Final commit before task completion";
+      if (diffResponse.success && diffResponse.diff) {
+        // Generate commit message using server-side GitManager (which has AI integration)
+        const tempGitManager = new GitManager("", taskId);
+        commitMessage = await tempGitManager.generateCommitMessage(diffResponse.diff);
+      }
+
+      // Commit the final changes
+      const commitResponse = await sidecarClient.commitChanges(
+        {
+          name: task.user.name,
+          email: task.user.email,
+        },
+        {
+          name: "Shadow",
+          email: "noreply@shadow.ai",
+        },
+        commitMessage
+      );
+
+      if (!commitResponse.success) {
+        throw new Error(`Final commit failed: ${commitResponse.message}`);
+      }
+
+      const pushResponse = await sidecarClient.pushBranch(task.shadowBranch!, false);
+
+      if (!pushResponse.success) {
+        console.warn(`[REMOTE_WORKSPACE] Failed to push final commit for task ${taskId}: ${pushResponse.message}`);
+      }
+
+      console.log(`[REMOTE_WORKSPACE] Final changes committed and pushed for task ${taskId}`);
+    } catch (error) {
+      console.error(`[REMOTE_WORKSPACE] Error in final commit for task ${taskId}:`, error);
+      throw error;
     }
   }
 
   async healthCheck(taskId: string): Promise<HealthStatus> {
     try {
       const status = await this.getWorkspaceStatus(taskId);
-      
+
       if (!status.exists) {
         return {
           healthy: false,
@@ -251,18 +356,13 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
         };
       }
 
-      // Try to ping the sidecar API
-      const sidecarPort = config.sidecarPort || 8080;
-      const sidecarUrl = `http://shadow-agent-${taskId}.${this.namespace}.svc.cluster.local:${sidecarPort}`;
-      const healthPath = config.sidecarHealthPath || "/health";
-      
-      try {
-        const response = await fetch(`${sidecarUrl}${healthPath}`, {
-          method: "GET",
-          signal: AbortSignal.timeout(5000), // 5 second timeout
-        });
+      // Try to ping the sidecar API using SidecarClient
+      const sidecarClient = this.getSidecarClient(taskId);
 
-        if (response.ok) {
+      try {
+        const healthResponse = await sidecarClient.healthCheck();
+
+        if (healthResponse.healthy) {
           return {
             healthy: true,
             message: `Workspace for task ${taskId} is healthy`,
@@ -274,7 +374,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
         } else {
           return {
             healthy: false,
-            message: `Sidecar API not responding for task ${taskId}`,
+            message: `Sidecar API not healthy for task ${taskId}: ${healthResponse.message}`,
             details: {
               podReady: true,
               sidecarResponding: false,
@@ -294,42 +394,69 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
     } catch (error) {
       return {
         healthy: false,
-        message: `Health check failed for task ${taskId}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        message: `Health check failed for task ${taskId}: ${error instanceof Error ? error.message : "Unknown error"
+          }`,
       };
     }
   }
 
   /**
-   * Setup git branch tracking in database for remote tasks
-   * The actual git operations will be handled by the sidecar in the pod
+   * Setup git operations in remote pod via sidecar APIs
+   * This mirrors the local mode git setup workflow
    */
   private async setupGitBranchTracking(
     taskId: string,
     baseBranch: string,
     shadowBranch: string,
-    _userId: string
+    userId: string
   ): Promise<void> {
     try {
-      // Update task in database with branch information
-      // Note: baseCommitSha will be set later by the sidecar after git operations
+      console.log(`[REMOTE_WORKSPACE] Setting up git for task ${taskId} via sidecar APIs`);
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, email: true },
+      });
+
+      if (!user) {
+        throw new Error(`User not found: ${userId}`);
+      }
+
+      const sidecarClient = this.getSidecarClient(taskId);
+
+      // Step 1: Configure git user in the pod
+      const configResponse = await sidecarClient.configureGitUser(user.name, user.email);
+
+      if (!configResponse.success) {
+        throw new Error(`Failed to configure git user: ${configResponse.message}`);
+      }
+
+      // Step 2: Create shadow branch
+      const branchResponse = await sidecarClient.createShadowBranch(baseBranch, shadowBranch);
+
+      if (!branchResponse.success) {
+        throw new Error(`Failed to create shadow branch: ${branchResponse.message}`);
+      }
+
+      // Step 3: Update task in database with actual base commit SHA
       await prisma.task.update({
         where: { id: taskId },
         data: {
-          baseCommitSha: "pending", // Will be updated by sidecar once git operations complete
+          baseCommitSha: branchResponse.baseCommitSha || "unknown",
         },
       });
 
-      console.log(`[REMOTE_WORKSPACE] Git branch tracking setup for task ${taskId}:`, {
+      console.log(`[REMOTE_WORKSPACE] Git setup complete for task ${taskId}:`, {
         baseBranch,
         shadowBranch,
+        baseCommitSha: branchResponse.baseCommitSha,
       });
     } catch (error) {
-      console.error(`[REMOTE_WORKSPACE] Failed to setup git branch tracking for task ${taskId}:`, error);
+      console.error(`[REMOTE_WORKSPACE] Failed to setup git for task ${taskId}:`, error);
       throw error;
     }
   }
+
 
   /**
    * Create Kubernetes pod specification for the agent
@@ -446,7 +573,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
    */
   private createVolumeMounts(): any[] {
     const efsVolumeId = config.efsVolumeId;
-    
+
     const mounts = [
       {
         name: "workspace",
@@ -471,7 +598,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
    */
   private createWorkspaceVolumes(taskId: string): any[] {
     const efsVolumeId = config.efsVolumeId;
-    
+
     if (efsVolumeId) {
       // Use EFS persistent storage
       return [
@@ -511,7 +638,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
     }
 
     const pvcName = `shadow-workspace-${taskId}`;
-    
+
     const pvcSpec = {
       apiVersion: "v1",
       kind: "PersistentVolumeClaim",
@@ -543,7 +670,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
         method: "POST",
         body: JSON.stringify(pvcSpec),
       });
-      
+
       console.log(`[REMOTE_WORKSPACE] Created EFS PVC ${pvcName} for task ${taskId}`);
     } catch (error) {
       console.error(`[REMOTE_WORKSPACE] Failed to create PVC ${pvcName}:`, error);
@@ -561,13 +688,13 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
     }
 
     const pvcName = "shadow-shared-cache";
-    
+
     try {
       // Check if shared cache PVC already exists
       await this.makeK8sRequest<any>(`/api/v1/namespaces/${this.namespace}/persistentvolumeclaims/${pvcName}`);
       console.log(`[REMOTE_WORKSPACE] Shared cache PVC ${pvcName} already exists`);
       return;
-    } catch (error) {
+    } catch (_error) {
       // PVC doesn't exist, create it
     }
 
@@ -602,7 +729,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
         method: "POST",
         body: JSON.stringify(pvcSpec),
       });
-      
+
       console.log(`[REMOTE_WORKSPACE] Created shared cache PVC ${pvcName}`);
     } catch (error) {
       console.error(`[REMOTE_WORKSPACE] Failed to create shared cache PVC:`, error);
@@ -616,11 +743,11 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
   private async cleanupWorkspacePVC(taskId: string): Promise<void> {
     const efsVolumeId = config.efsVolumeId;
     if (!efsVolumeId) {
-      return; // Skip if not using EFS
+      return;
     }
 
     const pvcName = `shadow-workspace-${taskId}`;
-    
+
     try {
       await this.makeK8sRequest(`/api/v1/namespaces/${this.namespace}/persistentvolumeclaims/${pvcName}`, {
         method: "DELETE",
@@ -683,7 +810,7 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
           `/api/v1/namespaces/${this.namespace}/pods/${podName}`
         );
 
-        const isReady = pod.status?.phase === "Running" && 
+        const isReady = pod.status?.phase === "Running" &&
           pod.status?.conditions?.some((c: any) => c.type === "Ready" && c.status === "True");
 
         if (isReady) {
@@ -754,11 +881,10 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
     // K8s doesn't provide easy disk usage, would need to call sidecar API
     // For now, return 0 as placeholder
     try {
-      const sidecarPort = config.sidecarPort || 8080;
-      const sidecarUrl = `http://shadow-agent-${taskId}.${this.namespace}.svc.cluster.local:${sidecarPort}`;
-      
+      const sidecarClient = this.getSidecarClient(taskId);
+
       // This would be a custom endpoint in the sidecar to get disk usage
-      const response = await fetch(`${sidecarUrl}/workspace/size`, {
+      const response = await fetch(`${sidecarClient.getSidecarUrl()}/workspace/size`, {
         method: "GET",
         signal: AbortSignal.timeout(5000),
       });
@@ -770,8 +896,8 @@ export class RemoteWorkspaceManager implements WorkspaceManager {
     } catch (error) {
       console.warn(`[REMOTE_WORKSPACE] Failed to get workspace size for ${taskId}:`, error);
     }
-    
-    return 0; // Default to 0 if unable to determine
+
+    return 0;
   }
 
   async getExecutor(taskId: string): Promise<ToolExecutor> {

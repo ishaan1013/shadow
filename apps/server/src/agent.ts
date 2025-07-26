@@ -6,11 +6,6 @@ import { randomUUID } from "crypto";
 import readline from "readline";
 import { ChatService, DEFAULT_MODEL } from "./chat";
 import config from "./config";
-import {
-  REQUIRE_TERMINAL_APPROVAL,
-  approveTerminalCommand,
-  getPendingCommands,
-} from "./tools";
 
 interface LocalAgentOptions {
   model?: ModelType;
@@ -40,7 +35,6 @@ class LocalCodingAgent {
     console.log(`Task ID: ${this.taskId}`);
     console.log(`Model: ${this.model}`);
     console.log(`Workspace: ${config.workspaceDir}`);
-    console.log(`Tool Approval Required: ${REQUIRE_TERMINAL_APPROVAL}`);
     console.log(`Debug Mode: ${config.debug ? "ON" : "OFF"}`);
     console.log("=====================================\n");
   }
@@ -276,11 +270,6 @@ class LocalCodingAgent {
       );
 
       console.log("\n✅ Task completed!");
-
-      // Check for pending commands if approval is required
-      if (REQUIRE_TERMINAL_APPROVAL) {
-        await this.handlePendingCommands();
-      }
     } catch (error) {
       console.error("\n❌ Error processing request:", error);
     }
@@ -292,28 +281,6 @@ class LocalCodingAgent {
     console.log("📡 Streaming output initialized...");
   }
 
-  private async handlePendingCommands() {
-    const pending = getPendingCommands();
-
-    if (pending.length === 0) {
-      return;
-    }
-
-    console.log(`\n⏳ ${pending.length} commands awaiting approval:`);
-
-    for (const { id, command } of pending) {
-      console.log(`\nCommand: ${command}`);
-      const approved = await this.askYesNo("Approve this command? (y/n): ");
-
-      if (approveTerminalCommand(id, approved)) {
-        console.log(
-          approved ? "✅ Command approved and executed" : "❌ Command rejected"
-        );
-      } else {
-        console.log("⚠️  Command not found in pending list");
-      }
-    }
-  }
 
   private askQuestion(question: string): Promise<string> {
     return new Promise((resolve) => {
@@ -323,10 +290,6 @@ class LocalCodingAgent {
     });
   }
 
-  private async askYesNo(question: string): Promise<boolean> {
-    const answer = await this.askQuestion(question);
-    return answer.toLowerCase().startsWith("y");
-  }
 }
 
 // CLI entry point

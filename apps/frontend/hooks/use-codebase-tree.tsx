@@ -1,11 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-
-export type FileNode = {
-  name: string;
-  type: "file" | "folder";
-  path: string;
-  children?: FileNode[];
-};
+import { FileNode } from "@repo/types";
 
 export interface CodebaseTreeResponse {
   success: boolean;

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "./middleware";
 import { CommandService, CommandStreamEvent } from "../services/command-service";
 import { TerminalBuffer } from "../services/terminal-buffer";
-import { CommandRequestSchema } from "../types";
+import { CommandRequestSchema } from "@repo/types";
 
 export function createExecuteRouter(commandService: CommandService, terminalBuffer: TerminalBuffer): Router {
   const router = Router();
@@ -23,11 +23,7 @@ export function createExecuteRouter(commandService: CommandService, terminalBuff
       );
 
       if (!result.success) {
-        if (result.requiresApproval) {
-          res.status(400).json(result);
-        } else {
-          res.status(500).json(result);
-        }
+        res.status(500).json(result);
       } else {
         res.json(result);
       }
@@ -88,7 +84,7 @@ export function createExecuteRouter(commandService: CommandService, terminalBuff
           if (event.message) {
             terminalBuffer.addSystemMessage(event.message);
           }
-          
+
           clearInterval(keepAlive);
           res.end();
         }
@@ -117,12 +113,7 @@ export function createExecuteRouter(commandService: CommandService, terminalBuff
 
       if (!result.success) {
         terminalBuffer.addEntry(`Error: ${result.error || result.message}`, 'stderr');
-        
-        if (result.requiresApproval) {
-          res.status(400).json(result);
-        } else {
-          res.status(500).json(result);
-        }
+        res.status(500).json(result);
       } else {
         // Return command ID for background command tracking
         res.json({
@@ -142,7 +133,7 @@ export function createExecuteRouter(commandService: CommandService, terminalBuff
     asyncHandler(async (req, res) => {
       const count = req.query.count ? parseInt(req.query.count as string) : undefined;
       const sinceId = req.query.sinceId ? parseInt(req.query.sinceId as string) : undefined;
-      
+
       let entries;
       if (sinceId) {
         entries = terminalBuffer.getEntriesSince(sinceId);
@@ -164,7 +155,7 @@ export function createExecuteRouter(commandService: CommandService, terminalBuff
    */
   router.get(
     "/terminal/stats",
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (_req, res) => {
       res.json({
         success: true,
         stats: terminalBuffer.getStats(),
@@ -178,10 +169,10 @@ export function createExecuteRouter(commandService: CommandService, terminalBuff
    */
   router.post(
     "/terminal/clear",
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (_req, res) => {
       terminalBuffer.clear();
       terminalBuffer.addSystemMessage("Terminal history cleared");
-      
+
       res.json({
         success: true,
         message: "Terminal history cleared",

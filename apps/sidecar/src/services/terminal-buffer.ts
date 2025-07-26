@@ -185,8 +185,8 @@ export class TerminalBuffer {
       memoryUsage: this.memoryUsage,
       droppedCount: this.droppedCount,
       backpressureActive: this.backpressureActive,
-      oldestEntry: this.buffer.length > 0 ? this.buffer[0].timestamp : undefined,
-      newestEntry: this.buffer.length > 0 ? this.buffer[this.buffer.length - 1].timestamp : undefined,
+      oldestEntry: this.buffer.length > 0 ? this.buffer[0]?.timestamp : undefined,
+      newestEntry: this.buffer.length > 0 ? this.buffer[this.buffer.length - 1]?.timestamp : undefined,
     };
   }
 
@@ -341,7 +341,8 @@ export class TerminalBuffer {
     // Find first entry to keep
     let keepFromIndex = 0;
     for (let i = 0; i < this.buffer.length; i++) {
-      if (this.buffer[i].timestamp > cutoffTime) {
+      const entry = this.buffer[i];
+      if (entry && entry.timestamp > cutoffTime) {
         keepFromIndex = i;
         break;
       }

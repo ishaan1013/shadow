@@ -13,7 +13,6 @@ const configSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
   CORS_ORIGIN: z.string().default("*"),
-  ENABLE_COMMAND_APPROVAL: z.coerce.boolean().default(false),
 });
 
 const parsed = configSchema.safeParse(process.env);
@@ -33,7 +32,6 @@ export const config = {
   rateLimitWindowMs: parsed.data.RATE_LIMIT_WINDOW_MS,
   rateLimitMaxRequests: parsed.data.RATE_LIMIT_MAX_REQUESTS,
   corsOrigin: parsed.data.CORS_ORIGIN,
-  enableCommandApproval: parsed.data.ENABLE_COMMAND_APPROVAL,
   isDevelopment: parsed.data.NODE_ENV === "development",
   isProduction: parsed.data.NODE_ENV === "production",
 };

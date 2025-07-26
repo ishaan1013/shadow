@@ -1,7 +1,6 @@
 import { ToolExecutor } from "../interfaces/tool-executor";
 import {
   CommandOptions,
-  CommandResult,
   DeleteResult,
   DirectoryListing,
   FileResult,
@@ -11,10 +10,14 @@ import {
   GrepResult,
   ReadFileOptions,
   WriteResult,
-  CodebaseSearchResult,
+  CodebaseSearchToolResult,
   SearchOptions,
-} from "../interfaces/types";
-
+  WebSearchResult,
+  CodebaseSearchResult,
+} from "@repo/types";
+import { CommandResult } from "../interfaces/types";
+import config from "../../config";
+import { EmbeddingSearchResult } from "../../indexing/embedding/types";
 /**
  * MockRemoteToolExecutor simulates HTTP calls to a sidecar API
  * Used for testing the abstraction layer without real infrastructure
@@ -254,7 +257,7 @@ export class MockRemoteToolExecutor implements ToolExecutor {
   async codebaseSearch(
     query: string,
     _options?: SearchOptions
-  ): Promise<CodebaseSearchResult> {
+  ): Promise<CodebaseSearchToolResult> {
     return this.simulateNetworkCall("codebaseSearch", () => {
       const searchTerms = query.split(" ").filter(term => term.length > 2);
 
@@ -283,6 +286,97 @@ export class MockRemoteToolExecutor implements ToolExecutor {
         query,
         searchTerms,
         message: `Found ${mockResults.length} relevant code snippets for "${query}"`,
+      };
+    });
+  }
+
+  async semanticSearch(query: string, repo: string, options?: SearchOptions): Promise<CodebaseSearchToolResult> {
+    if (!config.useSemanticSearch) {
+      console.log("semanticSearch disabled, falling back to codebaseSearch");
+      return this.codebaseSearch(query, options);
+    }
+    try {
+      console.log("semanticSearch enabled");
+      console.log("semanticSearchParams", query, repo);
+      const response = await fetch(`${config.apiUrl}/api/indexing/search`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          namespace: repo,
+          topK: 5,
+          fields: ["content", "filePath", "language"]
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Indexing service error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as { matches: EmbeddingSearchResult[] };
+      const matches = data.matches;
+
+      const parsedData = {
+        success: !!matches,
+        results: matches.map((match: EmbeddingSearchResult, i: number) => ({
+          id: i + 1,
+          content: match?.fields?.code || match?.fields?.text || "",
+          relevance: typeof match?._score === "number" ? match._score : 0.8,
+        })),
+        query,
+        searchTerms: query.split(/\s+/),
+        message: matches?.length
+          ? `Found ${matches.length} relevant code snippets for "${query}"`
+          : `No relevant code found for "${query}"`,
+      }
+      console.log("semanticSearch", parsedData);
+
+      return parsedData;
+    } catch (error) {
+      console.error(`[SEMANTIC_SEARCH_ERROR] Failed to query indexing service:`, error);
+
+      // Fallback to ripgrep if indexing service is unavailable
+      return this.codebaseSearch(query, options);
+    }
+  }
+  
+  async webSearch(query: string, domain?: string): Promise<WebSearchResult> {
+    return this.simulateNetworkCall("webSearch", () => {
+      // Generate mock web search results
+      const mockResults = [
+        {
+          text: `This is a mock search result for "${query}". It contains detailed information about the topic you're searching for.`,
+          url: `https://example.com/search-result-1?q=${encodeURIComponent(query)}`,
+          title: `${query} - Comprehensive Guide`,
+        },
+        {
+          text: `Another mock result showing how ${query} is used in practice with real-world examples and best practices.`,
+          url: `https://docs.example.com/${query.toLowerCase().replace(/\s+/g, '-')}`,
+          title: `Understanding ${query}: Documentation`,
+        },
+        {
+          text: `Latest news and updates about ${query}. Stay informed about recent developments and trends.`,
+          url: `https://news.example.com/articles/${query.toLowerCase().replace(/\s+/g, '-')}`,
+          title: `${query} News & Updates`,
+        },
+      ];
+
+      // Filter by domain if specified
+      const filteredResults = domain
+        ? mockResults.filter(result => result.url.includes(domain))
+        : mockResults;
+
+      // Randomly return 1-3 results
+      const selectedResults = filteredResults.slice(0, Math.floor(Math.random() * 3) + 1);
+
+      return {
+        success: true,
+        results: selectedResults,
+        query,
+        domain,
+        message: `Found ${selectedResults.length} web search results for "${query}"${domain ? ` from ${domain}` : ''}`,
       };
     });
   }

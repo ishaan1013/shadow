@@ -8,12 +8,12 @@ import {
   GrepSearchResponse,
   CodebaseSearchResponse,
   CodebaseSearchResult,
-} from "../types";
+} from "@repo/types";
 
 const execAsync = promisify(exec);
 
 export class SearchService {
-  constructor(private workspaceService: WorkspaceService) {}
+  constructor(private workspaceService: WorkspaceService) { }
 
   /**
    * Search for files by name pattern
@@ -21,19 +21,19 @@ export class SearchService {
   async searchFiles(query: string): Promise<FileSearchResponse> {
     try {
       const workspaceDir = this.workspaceService.getWorkspaceDir();
-      
+
       // Use find command for file search
       const command = `find "${workspaceDir}" -name "*${query}*" -type f | head -100`;
-      
+
       logger.debug("Executing file search", { command });
       const { stdout } = await execAsync(command);
-      
+
       const files = stdout
         .trim()
         .split("\n")
         .filter(line => line.length > 0)
         .map(file => path.relative(workspaceDir, file));
-      
+
       return {
         success: true,
         files,
@@ -43,7 +43,7 @@ export class SearchService {
       };
     } catch (error) {
       logger.error("File search failed", { query, error });
-      
+
       return {
         success: false,
         query,
@@ -65,30 +65,30 @@ export class SearchService {
   ): Promise<GrepSearchResponse> {
     try {
       const workspaceDir = this.workspaceService.getWorkspaceDir();
-      
+
       // Build ripgrep command
       let command = `rg "${query}" "${workspaceDir}"`;
-      
+
       if (!caseSensitive) {
         command += " -i";
       }
-      
+
       if (includePattern) {
         command += ` --glob "${includePattern}"`;
       }
-      
+
       if (excludePattern) {
         command += ` --glob "!${excludePattern}"`;
       }
-      
+
       // Limit results
       command += " --max-count 50";
-      
+
       logger.debug("Executing grep search", { command });
-      
+
       try {
         const { stdout } = await execAsync(command);
-        
+
         const matches = stdout
           .trim()
           .split("\n")
@@ -102,7 +102,7 @@ export class SearchService {
             }
             return line;
           });
-        
+
         return {
           success: true,
           matches,
@@ -125,7 +125,7 @@ export class SearchService {
       }
     } catch (error) {
       logger.error("Grep search failed", { query, error });
-      
+
       return {
         success: false,
         query,
@@ -145,28 +145,28 @@ export class SearchService {
   ): Promise<CodebaseSearchResponse> {
     try {
       const workspaceDir = this.workspaceService.getWorkspaceDir();
-      
+
       // Split query into search terms
       const searchTerms = query
         .split(" ")
         .filter(term => term.length > 2);
-      
+
       const searchPattern = searchTerms.join("|");
-      
+
       let searchPath = workspaceDir;
       if (targetDirectories && targetDirectories.length > 0) {
         // Use the first target directory
         searchPath = this.workspaceService.resolvePath(targetDirectories[0] || ".");
       }
-      
+
       // Use ripgrep with context for semantic-like search
       const command = `rg -i -C 3 --max-count 10 "${searchPattern}" "${searchPath}"`;
-      
+
       logger.debug("Executing codebase search", { command });
-      
+
       try {
         const { stdout } = await execAsync(command);
-        
+
         const results: CodebaseSearchResult[] = stdout
           .trim()
           .split("\n--\n")
@@ -177,7 +177,7 @@ export class SearchService {
           }))
           .filter(result => result.content.length > 0)
           .slice(0, 5); // Limit to top 5 results
-        
+
         return {
           success: true,
           results,
@@ -200,7 +200,7 @@ export class SearchService {
       }
     } catch (error) {
       logger.error("Codebase search failed", { query, error });
-      
+
       return {
         success: false,
         query,

@@ -116,7 +116,7 @@ export function AssistantMessage({ message }: { message: Message }) {
                 name: part.toolName,
                 args: part.args,
                 status: "COMPLETED",
-                result: toolResult?.result,
+                result: toolResult?.result as any, // Tool result from stream - cast for compatibility
               },
             },
           };

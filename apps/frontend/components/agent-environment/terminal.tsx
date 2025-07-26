@@ -3,46 +3,84 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { useTerminalSocket } from "@/hooks/socket";
+import { useParams } from "next/navigation";
+import type { TerminalEntry } from "@repo/types";
 
 export default function Terminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+
+  const params = useParams();
+  const taskId = params?.taskId as string;
+
+  // Use our hook architecture but with enhanced terminal functionality
+  const { terminalEntries, isTerminalConnected, clearTerminal } =
+    useTerminalSocket(taskId);
+
+  // Terminal entry formatting with ANSI colors
+  const writeToTerminal = (entry: TerminalEntry) => {
+    const xterm = xtermRef.current;
+    if (!xterm) return;
+
+    switch (entry.type) {
+      case "command":
+        // Green bold for commands
+        xterm.write(`\x1b[1;32m$ ${entry.data}\x1b[0m\r\n`);
+        break;
+      case "stdout":
+        // Normal white text for stdout
+        xterm.write(entry.data);
+        break;
+      case "stderr":
+        // Red text for errors
+        xterm.write(`\x1b[31m${entry.data}\x1b[0m`);
+        break;
+      case "system":
+        // Gray text for system messages
+        xterm.write(`\x1b[90m${entry.data}\x1b[0m\r\n`);
+        break;
+      default:
+        xterm.write(entry.data);
+    }
+  };
 
   useEffect(() => {
     if (!terminalRef.current) return;
 
     // Create xterm instance
     const xterm = new XTerm({
+      fontFamily: '"Departure Mono", "Fira Code", "Courier New", monospace',
+      fontSize: 13,
+      lineHeight: 1.2,
       cursorBlink: true,
-      fontSize: 14,
-      fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", monospace',
+      cursorStyle: "block",
       theme: {
-        background: "#151515",
-        foreground: "#d4d4d4",
+        background: "#0a0a0a",
+        foreground: "#ffffff",
         cursor: "#ffffff",
-        cursorAccent: "#000000",
-        selectionBackground: "#3a3d41",
-        black: "#000000",
-        red: "#cd3131",
-        green: "#0dbc79",
-        yellow: "#e5e510",
-        blue: "#2472c8",
-        magenta: "#bc3fbc",
-        cyan: "#11a8cd",
-        white: "#e5e5e5",
-        brightBlack: "#666666",
-        brightRed: "#f14c4c",
-        brightGreen: "#23d18b",
-        brightYellow: "#f5f543",
-        brightBlue: "#3b8eea",
-        brightMagenta: "#d670d6",
-        brightCyan: "#29b8db",
+        cursorAccent: "#0a0a0a",
+        black: "#0a0a0a",
+        red: "#ff5555",
+        green: "#50fa7b",
+        yellow: "#f1fa8c",
+        blue: "#bd93f9",
+        magenta: "#ff79c6",
+        cyan: "#8be9fd",
+        white: "#f8f8f2",
+        brightBlack: "#44475a",
+        brightRed: "#ff5555",
+        brightGreen: "#50fa7b",
+        brightYellow: "#f1fa8c",
+        brightBlue: "#bd93f9",
+        brightMagenta: "#ff79c6",
+        brightCyan: "#8be9fd",
         brightWhite: "#e5e5e5",
       },
       allowProposedApi: true,
+      disableStdin: true, // Read-only terminal
     });
 
     // Create fit addon
@@ -56,44 +94,51 @@ export default function Terminal() {
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
 
-    // Write initial content
-    xterm.writeln("Welcome to Shadow Agent Environment");
-    xterm.writeln("Terminal is read-only in demo mode");
+    // Write initial welcome message
+    xterm.writeln("\x1b[1m=== Shadow Agent Terminal ===\x1b[0m");
     xterm.writeln("");
-    xterm.writeln("$ git status");
-    xterm.writeln("On branch main");
-    xterm.writeln("Your branch is up to date with 'origin/main'.");
-    xterm.writeln("");
-    xterm.writeln("nothing to commit, working tree clean");
-    xterm.writeln("");
-    xterm.writeln("$ npm run test");
-    xterm.writeln("Running tests...");
-    xterm.writeln("✓ All tests passed");
-    xterm.write("$ ");
 
     // Handle terminal resize
     const handleResize = () => {
-      fitAddon.fit();
+      if (fitAddon) {
+        fitAddon.fit();
+      }
     };
 
-    // Resize observer
-    const resizeObserver = new ResizeObserver(handleResize);
-    if (terminalRef.current) {
-      resizeObserver.observe(terminalRef.current);
-    }
-
-    // Initial resize
-    setTimeout(handleResize, 100);
+    window.addEventListener("resize", handleResize);
 
     // Cleanup
     return () => {
-      resizeObserver.disconnect();
+      window.removeEventListener("resize", handleResize);
       xterm.dispose();
+      xtermRef.current = null;
+      fitAddonRef.current = null;
     };
   }, []);
 
+  // Write terminal entries to xterm when they change
+  useEffect(() => {
+    if (xtermRef.current && terminalEntries.length > 0) {
+      // Clear and rewrite all entries
+      xtermRef.current.clear();
+      xtermRef.current.writeln("Shadow Agent Terminal");
+      xtermRef.current.writeln("Connected to agent workspace");
+      xtermRef.current.writeln("");
+
+      terminalEntries.forEach((entry) => writeToTerminal(entry));
+    }
+  }, [terminalEntries]);
+
   return (
-    <div className="bg-background flex-1 overflow-hidden p-2">
+    <div className="bg-background relative flex-1 overflow-hidden p-2">
+      {/* Connection status indicator */}
+      <div className="absolute right-4 top-4 z-10">
+        <div
+          className={`h-2 w-2 rounded-full ${isTerminalConnected ? "bg-green-500" : "bg-red-500"}`}
+          title={isTerminalConnected ? "Connected" : "Disconnected"}
+        />
+      </div>
+
       <div ref={terminalRef} className="h-full" />
     </div>
   );

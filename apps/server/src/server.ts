@@ -1,10 +1,38 @@
 import { app, socketIOServer } from "./app";
 import config from "./config";
+import { stopAllFileSystemWatchers } from "./tools";
 
-app.listen(config.apiPort, () => {
+const apiServer = app.listen(config.apiPort, () => {
   console.log(`Server running on port ${config.apiPort}`);
 });
 
-socketIOServer.listen(config.socketPort, () => {
+const socketServer = socketIOServer.listen(config.socketPort, () => {
   console.log(`Socket.IO server running on port ${config.socketPort}`);
 });
+
+// Graceful shutdown handling
+const shutdown = (signal: string) => {
+  console.log(`\n[SERVER] Received ${signal}, starting graceful shutdown...`);
+  
+  // Stop all filesystem watchers first
+  stopAllFileSystemWatchers();
+  
+  // Close servers
+  apiServer.close(() => {
+    console.log('[SERVER] HTTP server closed');
+  });
+  
+  socketServer.close(() => {
+    console.log('[SERVER] Socket.IO server closed');
+    process.exit(0);
+  });
+  
+  // Force exit after 10 seconds
+  setTimeout(() => {
+    console.error('[SERVER] Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

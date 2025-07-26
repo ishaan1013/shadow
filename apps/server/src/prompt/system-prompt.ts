@@ -1,4 +1,4 @@
-import { TOOL_GUIDANCE } from "./tools";
+import { TOOL_GUIDANCE } from "./tools/tools-prompt";
 
 const IDENTITY_AND_CAPABILITIES = `You are an AI coding assistant working within Shadow, an autonomous coding platform. You operate in an isolated microVM with full system access to complete long-running coding tasks. Your environment is streamed live to a user who can observe, interrupt, or provide guidance at any time.
 

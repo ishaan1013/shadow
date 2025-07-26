@@ -419,7 +419,7 @@ export class TaskInitializationEngine {
   /**
    * Verify workspace step - Verify workspace is ready and contains repository
    */
-  private async executeVerifyWorkspace(taskId: string, userId: string): Promise<void> {
+  private async executeVerifyWorkspace(taskId: string, _userId: string): Promise<void> {
     console.log(`[TASK_INIT] ${taskId}: Verifying workspace is ready and contains repository`);
 
     try {
@@ -499,7 +499,7 @@ export class TaskInitializationEngine {
   /**
    * Emit progress events via WebSocket
    */
-  private emitProgress(taskId: string, progress: InitializationProgress): void {
+  private emitProgress(_taskId: string, progress: InitializationProgress): void {
     emitStreamChunk({
       type: "init-progress",
       initProgress: progress,

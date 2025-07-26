@@ -37,3 +37,5 @@ shadow-worktree/*
 # Indexing stuff (Rajan)
 .shadow/
 bun.lock
+
+internal/

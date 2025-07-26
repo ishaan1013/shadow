@@ -15,6 +15,7 @@ import { tokenize } from "@/indexing/utils/tokenize";
 import TreeSitter from "tree-sitter";
 import { embedAndUpsertToPinecone } from "./embedder";
 import { getOwnerRepo, isValidRepo } from "./utils/repository";
+import { LocalWorkspaceManager } from "@/execution/local/local-workspace-manager";
 
 export interface FileContentResponse {
   content: string;
@@ -23,6 +24,7 @@ export interface FileContentResponse {
 }
 
 export interface IndexRepoOptions {
+  clearNamespace: boolean;
   maxLines?: number;
   embed?: boolean;
   outDir?: string;
@@ -31,82 +33,30 @@ export interface IndexRepoOptions {
 
 // Add GitHub API helper
 async function fetchRepoFiles(
-  owner: string,
-  repo: string,
+  taskId: string,
   path: string = ""
 ): Promise<Array<{ path: string; content: string; type: string }>> {
-  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
-  const url = path ? `${baseUrl}/${path}` : baseUrl;
+  // For local indexing, we'll use the workspace manager
+  // The repo parameter should be the taskId or we need to map repo to taskId
 
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github.v3+json",
-    "User-Agent": "shadow-indexer",
-  };
+  // You'll need to get the taskId from the repo name or pass it differently
 
-  if (process.env.GITHUB_TOKEN) {
-    headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
-  }
-
-  try {
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      throw new Error(
-        `GitHub API error: ${response.status} ${response.statusText}`
-      );
-    }
-
-    const data = await response.json();
-    const files: Array<{ path: string; content: string; type: string }> = [];
-
-    if (Array.isArray(data)) {
-      // Directory
-      for (const item of data) {
-        if (item.type === "file") {
-          try {
-            const fileResponse = await fetch(item.url, { headers });
-            if (!fileResponse.ok) {
-              throw new Error(
-                `Failed to fetch file: ${item.path} - ${fileResponse.status} ${fileResponse.statusText}`
-              );
-            }
-            const fileData = await fileResponse.json();
-            const content = Buffer.from(fileData.content, "base64").toString(
-              "utf8"
-            );
-            files.push({ path: fileData.path, content, type: "file" });
-          } catch (error) {
-            logger.error(`Error fetching file ${item.path}: ${error}`);
-          }
-        } else if (item.type === "dir") {
-          const subFiles = await fetchRepoFiles(owner, repo, item.path);
-          files.push(...subFiles);
-        }
-      }
-    } else {
-      // Single file
-      const content = Buffer.from(data.content, "base64").toString("utf8");
-      files.push({ path: data.path, content, type: "file" });
-    }
-
-    return files;
-  } catch (error) {
-    logger.error(`Error fetching ${owner}/${repo}: ${error}`);
-    return [];
-  }
+  const workspaceManager = new LocalWorkspaceManager();
+  return await workspaceManager.getAllFilesFromWorkspace(taskId);
 }
 
 // Modified indexRepo to accept GitHub repo
 async function indexRepo(
   repoName: string,
-  options: IndexRepoOptions | null = {}
+  taskId: string,
+  options: IndexRepoOptions
 ): Promise<{
   graph: Graph;
   graphJSON: any;
   invertedIndex: any;
   embeddings?: { index: any; binary: Buffer };
 }> {
-  const { maxLines = 200, embed = false, paths = null } = options || {};
+  const { maxLines = 200, embed = false, paths = null, clearNamespace = true } = options;
 
   logger.info(
     `Indexing ${repoName}${paths ? " (filtered)" : ""}${embed ? " + embeddings" : ""}`
@@ -120,7 +70,7 @@ async function indexRepo(
     const { owner, repo } = getOwnerRepo(repoName);
     logger.info(`Fetching GitHub repo: ${owner}/${repo}`);
 
-    files = await fetchRepoFiles(owner, repo);
+    files = await fetchRepoFiles(taskId);
     if (files.length === 0) {
       logger.warn(`No files found in ${owner}/${repo}`);
       throw new Error(`No files found in ${owner}/${repo}`);
@@ -148,6 +98,8 @@ async function indexRepo(
       if (!spec || !spec.language) {
         logger.warn(`Skipping unsupported: ${file.path}`);
         continue;
+      } else {
+        console.log("Parsing", file.path);
       }
       const parser = new TreeSitter();
       parser.setLanguage(spec.language);
@@ -369,7 +321,8 @@ async function indexRepo(
       logger.info("Embedding and uploading to Pinecone...");
       await embedAndUpsertToPinecone(
         Array.from(graph.nodes.values()),
-        repoName
+        repoName,
+        clearNamespace
       );
     } else {
       logger.info("Embedding skipped (embed=false).");

@@ -14,11 +14,14 @@ interface ExtendedLanguageSpec extends LanguageSpec {
   language: any;
 }
 
-async function safeRequire(name: string): Promise<any> {
+function safeRequire(name: string): any {
   try {
-    const mod = await import(name);
+    const mod = require(name);
+    if (name === "tree-sitter-typescript") {
+      return mod.typescript || mod;
+    }
     return mod.default || mod;
-  } catch (err) {
+  } catch (_err) {
     logger.warn(`Language grammar not installed: ${name}`);
     return null;
   }
@@ -48,14 +51,17 @@ const EXT_MAP: Record<string, LanguageSpec> = {
     calls: ["call_expression"],
   },
   ".ts": {
-    id: "ts",
+    id: "typescript",
     pkg: "tree-sitter-typescript",
-    symbols: [
-      "function_declaration",
-      "method_definition",
-      "class_declaration",
-      "interface_declaration",
-    ],
+    symbols: ["function_declaration", "class_declaration", "method_definition"],
+    imports: ["import_statement"],
+    docs: ["comment"],
+    calls: ["call_expression"],
+  },
+  ".tsx": {
+    id: "typescript",
+    pkg: "tree-sitter-typescript",
+    symbols: ["function_declaration", "class_declaration", "method_definition"],
     imports: ["import_statement"],
     docs: ["comment"],
     calls: ["call_expression"],
@@ -114,7 +120,7 @@ export async function getLanguageForPath(
   }
 
   const loadPromise = (async () => {
-    const mod = await safeRequire(spec.pkg);
+    const mod = safeRequire(spec.pkg);
     if (mod) {
       const result = {
         ...spec,

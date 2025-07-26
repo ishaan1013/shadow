@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { prisma } from "@repo/db";
-import { FILE_SIZE_LIMITS } from "@repo/types";
+import { FILE_SIZE_LIMITS, FileNode } from "@repo/types";
 import type { ToolExecutor } from "../execution/interfaces/tool-executor";
 import { createToolExecutor } from "../execution";
+import { getFileChanges, hasGitRepository } from "../utils/git-operations";
 
 const router = Router();
 
@@ -15,13 +16,6 @@ const IGNORE_DIRS = [
   "dist",
   "build",
 ];
-
-type FileNode = {
-  name: string;
-  type: "file" | "folder";
-  path: string;
-  children?: FileNode[];
-};
 
 async function buildFileTree(executor: ToolExecutor, dirPath: string = "."): Promise<FileNode[]> {
   try {
@@ -211,6 +205,60 @@ router.get("/:taskId/files/content", async (req, res) => {
     });
   } catch (error) {
     console.error("[FILE_CONTENT_API_ERROR]", error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+// GET /api/tasks/:taskId/file-changes - Get git-based file changes
+router.get('/:taskId/file-changes', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    // Validate task exists and get full status
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true, workspacePath: true, status: true }
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        error: "Task not found"
+      });
+    }
+
+    // Don't return file changes if task is still initializing
+    if (task.status === 'INITIALIZING') {
+      return res.json({
+        success: true,
+        fileChanges: [],
+        diffStats: { additions: 0, deletions: 0, totalFiles: 0 }
+      });
+    }
+
+    // Check if workspace has git repository
+    const hasGit = await hasGitRepository(taskId);
+    if (!hasGit) {
+      return res.json({
+        success: true,
+        fileChanges: [],
+        diffStats: { additions: 0, deletions: 0, totalFiles: 0 }
+      });
+    }
+
+    const { fileChanges, diffStats } = await getFileChanges(taskId);
+
+    res.json({
+      success: true,
+      fileChanges,
+      diffStats
+    });
+
+  } catch (error) {
+    console.error("[FILE_CHANGES_API_ERROR]", error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : "Unknown error"

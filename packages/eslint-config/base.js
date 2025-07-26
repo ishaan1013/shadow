@@ -18,7 +18,7 @@ export const config = [
       turbo: turboPlugin,
     },
     rules: {
-      "turbo/no-undeclared-env-vars": "warn",
+      "turbo/no-undeclared-env-vars": "off",
     },
   },
   {
@@ -28,6 +28,7 @@ export const config = [
   },
   {
     rules: {
+      "no-unused-vars": "off",
       // Allow unused variables/parameters that start with underscore
       "@typescript-eslint/no-unused-vars": [
         "error",

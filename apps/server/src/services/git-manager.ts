@@ -18,6 +18,7 @@ export interface CommitOptions {
 
 export class GitManager {
   private workspacePath: string;
+  // @ts-expect-error unused
   private taskId: string;
 
   constructor(workspacePath: string, taskId: string) {
@@ -46,10 +47,10 @@ export class GitManager {
     try {
       // Ensure we're on the base branch first
       await this.execGit(`checkout ${baseBranch}`);
-      
+
       // Get the base commit SHA before creating the branch
       const baseCommitSha = await this.getCurrentCommitSha();
-      
+
       // Create and checkout the shadow branch
       await this.execGit(`checkout -b ${shadowBranch}`);
 
@@ -222,12 +223,13 @@ Commit message:`,
     try {
       const result = await execAsync(command, options);
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Log the command and error for debugging
+      const errorObj = error as { code?: string; stdout?: string; stderr?: string };
       console.error(`[GIT_MANAGER] Command failed: ${command}`, {
-        code: error.code,
-        stdout: error.stdout,
-        stderr: error.stderr,
+        code: errorObj.code,
+        stdout: errorObj.stdout,
+        stderr: errorObj.stderr,
       });
       throw error;
     }

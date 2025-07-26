@@ -1,6 +1,7 @@
 "use client";
 
 import { useFileContent } from "@/hooks/use-file-content";
+import { useCodebaseTree } from "@/hooks/use-codebase-tree";
 import {
   createContext,
   useContext,
@@ -8,6 +9,8 @@ import {
   ReactNode,
   useMemo,
   useRef,
+  useEffect,
+  useCallback,
 } from "react";
 import { ImperativePanelHandle } from "react-resizable-panels";
 
@@ -21,15 +24,27 @@ type FileWithContent = {
 type AgentEnvironmentContextType = {
   selectedFilePath: string | null;
   selectedFileWithContent: FileWithContent | null;
-  setSelectedFilePath: (path: string | null) => void;
+  updateSelectedFilePath: (path: string | null) => void;
   isLoadingContent: boolean;
   contentError: string | undefined;
   rightPanelRef: React.RefObject<ImperativePanelHandle | null>;
+  lastPanelSizeRef: React.RefObject<number | null>;
+  expandRightPanel: () => void;
 };
 
 const AgentEnvironmentContext = createContext<
   AgentEnvironmentContextType | undefined
 >(undefined);
+
+// Helper function to find README.md in the root of the file tree
+function findReadmeFile(tree: Array<any>): string | null {
+  // Only look for README.md at the root level (case insensitive)
+  const rootReadme = tree.find(
+    (node) => node.type === "file" && node.name.toLowerCase() === "readme.md"
+  );
+
+  return rootReadme ? rootReadme.path : null;
+}
 
 export function AgentEnvironmentProvider({
   children,
@@ -42,6 +57,17 @@ export function AgentEnvironmentProvider({
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
 
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+
+  function updateSelectedFilePath(path: string | null) {
+    if (path && !path.startsWith("/")) {
+      setSelectedFilePath("/" + path);
+    } else {
+      setSelectedFilePath(path);
+    }
+  }
+
+  // Get file tree to find README.md
+  const treeQuery = useCodebaseTree(taskId);
 
   // Fetch file content when a file is selected
   const fileContentQuery = useFileContent(
@@ -65,21 +91,50 @@ export function AgentEnvironmentProvider({
     [selectedFilePath, fileContentQuery.data]
   );
 
+  // Automatically select README.md when the file tree loads
+  useEffect(() => {
+    // Only attempt to find README.md if no file is currently selected
+    // and the file tree has loaded successfully
+    if (!selectedFilePath && treeQuery.data?.success && treeQuery.data.tree) {
+      const readmePath = findReadmeFile(treeQuery.data.tree);
+      if (readmePath) {
+        updateSelectedFilePath(readmePath);
+      }
+    }
+  }, [treeQuery.data, selectedFilePath]);
+
+  const lastPanelSizeRef = useRef<number | null>(null);
+
+  const expandRightPanel = useCallback(() => {
+    if (rightPanelRef.current && rightPanelRef.current.isCollapsed()) {
+      const panel = rightPanelRef.current;
+
+      panel.expand();
+      if (!lastPanelSizeRef.current) {
+        panel.resize(50);
+      }
+    }
+  }, [rightPanelRef]);
+
   const value: AgentEnvironmentContextType = useMemo(
     () => ({
       selectedFilePath,
       selectedFileWithContent,
-      setSelectedFilePath,
+      updateSelectedFilePath,
       isLoadingContent: fileContentQuery.isLoading,
       contentError: fileContentQuery.error?.message,
       rightPanelRef,
+      lastPanelSizeRef,
+      expandRightPanel,
     }),
     [
       selectedFilePath,
       selectedFileWithContent,
+      updateSelectedFilePath,
       fileContentQuery.isLoading,
       fileContentQuery.error?.message,
       rightPanelRef,
+      expandRightPanel,
     ]
   );
 

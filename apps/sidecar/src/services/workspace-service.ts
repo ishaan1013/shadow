@@ -4,7 +4,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { config } from "../config";
 import { logger } from "../utils/logger";
-import { WorkspaceStatusResponse } from "../types";
+import { WorkspaceStatusResponse } from "@repo/types";
 
 const execAsync = promisify(exec);
 
@@ -13,6 +13,13 @@ export class WorkspaceService {
 
   constructor() {
     this.workspaceDir = config.workspaceDir;
+  }
+
+  /**
+   * Get the workspace directory path
+   */
+  getWorkspacePath(): string {
+    return this.workspaceDir;
   }
 
   /**
@@ -37,7 +44,7 @@ export class WorkspaceService {
       // Get workspace size using du command
       let sizeBytes = 0;
       try {
-        const { stdout } = await execAsync(`du -sb "${this.workspaceDir}"`);
+        const { stdout } = await execAsync("du -sb .", { cwd: this.workspaceDir });
         const match = stdout.match(/^(\d+)/);
         sizeBytes = match?.[1] ? parseInt(match[1], 10) : 0;
       } catch (error) {
@@ -45,6 +52,7 @@ export class WorkspaceService {
       }
 
       return {
+        success: true,
         exists: true,
         path: this.workspaceDir,
         isReady: stats.isDirectory(),
@@ -52,6 +60,7 @@ export class WorkspaceService {
       };
     } catch (error) {
       return {
+        success: false,
         exists: false,
         path: this.workspaceDir,
         isReady: false,

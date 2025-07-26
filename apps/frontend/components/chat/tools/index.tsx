@@ -2,6 +2,7 @@ import type { Message } from "@repo/types";
 
 // Tool-specific components
 import { CodebaseSearchTool } from "./codebase-search";
+import { SemanticSearchTool } from "./semantic-search";
 import { DeleteFileTool } from "./delete-file";
 import { EditFileTool } from "./edit-file";
 import { FileSearchTool } from "./file-search";
@@ -11,6 +12,7 @@ import { ReadFileTool } from "./read-file";
 import { RunTerminalCmdTool } from "./run-terminal-cmd";
 import { SearchReplaceTool } from "./search-replace";
 import { TodoWriteTool } from "./todo-write";
+import { WebSearchTool } from "./web-search";
 
 // Export ToolType enum
 export { ToolType } from "./collapsible-tool";
@@ -19,6 +21,7 @@ export { ToolType } from "./collapsible-tool";
 const TOOL_COMPONENTS = {
   todo_write: TodoWriteTool,
   codebase_search: CodebaseSearchTool,
+  semantic_search: SemanticSearchTool,
   read_file: ReadFileTool,
   run_terminal_cmd: RunTerminalCmdTool,
   list_dir: ListDirTool,
@@ -27,6 +30,7 @@ const TOOL_COMPONENTS = {
   search_replace: SearchReplaceTool,
   file_search: FileSearchTool,
   delete_file: DeleteFileTool,
+  web_search: WebSearchTool,
 } as const;
 
 export type ToolName = keyof typeof TOOL_COMPONENTS;
@@ -62,7 +66,7 @@ export function ToolMessage({ message }: { message: Message }) {
   }
 
   const ToolComponent = TOOL_COMPONENTS[toolMeta.name as ToolName];
-
+  
   if (!ToolComponent) {
     return (
       <div className="text-muted-foreground">
@@ -78,6 +82,7 @@ export function ToolMessage({ message }: { message: Message }) {
 // Export all tool components for potential individual use
 export {
   CodebaseSearchTool,
+  SemanticSearchTool,
   DeleteFileTool,
   EditFileTool,
   FileSearchTool,
@@ -87,4 +92,5 @@ export {
   RunTerminalCmdTool,
   SearchReplaceTool,
   TodoWriteTool,
+  WebSearchTool,
 };

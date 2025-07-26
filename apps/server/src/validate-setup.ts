@@ -86,7 +86,7 @@ class SetupValidator {
           `${version} (requires >= 18.0.0)`
         );
       }
-    } catch (error) {
+    } catch (_error) {
       this.addResult("Node.js Version", "fail", "Node.js not found");
     }
   }
@@ -134,7 +134,7 @@ class SetupValidator {
       const { stdout } = await execAsync("rg --version");
       const version = stdout.trim().split("\n")[0];
       this.addResult("ripgrep", "pass", `${version} installed`);
-    } catch (error) {
+    } catch (_error) {
       this.addResult(
         "ripgrep",
         "fail",
@@ -159,7 +159,7 @@ class SetupValidator {
             "pass",
             `${workspaceDir} exists and is writable`
           );
-        } catch (writeError) {
+        } catch (_writeError) {
           this.addResult(
             "Workspace Directory",
             "warning",
@@ -221,7 +221,7 @@ class SetupValidator {
           `Missing dependencies: ${missingDeps.join(", ")}`
         );
       }
-    } catch (error) {
+    } catch (_error) {
       this.addResult(
         "Dependencies",
         "warning",
@@ -253,7 +253,6 @@ async function main() {
   process.exit(success ? 0 : 1);
 }
 
-// eslint-disable-next-line
 if (require.main === module) {
   main().catch(console.error);
 }

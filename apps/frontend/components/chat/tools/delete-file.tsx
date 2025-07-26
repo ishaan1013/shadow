@@ -1,5 +1,6 @@
 import type { Message } from "@repo/types";
 import { Trash2 } from "lucide-react";
+import { ToolTrigger, ToolType } from "./collapsible-tool";
 
 export function DeleteFileTool({ message }: { message: Message }) {
   const toolMeta = message.metadata?.tool;
@@ -9,9 +10,12 @@ export function DeleteFileTool({ message }: { message: Message }) {
   const filePath = args.target_file as string;
 
   return (
-    <div className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 text-left text-[13px] transition-colors [&_svg:not([class*='size-'])]:size-3.5">
-      <Trash2 className="text-destructive" />
-      <span>Deleted {filePath}</span>
+    <div className="text-muted-foreground hover:text-foreground flex w-full text-left text-[13px] transition-colors">
+      <ToolTrigger
+        icon={<Trash2 className="text-destructive" />}
+        type={ToolType.DELETE_FILE}
+        title={filePath}
+      />
     </div>
   );
 }

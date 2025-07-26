@@ -1,14 +1,24 @@
-import type { Message } from "@repo/types";
+import type { Message, CodebaseSearchToolResult } from "@repo/types";
 import { Folder, Search } from "lucide-react";
 import { CollapsibleTool, ToolType } from "./collapsible-tool";
+import { getToolResult } from "@repo/types";
 
 export function CodebaseSearchTool({ message }: { message: Message }) {
   const toolMeta = message.metadata?.tool;
   if (!toolMeta) return null;
 
-  const { args, status, result } = toolMeta;
+  const { args, status } = toolMeta;
   const query = args.query as string;
   const targetDirectories = (args.target_directories as string[]) || [];
+
+  const result = getToolResult(
+    toolMeta,
+    "codebase_search"
+  ) as CodebaseSearchToolResult | null;
+  const displayContent =
+    result?.results?.map((r) => r.content).join("\n\n---\n\n") ||
+    result?.message ||
+    "No results found";
 
   return (
     <CollapsibleTool
@@ -38,8 +48,8 @@ export function CodebaseSearchTool({ message }: { message: Message }) {
           <div className="text-muted-foreground mb-1 text-xs">Results:</div>
           <div className="max-h-40 overflow-y-auto rounded-md border bg-gray-50 p-3 text-xs dark:bg-gray-900/50">
             <div className="text-muted-foreground whitespace-pre-wrap">
-              {result.substring(0, 800)}
-              {result.length > 800 && "\n\n... (truncated)"}
+              {displayContent.substring(0, 800)}
+              {displayContent.length > 800 && "\n\n... (truncated)"}
             </div>
           </div>
         </div>

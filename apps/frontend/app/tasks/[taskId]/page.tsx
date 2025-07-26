@@ -1,18 +1,8 @@
 import { TaskPageLayout } from "@/components/task/task-layout";
-import { cookies } from "next/headers";
+import { getInitialLayoutCookie } from "@/lib/actions/get-initial-layout-cookie";
 
 export default async function TaskPage() {
-  const cookieStore = await cookies();
-  const taskLayoutCookie = cookieStore.get("resizable-task-layout");
-
-  let initialLayout: number[] | undefined;
-  if (taskLayoutCookie?.value) {
-    try {
-      initialLayout = JSON.parse(taskLayoutCookie.value);
-    } catch {
-      // Invalid JSON, ignore
-    }
-  }
+  const initialLayout = await getInitialLayoutCookie();
 
   return <TaskPageLayout initialLayout={initialLayout} />;
 }

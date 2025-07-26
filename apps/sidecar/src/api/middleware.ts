@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { logger } from "../utils/logger";
-import { ErrorResponse } from "../types";
+import { ErrorResponse } from "@repo/types";
 
 /**
  * Error handling middleware

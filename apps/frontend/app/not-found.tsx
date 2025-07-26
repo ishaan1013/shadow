@@ -11,7 +11,7 @@ export default async function NotFound() {
   return (
     <>
       {/* Render the sidebar */}
-      <SidebarViews initialTasks={initialTasks} currentTask={null} />
+      <SidebarViews initialTasks={initialTasks} />
 
       {/* Fallback content */}
       <div className="flex grow flex-col items-center justify-center gap-6 p-6">

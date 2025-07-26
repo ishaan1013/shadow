@@ -43,10 +43,6 @@ export const nextJsConfig = [
     },
     settings: { react: { version: "detect" } },
     rules: {
-      // React hooks rules - exhaustive-deps temporarily disabled due to compatibility issue
-      "react-hooks/rules-of-hooks": "error",
-      "react-hooks/exhaustive-deps": "off", // TODO: Re-enable when compatibility issue is fixed
-      // React scope no longer necessary with new JSX transform.
       "react/react-in-jsx-scope": "off",
     },
   },

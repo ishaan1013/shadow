@@ -12,14 +12,7 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-
-export interface FileNode {
-  name: string;
-  type: "file" | "folder";
-  path: string;
-  content?: string;
-  children?: FileNode[];
-}
+import { FileNode } from "@repo/types";
 
 interface FileChange {
   filePath: string;

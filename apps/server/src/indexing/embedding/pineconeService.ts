@@ -59,13 +59,8 @@ class PineconeHandler {
         }));
 
       if (autoEmbedRecords.length === 0) {
-        logger.info("No records with text to upsert, skipping batch");
         return 0;
       }
-
-      logger.info(
-        `Upserting ${autoEmbedRecords.length} records with text (filtered from ${records.length})`
-      );
 
       // Use upsertRecords for auto-embedding
       await this.client.namespace(namespace).upsertRecords(autoEmbedRecords);
@@ -127,7 +122,6 @@ class PineconeHandler {
         topK: topK,
         inputs: { text: query },
       },
-      fields: fields,
     });
     return response;
   }

@@ -19,10 +19,10 @@ export function SidebarNavigation({
 }: {
   sidebarView: SidebarView;
   setSidebarView: (view: SidebarView) => void;
-  currentTaskId: string;
+  currentTaskId: string | null;
 }) {
   const { open, toggleSidebar } = useSidebar();
-  const { task } = useTask(currentTaskId);
+  const { task } = useTask(currentTaskId ?? "");
 
   const currentTaskStatus = task?.status;
 

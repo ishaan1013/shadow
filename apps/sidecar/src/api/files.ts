@@ -5,7 +5,7 @@ import {
   FileReadOptionsSchema,
   FileWriteRequestSchema,
   SearchReplaceRequestSchema,
-} from "../types";
+} from "@repo/types";
 
 export function createFilesRouter(fileService: FileService): Router {
   const router = Router();

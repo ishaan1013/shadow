@@ -16,26 +16,28 @@
     "docker:run": "docker run -p 8080:8080 -v $(pwd)/workspace:/workspace shadow-sidecar"
   },
   "dependencies": {
-    "express": "^4.21.1",
-    "cors": "^2.8.5",
-    "helmet": "^8.0.0",
+    "@repo/command-security": "*",
     "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.1",
     "express-rate-limit": "^7.4.1",
-    "zod": "^3.24.1",
+    "helmet": "^8.0.0",
+    "socket.io-client": "^4.7.2",
     "winston": "^3.17.0",
-    "dotenv": "^16.4.7"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/cors": "^2.8.17",
     "@types/compression": "^1.7.5",
-    "@types/node": "^22.10.2",
-    "tsx": "^4.19.2",
-    "typescript": "5.8.3",
-    "jest": "^29.7.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
-    "eslint": "^8.57.0",
+    "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
-    "@typescript-eslint/parser": "^8.18.0"
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "tsx": "^4.19.2",
+    "typescript": "5.8.3"
   }
 }

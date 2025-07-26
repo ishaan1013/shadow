@@ -188,7 +188,7 @@ export function PromptForm({
               {isPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : isStreaming ? (
-                <Square className="size-4" />
+                <Square className="fill-primary-foreground size-3.5" />
               ) : (
                 <ArrowUp className="size-4" />
               )}

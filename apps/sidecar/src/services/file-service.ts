@@ -10,7 +10,7 @@ import {
   FileStatsResponse,
   DirectoryListResponse,
   DirectoryEntry,
-} from "../types";
+} from "@repo/types";
 
 export class FileService {
   constructor(private workspaceService: WorkspaceService) { }

@@ -21,14 +21,17 @@ export default async function TaskLayout({
 }>) {
   const { taskId } = await params;
   const user = await getUser();
-
-  const [initialTasks, { task, todos, fileChanges }, taskMessages, models] =
-    await Promise.all([
-      user ? getTasks(user.id) : [],
-      getTaskWithDetails(taskId),
-      getTaskMessages(taskId),
-      getModels(),
-    ]);
+  const [
+    initialTasks,
+    { task, todos, fileChanges, diffStats },
+    taskMessages,
+    models,
+  ] = await Promise.all([
+    user ? getTasks(user.id) : [],
+    getTaskWithDetails(taskId),
+    getTaskMessages(taskId),
+    getModels(),
+  ]);
 
   if (!task) {
     notFound();
@@ -43,6 +46,7 @@ export default async function TaskLayout({
         task,
         todos,
         fileChanges,
+        diffStats,
       }),
     }),
     queryClient.prefetchQuery({

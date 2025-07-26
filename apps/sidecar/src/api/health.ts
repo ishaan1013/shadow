@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "./middleware";
 import { WorkspaceService } from "../services/workspace-service";
-import { HealthResponse } from "../types";
+import { HealthResponse } from "@repo/types";
 
 export function createHealthRouter(workspaceService: WorkspaceService): Router {
   const router = Router();
@@ -14,6 +14,7 @@ export function createHealthRouter(workspaceService: WorkspaceService): Router {
     "/health",
     asyncHandler(async (_req, res) => {
       const response: HealthResponse = {
+        success: true,
         healthy: true,
         message: "Sidecar service is healthy",
         details: {

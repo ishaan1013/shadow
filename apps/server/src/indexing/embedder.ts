@@ -39,7 +39,7 @@ interface EmbedViaLocalTransformersOptions {
 
 interface EmbedTextsOptions
   extends EmbedViaJinaAPIOptions,
-    EmbedViaLocalTransformersOptions {
+  EmbedViaLocalTransformersOptions {
   provider?: EmbeddingProvider;
 }
 
@@ -243,11 +243,11 @@ async function embedTexts(
 
 async function embedGraphChunks(
   chunks: GraphNode[],
-  opts: EmbedTextsOptions = {}
+  _opts: EmbedTextsOptions = {}
 ): Promise<number> {
   // gather codes
   const texts = chunks.map((ch) => ch.code || "");
-  const { embeddings, dim } = await embedTexts(texts, opts);
+  const { embeddings, dim } = await embedTexts(texts, _opts);
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     if (chunk && embeddings[i]) {
@@ -266,11 +266,15 @@ async function embedGraphChunks(
 async function embedAndUpsertToPinecone(
   nodes: GraphNode[],
   repo: string,
+  clearNamespace: boolean,
   opts: EmbedTextsOptions = {}
 ): Promise<number> {
   const pinecone = new PineconeHandler();
   const namespace = getNamespaceFromRepo(repo);
-
+  if (clearNamespace) {
+    console.log("Clearing namespace", namespace);
+    await pinecone.clearNamespace(namespace);
+  }
   // Chunk by line ranges and upload
   const recordChunks: GraphNode[][] = await pinecone.chunkRecords(nodes);
 

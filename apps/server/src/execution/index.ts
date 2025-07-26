@@ -4,7 +4,7 @@
  */
 
 import config from "../config";
-import { AgentMode } from "./interfaces/types";
+import { AgentMode } from "@repo/types";
 import { ToolExecutor } from "./interfaces/tool-executor";
 import { WorkspaceManager } from "./interfaces/workspace-manager";
 import { LocalToolExecutor } from "./local/local-tool-executor";
@@ -89,15 +89,18 @@ export function isMockMode(): boolean {
 }
 
 // Re-export types and interfaces for convenience
-export type { AgentMode, ToolExecutor, WorkspaceManager };
+export type { ToolExecutor, WorkspaceManager };
 export type {
+  AgentMode,
   FileResult,
   WriteResult,
   DeleteResult,
   DirectoryListing,
   FileSearchResult,
   GrepResult,
-  CodebaseSearchResult,
+  CodebaseSearchToolResult,
+} from "@repo/types";
+export type {
   CommandResult,
   WorkspaceInfo,
   WorkspaceStatus,

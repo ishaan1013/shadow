@@ -13,7 +13,7 @@ import { DEFAULT_MODEL } from "./chat";
 import config from "./config";
 import { createTools } from "./tools";
 
-const MAX_STEPS = 20;
+const MAX_STEPS = 50;
 
 export class LLMService {
   private getModel(modelId: ModelType): LanguageModel {
@@ -57,7 +57,7 @@ export class LLMService {
       // Create tools with task context if taskId is provided
       const tools = taskId ? createTools(taskId, workspacePath) : undefined;
 
-      const streamConfig: any = {
+      const streamConfig = {
         model: modelInstance,
         system: systemPrompt,
         messages: coreMessages,
@@ -65,10 +65,8 @@ export class LLMService {
         temperature: 0.7,
         maxSteps: MAX_STEPS,
         ...(enableTools && tools && { tools }),
+        ...(abortSignal && { abortSignal }),
       };
-      if (abortSignal) {
-        streamConfig.signal = abortSignal;
-      }
 
       const result = streamText(streamConfig);
 
@@ -101,7 +99,7 @@ export class LLMService {
               type: "tool-result",
               toolResult: {
                 id: chunk.toolCallId,
-                result: JSON.stringify(chunk.result),
+                result: chunk.result as any, // Cast to avoid unknown type issues
               },
             };
             break;
@@ -121,16 +119,7 @@ export class LLMService {
 
             yield {
               type: "complete",
-              finishReason:
-                chunk.finishReason === "stop"
-                  ? "stop"
-                  : chunk.finishReason === "length"
-                    ? "length"
-                    : chunk.finishReason === "content-filter"
-                      ? "content-filter"
-                      : chunk.finishReason === "tool-calls"
-                        ? "tool_calls"
-                        : "stop",
+              finishReason: chunk.finishReason,
             };
             break;
 

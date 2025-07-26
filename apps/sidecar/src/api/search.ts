@@ -5,7 +5,7 @@ import {
   FileSearchRequestSchema,
   GrepSearchRequestSchema,
   CodebaseSearchRequestSchema,
-} from "../types";
+} from "@repo/types";
 
 export function createSearchRouter(searchService: SearchService): Router {
   const router = Router();

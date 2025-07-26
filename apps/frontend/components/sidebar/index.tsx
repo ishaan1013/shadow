@@ -22,10 +22,10 @@ export type SidebarView = "tasks" | "agent";
 
 export function SidebarViews({
   initialTasks,
-  currentTaskId,
+  currentTaskId = null,
 }: {
   initialTasks: Task[];
-  currentTaskId: string;
+  currentTaskId?: string | null;
 }) {
   const { data: tasks, isLoading: loading, error } = useTasks(initialTasks);
 

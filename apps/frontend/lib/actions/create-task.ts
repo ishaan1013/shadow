@@ -7,6 +7,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { generateTaskTitleAndBranch } from "./generate-title-branch";
 import { saveLayoutCookie } from "./save-sidebar-cookie";
+import callIndexApi, { gitHubUrlToRepoName } from "./index-repo";
 
 const createTaskSchema = z.object({
   message: z.string().min(1, "Message is required").max(1000, "Message too long"),
@@ -99,7 +100,11 @@ export async function createTask(formData: FormData) {
             }),
           }
         );
-
+        
+        const repoName = gitHubUrlToRepoName(repoUrl);
+        console.log("Indexing repo", repoName);
+        await callIndexApi(repoName, task.id, true);
+        console.log("Repo indexed");
         if (!response.ok) {
           console.error("Failed to initiate task:", await response.text());
         } else {
