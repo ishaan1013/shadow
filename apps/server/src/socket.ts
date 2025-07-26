@@ -291,14 +291,91 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
         // Get task workspace path from database
         const task = await prisma.task.findUnique({
           where: { id: data.taskId },
-          select: { workspacePath: true },
+          select: { workspacePath: true, id: true },
         });
 
+        if (!task) {
+          socket.emit("message-error", { error: "Task not found" });
+          return;
+        }
+
+        // Check if this is the first message for this task
+        const messageCount = await prisma.chatMessage.count({
+          where: { taskId: data.taskId }
+        });
+
+        const isFirstMessage = messageCount === 0;
+
+        if (isFirstMessage) {
+          console.log(`[SOCKET] First message for task ${data.taskId}, initiating repository indexing`);
+          
+          // Notify client that indexing is starting
+          emitToTask(data.taskId, "indexing-state", { 
+            taskId: data.taskId,
+            state: "started",
+            phase: "preparing" 
+          });
+
+          try {
+            // First phase: embeddings indexing
+            emitToTask(data.taskId, "indexing-state", { 
+              taskId: data.taskId,
+              state: "in-progress",
+              phase: "embeddings" 
+            });
+            
+            // Run embeddings indexing (placeholder - implement actual embeddings logic)
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate work
+            
+            // Second phase: DeepWiki indexing
+            emitToTask(data.taskId, "indexing-state", { 
+              taskId: data.taskId,
+              state: "in-progress",
+              phase: "understanding" 
+            });
+            
+            // Run DeepWiki-style indexing
+            // Import directly to avoid module resolution issues
+            const WorkspaceManager = require("./services/workspace-manager");
+            const workspaceManager = new WorkspaceManager.LocalWorkspaceManager();
+            
+            if (task.workspacePath) {
+              console.log(`[SOCKET] Running repository indexing for task ${data.taskId}`);
+              
+              // Get all files from workspace
+              await workspaceManager.getAllFilesFromWorkspace(task.workspacePath);
+              
+              // If needed, add calls to your indexing services here
+              // e.g., await indexingService.runDeepWiki(files, task.id);
+              
+              // Simulate work for now
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            // Notify client that indexing is complete
+            emitToTask(data.taskId, "indexing-state", { 
+              taskId: data.taskId,
+              state: "completed",
+              phase: "complete" 
+            });
+            
+          } catch (error) {
+            console.error(`[SOCKET] Error during indexing:`, error);
+            emitToTask(data.taskId, "indexing-state", { 
+              taskId: data.taskId,
+              state: "error",
+              phase: "error",
+              error: error instanceof Error ? error.message : "Unknown indexing error" 
+            });
+          }
+        }
+
+        // Process the user message as usual
         await chatService.processUserMessage({
           taskId: data.taskId,
           userMessage: data.message,
           llmModel: data.llmModel || DEFAULT_MODEL,
-          workspacePath: task?.workspacePath || undefined,
+          workspacePath: task.workspacePath || undefined,
         });
       } catch (error) {
         console.error("Error processing user message:", error);

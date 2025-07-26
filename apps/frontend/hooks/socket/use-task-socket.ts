@@ -213,6 +213,12 @@ export function useTaskSocket(taskId: string | undefined) {
   // All the state that was previously in task-content.tsx
   const [streamingAssistantParts, setStreamingAssistantParts] = useState<AssistantMessagePart[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  
+  // Indexing state for first-message repository understanding
+  const [indexingState, setIndexingState] = useState<{
+    isIndexing: boolean;
+    phase: "preparing" | "embeddings" | "understanding" | "complete" | "error" | null;
+  }>({ isIndexing: false, phase: null });
 
   // Join/leave task room
   useEffect(() => {
@@ -505,6 +511,24 @@ export function useTaskSocket(taskId: string | undefined) {
         });
       }
     }
+    
+    function onIndexingState(data: { taskId: string; state: string; phase: string }) {
+      if (data.taskId === taskId) {
+        console.log(`[TASK_SOCKET] Received indexing state update:`, data);
+        
+        // Update indexing state based on the event
+        if (data.state === "started" || data.state === "in-progress") {
+          setIndexingState({ 
+            isIndexing: true, 
+            phase: data.phase as "preparing" | "embeddings" | "understanding" | "complete" | "error" | null 
+          });
+        } else if (data.state === "completed") {
+          setIndexingState({ isIndexing: false, phase: "complete" });
+        } else if (data.state === "error") {
+          setIndexingState({ isIndexing: false, phase: "error" });
+        }
+      }
+    }
 
     // Register all event listeners
     socket.on('connect', onConnect);
@@ -516,6 +540,7 @@ export function useTaskSocket(taskId: string | undefined) {
     socket.on('stream-error', onStreamError);
     socket.on('message-error', onMessageError);
     socket.on('task-status-updated', onTaskStatusUpdate);
+    socket.on('indexing-state', onIndexingState);
 
     return () => {
       // Cleanup all listeners
@@ -528,6 +553,7 @@ export function useTaskSocket(taskId: string | undefined) {
       socket.off('stream-error', onStreamError);
       socket.off('message-error', onMessageError);
       socket.off('task-status-updated', onTaskStatusUpdate);
+      socket.off('indexing-state', onIndexingState);
     };
   }, [socket, taskId, queryClient]);
 
@@ -559,6 +585,7 @@ export function useTaskSocket(taskId: string | undefined) {
     // Chat state
     streamingAssistantParts,
     isStreaming,
+    indexingState,
 
     // Actions
     sendMessage,
