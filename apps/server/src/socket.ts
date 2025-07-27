@@ -596,6 +596,27 @@ export function emitStreamChunk(chunk: StreamChunk, taskId?: string) {
   }
 }
 
+// Helper function to emit context statistics to task room
+export function emitContextStatistics(
+  contextStatistics: {
+    currentTokens: number;
+    maxTokens: number;
+    percentage: number;
+    messageCount: number;
+    needsCompaction: boolean;
+    modelName: string;
+  },
+  taskId: string
+) {
+  if (io) {
+    const chunk: StreamChunk = {
+      type: "context-statistics",
+      contextStatistics,
+    };
+    emitToTask(taskId, "stream-chunk", chunk);
+  }
+}
+
 // Helper function to emit terminal output to task room
 export function emitTerminalOutput(taskId: string, entry: TerminalEntry) {
   if (io) {

@@ -16,7 +16,8 @@ export interface StreamChunk {
   | "tool-result"
   | "init-progress"
   | "fs-change"
-  | "todo-update";
+  | "todo-update"
+  | "context-statistics";
 
   // For content chunks
   content?: string;
@@ -71,6 +72,16 @@ export interface StreamChunk {
     action: 'updated' | 'replaced';
     totalTodos?: number;
     completedTodos?: number;
+  };
+
+  // For context statistics
+  contextStatistics?: {
+    currentTokens: number;
+    maxTokens: number;
+    percentage: number;
+    messageCount: number;
+    needsCompaction: boolean;
+    modelName: string;
   };
 }
 

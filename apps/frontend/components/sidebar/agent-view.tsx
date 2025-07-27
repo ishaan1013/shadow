@@ -35,6 +35,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ContextProgress } from "./context-progress";
+import { useContextStatistics } from "@/hooks/use-context-statistics";
 
 // Todo status config - aligned with main status colors
 const todoStatusConfig = {
@@ -105,6 +107,7 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
   const { setSelectedFilePath, expandRightPanel, setSelectedSummary } = useAgentEnvironment();
   const repoName = gitHubUrlToRepoName(task!.repoUrl);
   const [isIndexing, setIsIndexing] = useState(false);
+  const { data: contextStatistics } = useContextStatistics(taskId);
 
   const completedTodos = useMemo(
     () => todos.filter((todo) => todo.status === "COMPLETED").length,
@@ -314,6 +317,15 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
           )}
         </SidebarGroupContent>
       </SidebarGroup>
+
+      {/* Context Usage Progress */}
+      {contextStatistics && (
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <ContextProgress statistics={contextStatistics} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
 
       {/* Task List (Todos) */}
       {todos.length > 0 && (

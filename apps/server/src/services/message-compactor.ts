@@ -1,4 +1,4 @@
-import { Message, MessageMetadata, ModelType } from '@repo/types';
+import { Message, MessageMetadata, ModelType, ModelInfos } from '@repo/types';
 import { LLMService } from '../llm';
 import { estimateMessagesTokens } from '../utils/token-estimator';
 import { compactionCache } from './compaction-cache';
@@ -443,31 +443,11 @@ Conversation to summarize (${messages.length} messages):`;
   } {
     const currentTokens = estimateMessagesTokens(messages, model, systemPrompt);
     
-    // Token limits by model
-    const tokenLimits: Record<ModelType, number> = {
-      'claude-3-5-sonnet-20241022': 200000,
-      'claude-3-5-haiku-20241022': 200000,
-      'claude-3-opus-20240229': 200000,
-      'gpt-4o': 128000,
-      'gpt-4o-mini': 128000,
-      'gpt-4-turbo': 128000,
-      'gpt-3.5-turbo': 16000
-    };
-    
-    const maxTokens = tokenLimits[model] || 128000; // Default fallback
+    // Get max tokens from model info
+    const modelInfo = ModelInfos[model];
+    const maxTokens = modelInfo?.maxTokens || 128000; // Default fallback
     const percentage = Math.min((currentTokens / maxTokens) * 100, 100);
     const needsCompaction = percentage > 80; // Threshold for compaction warning
-    
-    // Clean model name for display
-    const modelDisplayNames: Record<ModelType, string> = {
-      'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-      'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
-      'claude-3-opus-20240229': 'Claude 3 Opus',
-      'gpt-4o': 'GPT-4o',
-      'gpt-4o-mini': 'GPT-4o Mini',
-      'gpt-4-turbo': 'GPT-4 Turbo',
-      'gpt-3.5-turbo': 'GPT-3.5 Turbo'
-    };
     
     return {
       currentTokens,
@@ -475,7 +455,7 @@ Conversation to summarize (${messages.length} messages):`;
       percentage,
       messageCount: messages.length,
       needsCompaction,
-      modelName: modelDisplayNames[model] || model
+      modelName: modelInfo?.name || model
     };
   }
 

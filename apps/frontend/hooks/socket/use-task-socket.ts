@@ -439,6 +439,17 @@ export function useTaskSocket(taskId: string | undefined) {
             );
           }
           break;
+
+        case "context-statistics":
+          if (chunk.contextStatistics) {
+            console.log("Context statistics update:", chunk.contextStatistics);
+            // Store context statistics in React Query cache for access by components
+            queryClient.setQueryData(
+              ["context-statistics", taskId],
+              chunk.contextStatistics
+            );
+          }
+          break;
       }
     }
 

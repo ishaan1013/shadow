@@ -17,6 +17,7 @@ import {
   endStream,
   handleStreamError,
   startStream,
+  emitContextStatistics,
 } from "./socket";
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
@@ -391,6 +392,14 @@ export class ChatService {
       compact: true,
       model: llmModel
     });
+
+    // Emit context statistics for the frontend progress bar
+    const contextStats = this.messageCompactor.getContextStatistics(
+      history,
+      llmModel,
+      systemPrompt
+    );
+    emitContextStatistics(contextStats, taskId);
 
     // Prepare messages for LLM (exclude the user message we just saved to avoid duplication)
     // Filter out tool messages since they're embedded in assistant messages as parts
