@@ -50,6 +50,17 @@ const configSchema = z
     REMOTE_CPU_LIMIT: z.string().default("1000m"),
     REMOTE_MEMORY_LIMIT: z.string().default("2Gi"),
     REMOTE_STORAGE_LIMIT: z.string().default("10Gi"),
+
+    // Message compaction configuration
+    COMPACTION_ENABLED: z.union([
+      z.boolean(),
+      z.string().transform(val => val === 'true')
+    ]).default(true),
+    COMPACTION_STRATEGY: z.enum(["sliding-window", "tool-result-summarization", "conversation-summarization", "hybrid"]).default("hybrid"),
+    COMPACTION_PRESERVE_RECENT_COUNT: z.coerce.number().default(10),
+    COMPACTION_MAX_TOOL_RESULT_LENGTH: z.coerce.number().default(2000),
+    COMPACTION_CONTEXT_THRESHOLD: z.coerce.number().min(0.1).max(1).default(0.8),
+    COMPACTION_SUMMARY_MODEL: z.string().default("gpt-4o"),
   })
   .refine((data) => data.ANTHROPIC_API_KEY || data.OPENAI_API_KEY, {
     message:
@@ -102,6 +113,14 @@ const config = {
   remoteCpuLimit: parsed.data.REMOTE_CPU_LIMIT,
   remoteMemoryLimit: parsed.data.REMOTE_MEMORY_LIMIT,
   remoteStorageLimit: parsed.data.REMOTE_STORAGE_LIMIT,
+
+  // Message compaction
+  compactionEnabled: parsed.data.COMPACTION_ENABLED,
+  compactionStrategy: parsed.data.COMPACTION_STRATEGY,
+  compactionPreserveRecentCount: parsed.data.COMPACTION_PRESERVE_RECENT_COUNT,
+  compactionMaxToolResultLength: parsed.data.COMPACTION_MAX_TOOL_RESULT_LENGTH,
+  compactionContextThreshold: parsed.data.COMPACTION_CONTEXT_THRESHOLD,
+  compactionSummaryModel: parsed.data.COMPACTION_SUMMARY_MODEL,
 };
 
 export default config;

@@ -56,6 +56,12 @@ export interface MessageMetadata {
 
   // Finish reason
   finishReason?: FinishReason;
+
+  isCompacted?: boolean;
+  compactionStrategy?: 'sliding-window' | 'tool-result-summarization' | 'conversation-summarization' | 'hybrid' | 'truncation';
+  originalLength?: number;
+  originalMessageCount?: number;
+  tokensSaved?: number;
 }
 
 export type Message = BaseMessage;

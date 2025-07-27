@@ -11,6 +11,7 @@ import { type ChatMessage } from "../../../packages/db/src/client";
 import { LLMService } from "./llm";
 import { systemPrompt } from "./prompt/system-prompt";
 import { GitManager } from "./services/git-manager";
+import { MessageCompactor, CompactionConfig } from "./services/message-compactor";
 import {
   emitStreamChunk,
   endStream,
@@ -20,16 +21,20 @@ import {
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
 import { SidecarClient } from "./execution/remote/sidecar-client";
+import { wouldExceedContextLimit, estimateContextTokens } from "./utils/token-estimator";
+import { compactionCache } from "./services/compaction-cache";
 
 export const DEFAULT_MODEL: ModelType = "gpt-4o";
 
 export class ChatService {
   private llmService: LLMService;
+  private messageCompactor: MessageCompactor;
   private activeStreams: Map<string, AbortController> = new Map();
   private stopRequested: Set<string> = new Set();
 
   constructor() {
     this.llmService = new LLMService();
+    this.messageCompactor = new MessageCompactor();
   }
 
   private async getNextSequence(taskId: string): Promise<number> {
@@ -47,7 +52,7 @@ export class ChatService {
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
     const sequence = await this.getNextSequence(taskId);
-    return await prisma.chatMessage.create({
+    const message = await prisma.chatMessage.create({
       data: {
         taskId,
         content,
@@ -56,6 +61,10 @@ export class ChatService {
         metadata: (metadata as any) || undefined,
       },
     });
+    
+    compactionCache.invalidateTask(taskId);
+    
+    return message;
   }
 
   async saveAssistantMessage(
@@ -68,7 +77,7 @@ export class ChatService {
     // Extract usage info for denormalized storage
     const usage = metadata?.usage;
 
-    return await prisma.chatMessage.create({
+    const message = await prisma.chatMessage.create({
       data: {
         taskId,
         content,
@@ -83,6 +92,10 @@ export class ChatService {
         finishReason: metadata?.finishReason,
       },
     });
+    
+    compactionCache.invalidateTask(taskId);
+    
+    return message;
   }
 
   async saveToolMessage(
@@ -93,7 +106,7 @@ export class ChatService {
     sequence: number,
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
-    return await prisma.chatMessage.create({
+    const message = await prisma.chatMessage.create({
       data: {
         taskId,
         content: toolResult,
@@ -110,6 +123,10 @@ export class ChatService {
         } as any,
       },
     });
+    
+    compactionCache.invalidateTask(taskId);
+    
+    return message;
   }
 
   /**
@@ -249,7 +266,14 @@ export class ChatService {
   }
 
 
-  async getChatHistory(taskId: string): Promise<Message[]> {
+  async getChatHistory(
+    taskId: string, 
+    options?: { 
+      compact?: boolean; 
+      model?: ModelType; 
+      compactionConfig?: Partial<CompactionConfig> 
+    }
+  ): Promise<Message[]> {
     const dbMessages = await prisma.chatMessage.findMany({
       where: { taskId },
       orderBy: [
@@ -258,7 +282,7 @@ export class ChatService {
       ],
     });
 
-    return dbMessages.map((msg) => ({
+    const messages: Message[] = dbMessages.map((msg) => ({
       id: msg.id,
       role: msg.role.toLowerCase() as Message["role"],
       content: msg.content,
@@ -266,6 +290,80 @@ export class ChatService {
       createdAt: msg.createdAt.toISOString(),
       metadata: msg.metadata as MessageMetadata | undefined,
     }));
+
+    // If compaction is not requested or disabled, return original messages
+    if (!options?.compact || !config.compactionEnabled) {
+      return messages;
+    }
+
+    const model = options.model || DEFAULT_MODEL;
+    
+    if (!wouldExceedContextLimit(systemPrompt, messages, model, config.compactionContextThreshold)) {
+      console.log(`[CHAT] Context within limits for task ${taskId}, no compaction needed`);
+      return messages;
+    }
+
+    console.log(`[CHAT] Context approaching limits for task ${taskId}, applying compaction`);
+    
+    // Apply compaction using configuration settings
+    const compactionConfig: CompactionConfig = {
+      ...MessageCompactor.getDefaultConfig(),
+      strategy: config.compactionStrategy,
+      preserveRecentCount: config.compactionPreserveRecentCount,
+      maxToolResultLength: config.compactionMaxToolResultLength,
+      summaryModel: config.compactionSummaryModel as ModelType,
+      ...options.compactionConfig
+    };
+
+    try {
+      // Apply compaction using configured strategy
+      const compactionResult = await this.messageCompactor.compactMessages(
+        messages,
+        model,
+        compactionConfig,
+        taskId
+      );
+
+      console.log(`[CHAT] Compaction completed for task ${taskId}:`);
+      console.log(`  - Original: ${compactionResult.originalCount} messages`);
+      console.log(`  - Compacted: ${compactionResult.compactedCount} messages`);
+      console.log(`  - Tokens saved: ${compactionResult.tokensSaved}`);
+      console.log(`  - Strategy: ${compactionResult.strategy}`);
+
+      // Log compaction event (could be extended to emit WebSocket event)
+      const contextTokensAfter = estimateContextTokens(systemPrompt, compactionResult.compactedMessages, model);
+      console.log(`  - Context tokens after compaction: ${contextTokensAfter}`);
+
+      return compactionResult.compactedMessages;
+    } catch (error) {
+      console.error(`[CHAT] Compaction failed for task ${taskId}:`, error);
+      // Fallback to sliding window compaction
+      const fallbackConfig: CompactionConfig = {
+        ...MessageCompactor.getDefaultConfig(),
+        strategy: 'sliding-window',
+        preserveRecentCount: 8 
+      };
+      
+      try {
+        const fallbackResult = await this.messageCompactor.compactMessages(
+          messages,
+          model,
+          fallbackConfig,
+          taskId
+        );
+        
+        console.log(`[CHAT] Fallback compaction applied for task ${taskId}, kept ${fallbackResult.compactedCount} messages`);
+        return fallbackResult.compactedMessages;
+      } catch (fallbackError) {
+        console.error(`[CHAT] Fallback compaction also failed for task ${taskId}:`, fallbackError);
+        
+        // Last resort - Keep only recent messages
+        const recentCount = Math.min(10, messages.length);
+        const recentMessages = messages.slice(-recentCount);
+        console.log(`[CHAT] Using last resort: keeping only ${recentCount} recent messages for task ${taskId}`);
+        return recentMessages;
+      }
+    }
   }
 
   async processUserMessage({
@@ -288,14 +386,17 @@ export class ChatService {
       await this.saveUserMessage(taskId, userMessage);
     }
 
-    // Get chat history for context
-    const history = await this.getChatHistory(taskId);
+    // Get chat history for context with automatic compaction
+    const history = await this.getChatHistory(taskId, {
+      compact: true,
+      model: llmModel
+    });
 
     // Prepare messages for LLM (exclude the user message we just saved to avoid duplication)
     // Filter out tool messages since they're embedded in assistant messages as parts
     const messages: Message[] = history
       .slice(0, -1) // Remove the last message (the one we just saved)
-      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .filter((msg) => msg.role === "user" || msg.role === "assistant" || msg.role === "system")
       .concat([
         {
           id: randomUUID(),
