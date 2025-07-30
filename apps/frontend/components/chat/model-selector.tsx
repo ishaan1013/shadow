@@ -1,4 +1,4 @@
-import { ModelInfos, ModelType } from "@repo/types";
+import { ModelInfos, ModelType, getModelProvider } from "@repo/types";
 import { useEffect, useState } from "react";
 import {
   Popover,
@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Layers, Square } from "lucide-react";
 import { useModels } from "@/hooks/use-models";
+import { useApiKeys } from "@/hooks/use-api-keys";
 
 export function ModelSelector({
   isHome,
@@ -26,6 +27,19 @@ export function ModelSelector({
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
 
   const { data: availableModels = [] } = useModels();
+  const { data: apiKeys } = useApiKeys();
+
+  // Filter models based on available API keys
+  const filteredModels = availableModels.filter((model) => {
+    const provider = getModelProvider(model.id as ModelType);
+    if (provider === "openai") {
+      return !!apiKeys?.openai;
+    }
+    if (provider === "anthropic") {
+      return !!apiKeys?.anthropic;
+    }
+    return true;
+  });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -68,18 +82,39 @@ export function ModelSelector({
         align="start"
         className="flex flex-col gap-0.5 rounded-lg p-1"
       >
-        {availableModels.map((model) => (
-          <Button
-            key={model.id}
-            size="sm"
-            variant="ghost"
-            className="hover:bg-accent justify-start font-normal"
-            onClick={() => handleSelectModel(model.id as ModelType)}
-          >
-            <Square className="size-4" />
-            {model.name}
-          </Button>
-        ))}
+        {filteredModels.length > 0 ? (
+          filteredModels.map((model) => (
+            <Button
+              key={model.id}
+              size="sm"
+              variant="ghost"
+              className="hover:bg-accent justify-start font-normal"
+              onClick={() => handleSelectModel(model.id as ModelType)}
+            >
+              <Square className="size-4" />
+              {model.name}
+            </Button>
+          ))
+        ) : (
+          <div className="p-2 text-center">
+            <p className="text-muted-foreground mb-2 text-sm">
+              No models available. Configure your API keys to access models.
+            </p>
+            <Button
+              size="sm"
+              onClick={() => {
+                setIsModelSelectorOpen(false);
+                // Open settings modal to models tab
+                const event = new CustomEvent("open-settings-modal", {
+                  detail: { tab: "models" },
+                });
+                window.dispatchEvent(event);
+              }}
+            >
+              Configure API Keys
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
