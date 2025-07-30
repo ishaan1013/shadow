@@ -27,6 +27,7 @@ export async function saveApiKey(provider: ApiKeyProvider, key: string | null) {
 
   if (key) {
     cookieStore.set(cookieName, key, {
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 30,
