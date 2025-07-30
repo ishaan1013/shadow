@@ -1,4 +1,5 @@
 import { Octokit } from "@octokit/rest";
+import type { RestEndpointMethodTypes } from "@octokit/plugin-rest-endpoint-methods";
 import config from "../config";
 import { execAsync } from "../utils/exec";
 import { githubTokenManager } from "../utils/github-token-manager";
@@ -181,7 +182,11 @@ export class GitHubService {
       }
 
       // Check if branch exists (if we have API access)
-      const branchExists = await this.validateBranch(repoFullName, branch, userId);
+      const branchExists = await this.validateBranch(
+        repoFullName,
+        branch,
+        userId
+      );
       if (!branchExists) {
         return {
           success: false,
@@ -264,7 +269,10 @@ export class GitHubService {
         clonedAt,
       };
     } catch (error) {
-      console.error(`[GITHUB] Clone failed for ${repoFullName}:${branch}`, error);
+      console.error(
+        `[GITHUB] Clone failed for ${repoFullName}:${branch}`,
+        error
+      );
 
       let errorMessage = "Unknown clone error";
       if (error instanceof Error) {
@@ -293,5 +301,231 @@ export class GitHubService {
         clonedAt,
       };
     }
+  }
+
+  /**
+   * List pull requests for a repository with optional head branch filter
+   */
+  async listPullRequests(
+    repoFullName: string,
+    head?: string,
+    userId?: string
+  ): Promise<RestEndpointMethodTypes["pulls"]["list"]["response"]["data"]> {
+    if (!userId) {
+      throw new Error("User ID is required for PR operations");
+    }
+
+    return this.executeWithRetry(userId, async (accessToken) => {
+      const [owner, repo] = repoFullName.split("/");
+      const octokit = this.createOctokit(accessToken);
+
+      if (!owner || !repo) {
+        throw new Error(`Invalid repository full name: ${repoFullName}`);
+      }
+
+      try {
+        const params: RestEndpointMethodTypes["pulls"]["list"]["parameters"] = {
+          owner,
+          repo,
+          state: "open",
+        };
+
+        // Filter by head branch if provided
+        if (head) {
+          params.head = `${owner}:${head}`;
+        }
+
+        const { data } = await octokit.pulls.list(params);
+        return data;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 404
+        ) {
+          throw new Error(
+            `Repository not found or not accessible: ${owner}/${repo}`
+          );
+        }
+        throw new Error(
+          `Failed to list pull requests: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    });
+  }
+
+  /**
+   * Create a pull request
+   */
+  async createPullRequest(
+    repoFullName: string,
+    options: {
+      title: string;
+      body: string;
+      head: string;
+      base: string;
+      draft: boolean;
+    },
+    userId: string
+  ): Promise<{
+    url: string;
+    number: number;
+    additions: number;
+    deletions: number;
+    changed_files: number;
+  }> {
+    return this.executeWithRetry(userId, async (accessToken) => {
+      const [owner, repo] = repoFullName.split("/");
+      const octokit = this.createOctokit(accessToken);
+
+      if (!owner || !repo) {
+        throw new Error(`Invalid repository full name: ${repoFullName}`);
+      }
+
+      try {
+        const { data } = await octokit.pulls.create({
+          owner,
+          repo,
+          title: options.title,
+          body: options.body,
+          head: options.head,
+          base: options.base,
+          draft: options.draft,
+        });
+
+        return {
+          url: data.html_url,
+          number: data.number,
+          additions: data.additions || 0,
+          deletions: data.deletions || 0,
+          changed_files: data.changed_files || 0,
+        };
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 404
+        ) {
+          throw new Error(
+            `Repository not found or not accessible: ${owner}/${repo}`
+          );
+        } else if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 422
+        ) {
+          // Unprocessable Entity - often means branch doesn't exist or PR already exists
+          throw new Error(
+            `Cannot create pull request: ${error.message || "Branch may not exist or PR already exists"}`
+          );
+        }
+        throw new Error(
+          `Failed to create pull request: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    });
+  }
+
+  /**
+   * Get pull request data including diff statistics
+   */
+  async getPullRequest(
+    repoFullName: string,
+    prNumber: number,
+    userId: string
+  ): Promise<{
+    additions: number;
+    deletions: number;
+    changed_files: number;
+  }> {
+    return this.executeWithRetry(userId, async (accessToken) => {
+      const [owner, repo] = repoFullName.split("/");
+      const octokit = this.createOctokit(accessToken);
+
+      if (!owner || !repo) {
+        throw new Error(`Invalid repository full name: ${repoFullName}`);
+      }
+
+      try {
+        const { data } = await octokit.pulls.get({
+          owner,
+          repo,
+          pull_number: prNumber,
+        });
+
+        return {
+          additions: data.additions || 0,
+          deletions: data.deletions || 0,
+          changed_files: data.changed_files || 0,
+        };
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 404
+        ) {
+          throw new Error(
+            `Pull request #${prNumber} not found in ${owner}/${repo}`
+          );
+        }
+        throw new Error(
+          `Failed to get pull request: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    });
+  }
+
+  /**
+   * Update an existing pull request
+   */
+  async updatePullRequest(
+    repoFullName: string,
+    prNumber: number,
+    options: { title?: string; body?: string },
+    userId: string
+  ): Promise<void> {
+    return this.executeWithRetry(userId, async (accessToken) => {
+      const [owner, repo] = repoFullName.split("/");
+      const octokit = this.createOctokit(accessToken);
+
+      if (!owner || !repo) {
+        throw new Error(`Invalid repository full name: ${repoFullName}`);
+      }
+
+      try {
+        await octokit.pulls.update({
+          owner,
+          repo,
+          pull_number: prNumber,
+          title: options.title,
+          body: options.body,
+        });
+
+        console.log(
+          `[GITHUB_SERVICE] Successfully updated PR #${prNumber} in ${owner}/${repo}`
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 404
+        ) {
+          throw new Error(
+            `Pull request #${prNumber} not found in ${owner}/${repo}`
+          );
+        } else if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 422
+        ) {
+          throw new Error(
+            `Cannot update pull request: ${error.message || "Invalid request"}`
+          );
+        }
+        throw new Error(
+          `Failed to update pull request: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    });
   }
 }

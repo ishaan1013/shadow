@@ -18,6 +18,18 @@ export interface WriteResult {
   linesRemoved?: number;
 }
 
+export interface SearchReplaceResult {
+  success: boolean;
+  message: string;
+  error?: string;
+  isNewFile: false;
+  linesAdded: number;
+  linesRemoved: number;
+  occurrences: number;
+  oldLength: number;
+  newLength: number;
+}
+
 export interface DeleteResult {
   success: boolean;
   message: string;
@@ -127,7 +139,7 @@ export interface TodoWriteResult {
 // Discriminated union for all tool results
 export type ToolResultTypes =
   | { toolName: "edit_file"; result: WriteResult }
-  | { toolName: "search_replace"; result: WriteResult }
+  | { toolName: "search_replace"; result: SearchReplaceResult }
   | { toolName: "run_terminal_cmd"; result: CommandResult }
   | { toolName: "read_file"; result: FileResult }
   | { toolName: "grep_search"; result: GrepResult }

@@ -8,8 +8,8 @@ export function useQueuedMessage(taskId: string) {
       const { queuedMessage } = queryClient.getQueryData([
         "queued-message",
         taskId,
-      ]) as { queuedMessage: string };
-      return queuedMessage;
+      ]) as { queuedMessage: string | null };
+      return queuedMessage || null;
     },
   });
 }

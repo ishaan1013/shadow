@@ -2,16 +2,18 @@
 
 import { Messages } from "@/components/chat/messages";
 import { PromptForm } from "@/components/chat/prompt-form";
-import { ScrollToBottom } from "@/hooks/use-is-at-top";
 import { useSendMessage } from "@/hooks/use-send-message";
 import { useTaskMessages } from "@/hooks/use-task-messages";
 import { useTaskSocket } from "@/hooks/socket";
-import { cn } from "@/lib/utils";
 import { useParams } from "next/navigation";
-import { StickToBottom } from "use-stick-to-bottom";
+import { ScrollToBottom } from "./scroll-to-bottom";
+import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
-export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
+export function TaskPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
+
+  const queryClient = useQueryClient();
 
   const { data: messages = [], error: taskMessagesError } =
     useTaskMessages(taskId);
@@ -20,25 +22,24 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
   const { streamingAssistantParts, isStreaming, sendMessage, stopStream } =
     useTaskSocket(taskId);
 
-  const handleSendMessage = (
-    message: string,
-    model: string,
-    queue: boolean
-  ) => {
-    if (!taskId || !message.trim()) return;
+  const handleSendMessage = useCallback(
+    (message: string, model: string, queue: boolean) => {
+      if (!taskId || !message.trim()) return;
 
-    // Use the mutation for optimistic updates
-    if (!queue) {
-      sendMessageMutation.mutate({ taskId, message, model });
-    }
+      // Use the mutation for optimistic updates
+      if (!queue) {
+        sendMessageMutation.mutate({ taskId, message, model });
+      }
 
-    // Send via socket
-    sendMessage(message, model, queue);
-  };
+      // Send via socket
+      sendMessage(message, model, queue);
+    },
+    [taskId, sendMessageMutation, sendMessage]
+  );
 
-  const handleStopStream = () => {
+  const handleStopStream = useCallback(() => {
     stopStream();
-  };
+  }, [stopStream]);
 
   if (taskMessagesError) {
     return (
@@ -51,31 +52,28 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
   }
 
   // Combine real messages with current streaming content
-  const displayMessages = [...messages];
+  const displayMessages = useMemo(() => {
+    const msgs = [...messages];
 
-  // Add streaming assistant message with structured parts if present
-  if (streamingAssistantParts.length > 0 || isStreaming) {
-    displayMessages.push({
-      id: "streaming",
-      role: "assistant",
-      content: "", // Content will come from parts
-      createdAt: new Date().toISOString(),
-      metadata: {
-        isStreaming: true,
-        parts: streamingAssistantParts,
-      },
-    });
-  }
+    // Add streaming assistant message with structured parts if present
+    if (streamingAssistantParts.length > 0 || isStreaming) {
+      msgs.push({
+        id: "streaming",
+        role: "assistant",
+        content: "", // Content will come from parts
+        createdAt: new Date().toISOString(),
+        metadata: {
+          isStreaming: true,
+          parts: streamingAssistantParts,
+        },
+      });
+    }
+
+    return msgs;
+  }, [messages, streamingAssistantParts, isStreaming]);
 
   return (
-    <StickToBottom.Content className="relative z-0 mx-auto flex min-h-full w-full max-w-lg flex-col items-center px-4 sm:px-6">
-      <div
-        className={cn(
-          "from-background via-background/60 pointer-events-none sticky -left-px top-0 z-10 h-16 w-[calc(100%+2px)] -translate-y-px bg-gradient-to-b to-transparent transition-opacity",
-          isAtTop ? "opacity-0" : "opacity-100"
-        )}
-      />
-
+    <div className="relative z-0 mx-auto flex w-full max-w-lg grow flex-col items-center px-4 sm:px-6">
       <Messages taskId={taskId} messages={displayMessages} />
 
       <ScrollToBottom />
@@ -84,8 +82,10 @@ export function TaskPageContent({ isAtTop }: { isAtTop: boolean }) {
         onSubmit={handleSendMessage}
         onStopStream={handleStopStream}
         isStreaming={isStreaming || sendMessageMutation.isPending}
-        taskId={taskId}
+        onFocus={() => {
+          queryClient.setQueryData(["edit-message-id", taskId], null);
+        }}
       />
-    </StickToBottom.Content>
+    </div>
   );
 }

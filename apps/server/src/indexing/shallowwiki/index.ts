@@ -10,7 +10,7 @@ import { DeepWikiStorage } from "./storage";
 // Tree-sitter imports
 import Parser from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
-import TS from "tree-sitter-typescript";
+import { safeRequire } from "../languages";
 // import Python from "tree-sitter-python";
 
 // Configuration - will be set by runDeepWiki function
@@ -68,16 +68,17 @@ const sha1 = (data: string) => createHash("sha1").update(data).digest("hex");
 // Tree-sitter language setup
 const parserJS = new Parser();
 parserJS.setLanguage(JavaScript as any);
+const TS = safeRequire("tree-sitter-typescript");
 const parserTS = new Parser();
-parserTS.setLanguage((TS as any).typescript);
+parserTS.setLanguage(TS?.typescript);
 const parserTSX = new Parser();
-parserTSX.setLanguage((TS as any).tsx);
+parserTSX.setLanguage(TS?.tsx);
 // Python parser disabled for now
 
 // Typed language aliases for tree-sitter
 const LangJS = JavaScript as any;
-const LangTS = (TS as any).typescript;
-const LangTSX = (TS as any).tsx;
+const LangTS = TS?.typescript;
+const LangTSX = TS?.tsx;
 // const LangPy = Python as any;
 
 type LangKey = "js" | "ts" | "tsx";

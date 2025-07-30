@@ -60,6 +60,10 @@ export default async function TaskLayout({
       queryKey: ["models"],
       queryFn: () => models,
     }),
+    queryClient.prefetchQuery({
+      queryKey: ["task-title", taskId],
+      queryFn: () => task.title,
+    }),
   ]);
 
   return (

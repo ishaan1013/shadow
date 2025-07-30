@@ -12,19 +12,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useIsAtTop } from "@/hooks/use-is-at-top";
 import { saveResizableTaskLayoutCookie } from "@/lib/actions/resizable-task-cookie";
 import { cn } from "@/lib/utils";
 import { AppWindowMac } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import type { ImperativePanelGroupHandle } from "react-resizable-panels";
-import { StickToBottom, type StickToBottomContext } from "use-stick-to-bottom";
+import { StickToBottom } from "use-stick-to-bottom";
 import { AgentEnvironment } from "../agent-environment";
 import { TaskPageContent } from "./task-content";
-import { useTask } from "@/hooks/use-task";
 import { useParams } from "next/navigation";
 import { useAgentEnvironment } from "../agent-environment/agent-environment-context";
-import { useUpdateTaskTitle } from "@/hooks/use-update-task-title";
+import { useTaskTitle, useUpdateTaskTitle } from "@/hooks/use-task-title";
 
 export function TaskPageWrapper({
   initialLayout,
@@ -36,8 +34,8 @@ export function TaskPageWrapper({
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { task } = useTask(taskId);
-  const [editValue, setEditValue] = useState(task?.title || "");
+  const { data: taskTitle } = useTaskTitle(taskId);
+  const [editValue, setEditValue] = useState(taskTitle || "");
   const {
     mutate: mutateTaskTitle,
     variables: taskTitleVariables,
@@ -46,14 +44,11 @@ export function TaskPageWrapper({
   // We don't need to access the sidebar view from context anymore
   // Just check the pathname directly to determine what to render
 
-  const stickToBottomContextRef = useRef<StickToBottomContext>(null);
-  const { isAtTop } = useIsAtTop(0, stickToBottomContextRef.current?.scrollRef);
-
   useEffect(() => {
-    if (task) {
-      setEditValue(task.title || "");
+    if (taskTitle) {
+      setEditValue(taskTitle);
     }
-  }, [task]);
+  }, [taskTitle]);
 
   /* 
   Resizable panel state
@@ -77,7 +72,7 @@ export function TaskPageWrapper({
     }, 100);
   }, []);
 
-  const getInitialSizes = () => {
+  const { leftSize, rightSize } = useMemo(() => {
     if (initialLayout && initialLayout.length >= 2) {
       return {
         leftSize: initialLayout[0],
@@ -88,9 +83,7 @@ export function TaskPageWrapper({
       leftSize: 100,
       rightSize: 0,
     };
-  };
-
-  const { leftSize, rightSize } = getInitialSizes();
+  }, [initialLayout]);
 
   /* 
   Keyboard shortcuts
@@ -124,32 +117,35 @@ export function TaskPageWrapper({
 
   const titleRef = useRef<HTMLDivElement>(null);
 
-  const handleTitleClick = () => {
+  const handleTitleClick = useCallback(() => {
     setIsEditing(true);
-  };
+  }, []);
 
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.stopPropagation();
-      if (editValue.trim() && editValue !== task?.title) {
-        mutateTaskTitle({ taskId, title: editValue.trim() });
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.stopPropagation();
+        if (editValue.trim() && editValue !== taskTitle) {
+          mutateTaskTitle({ taskId, title: editValue.trim() });
+        }
+        setIsEditing(false);
+      } else if (e.key === "Escape") {
+        e.stopPropagation();
+        setIsEditing(false);
+        setEditValue(taskTitle || "");
       }
-      setIsEditing(false);
-    } else if (e.key === "Escape") {
-      e.stopPropagation();
-      setIsEditing(false);
-      setEditValue(task?.title || "");
-    }
-  };
+    },
+    [editValue, taskTitle, mutateTaskTitle, taskId]
+  );
 
-  const handleInputBlur = () => {
-    if (editValue.trim() && editValue !== task?.title) {
+  const handleInputBlur = useCallback(() => {
+    if (editValue.trim() && editValue !== taskTitle) {
       mutateTaskTitle({ taskId, title: editValue.trim() });
     } else {
-      setEditValue(task?.title || "");
+      setEditValue(taskTitle || "");
     }
     setIsEditing(false);
-  };
+  }, [editValue, taskTitle, mutateTaskTitle, taskId]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -170,69 +166,74 @@ export function TaskPageWrapper({
           className="relative flex size-full max-h-svh flex-col overflow-y-auto"
           resize="smooth"
           initial="smooth"
-          contextRef={stickToBottomContextRef}
         >
-          <div className="bg-background sticky top-0 z-10 flex w-full items-center justify-between">
-            <div className="flex grow items-center gap-1 overflow-hidden p-3 pr-0">
-              {!open && (
+          <StickToBottom.Content className="relative flex min-h-svh w-full flex-col">
+            <div className="bg-background sticky top-0 z-10 flex w-full items-center justify-between pb-3">
+              <div className="flex grow items-center gap-1 overflow-hidden p-3 pr-0">
+                {!open && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SidebarTrigger />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" shortcut="⌘B">
+                      {open ? "Close Sidebar" : "Open Sidebar"}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+
+                <div className="relative">
+                  <input
+                    ref={inputRef}
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                    onBlur={handleInputBlur}
+                    className={cn(
+                      "focus:ring-ring/10 focus:border-border absolute left-0 top-0 z-10 h-7 w-full min-w-36 items-center rounded-md border border-transparent bg-transparent px-2 focus:outline-none focus:ring-2",
+                      isEditing ? "flex" : "pointer-events-none hidden"
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "hover:border-border flex h-7 cursor-text items-center truncate rounded-md border border-transparent px-2",
+                      isEditing
+                        ? "pointer-events-none opacity-0"
+                        : "opacity-100"
+                    )}
+                    onClick={handleTitleClick}
+                    ref={titleRef}
+                  >
+                    {isUpdatingTaskTitle ? (
+                      <span className="animate-pulse truncate">
+                        {taskTitleVariables?.title}
+                      </span>
+                    ) : (
+                      <span className="truncate">{editValue}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <SidebarTrigger />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn("size-7 cursor-pointer")}
+                      onClick={handleToggleRightPanel}
+                    >
+                      <AppWindowMac className="size-4" />
+                    </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="right" shortcut="⌘B">
-                    {open ? "Close Sidebar" : "Open Sidebar"}
+                  <TooltipContent side="left" shortcut="⌘J">
+                    Toggle Shadow Realm
                   </TooltipContent>
                 </Tooltip>
-              )}
-              <input
-                ref={inputRef}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onKeyDown={handleInputKeyDown}
-                onBlur={handleInputBlur}
-                style={{ width: (titleRef.current?.clientWidth || 0) + 8 }}
-                className={cn(
-                  "focus:ring-ring/10 focus:border-border h-7 w-full min-w-36 items-center rounded-md border border-transparent bg-transparent px-2 focus:outline-none focus:ring-2",
-                  isEditing ? "flex" : "hidden"
-                )}
-              />
-              <div
-                className={cn(
-                  "hover:border-border flex h-7 cursor-text items-center truncate rounded-md border border-transparent px-2",
-                  isEditing ? "pointer-events-none opacity-0" : "opacity-100"
-                )}
-                onClick={handleTitleClick}
-                ref={titleRef}
-              >
-                {isUpdatingTaskTitle ? (
-                  <span className="animate-pulse truncate">
-                    {taskTitleVariables?.title}
-                  </span>
-                ) : (
-                  <span className="truncate">{editValue}</span>
-                )}
               </div>
             </div>
-
-            <div className="p-3">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn("size-7 cursor-pointer")}
-                    onClick={handleToggleRightPanel}
-                  >
-                    <AppWindowMac className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left" shortcut="⌘J">
-                  Toggle Shadow Realm
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-          <TaskPageContent isAtTop={isAtTop} />
+            <TaskPageContent />
+          </StickToBottom.Content>
         </StickToBottom>
       </ResizablePanel>
       <ResizableHandle />

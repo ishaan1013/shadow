@@ -8,6 +8,7 @@ import { z, ZodIssue } from "zod";
 import { generateTaskTitleAndBranch } from "./generate-title-branch";
 import { saveResizableTaskLayoutCookie } from "./resizable-task-cookie";
 import { fetchIndexApi } from "./index-repo";
+import { nanoid } from "nanoid";
 
 const createTaskSchema = z.object({
   message: z
@@ -54,7 +55,7 @@ export async function createTask(formData: FormData) {
 
   const { message, model, repoUrl, baseBranch, repoFullName } = validation.data;
 
-  const taskId = crypto.randomUUID();
+  const taskId = nanoid();
   let task: Task;
 
   try {
@@ -69,14 +70,12 @@ export async function createTask(formData: FormData) {
       data: {
         id: taskId,
         title,
-        description: message,
         repoFullName,
         repoUrl,
         baseBranch,
         shadowBranch,
-        baseCommitSha: "pending", // Will be updated when workspace is prepared
+        baseCommitSha: "pending",
         status: "INITIALIZING",
-        mode: "FULL_AUTO",
         user: {
           connect: {
             id: session.user.id,
@@ -87,6 +86,7 @@ export async function createTask(formData: FormData) {
             content: message,
             role: MessageRole.USER,
             sequence: 1,
+            llmModel: model,
           },
         },
       },

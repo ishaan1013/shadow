@@ -13,6 +13,7 @@ import {
   Folder,
   FolderGit2,
   GitBranch,
+  GitPullRequest,
   ListTodo,
   RefreshCcw,
   Square,
@@ -158,6 +159,25 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
               })()}
             </div>
           </SidebarMenuItem>
+
+          {/* View PR button - only show if PR exists */}
+          {task.pullRequestNumber && (
+            <SidebarMenuItem>
+              <Button
+                variant="ghost"
+                className="hover:bg-sidebar-accent px-2! w-full justify-start font-normal"
+                asChild
+              >
+                <Link
+                  href={`${task.repoUrl}/pull/${task.pullRequestNumber}`}
+                  target="_blank"
+                >
+                  <GitPullRequest className="size-4 shrink-0" />
+                  <span className="truncate">View PR #{task.pullRequestNumber}</span>
+                </Link>
+              </Button>
+            </SidebarMenuItem>
+          )}
 
           <SidebarMenuItem>
             <Button

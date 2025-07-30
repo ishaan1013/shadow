@@ -6,6 +6,7 @@ import { WorkspaceService } from "./workspace-service";
 import {
   FileReadResponse,
   FileWriteResponse,
+  SearchReplaceResponse,
   FileDeleteResponse,
   FileStatsResponse,
   DirectoryListResponse,
@@ -232,26 +233,71 @@ export class FileService {
     relativePath: string,
     oldString: string,
     newString: string
-  ): Promise<FileWriteResponse> {
+  ): Promise<SearchReplaceResponse> {
     try {
-      const readResult = await this.readFile(relativePath);
-
-      if (!readResult.success || !readResult.content) {
+      // Input validation
+      if (!oldString) {
         return {
           success: false,
-          message: readResult.message,
-          error: readResult.error,
+          message: "Old string cannot be empty",
+          error: "EMPTY_OLD_STRING",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
         };
       }
 
-      const content = readResult.content;
-      const occurrences = content.split(oldString).length - 1;
+      if (oldString === newString) {
+        return {
+          success: false,
+          message: "Old string and new string are identical",
+          error: "IDENTICAL_STRINGS",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
+
+      const fullPath = this.workspaceService.resolvePath(relativePath);
+
+      // Read existing content
+      let existingContent: string;
+      try {
+        existingContent = await fs.readFile(fullPath, "utf-8");
+      } catch (error) {
+        return {
+          success: false,
+          message: `File not found: ${relativePath}`,
+          error: error instanceof Error ? error.message : "File read error",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
+
+      // Count occurrences
+      const occurrences = existingContent.split(oldString).length - 1;
 
       if (occurrences === 0) {
         return {
           success: false,
           message: `Text not found in file: ${relativePath}`,
           error: "TEXT_NOT_FOUND",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: existingContent.length,
+          newLength: existingContent.length,
         };
       }
 
@@ -260,15 +306,49 @@ export class FileService {
           success: false,
           message: `Multiple occurrences found (${occurrences}). The old_string must be unique.`,
           error: "TEXT_NOT_UNIQUE",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences,
+          oldLength: existingContent.length,
+          newLength: existingContent.length,
         };
       }
 
-      const newContent = content.replace(oldString, newString);
-      return await this.writeFile(
+      // Perform replacement and calculate metrics
+      const newContent = existingContent.replace(oldString, newString);
+      
+      // Calculate line changes
+      const oldLines = existingContent.split("\n");
+      const newLines = newContent.split("\n");
+      const oldLineCount = oldLines.length;
+      const newLineCount = newLines.length;
+      
+      const linesAdded = Math.max(0, newLineCount - oldLineCount);
+      const linesRemoved = Math.max(0, oldLineCount - newLineCount);
+
+      // Write the new content
+      await fs.writeFile(fullPath, newContent);
+
+      logger.info("Search and replace completed", {
         relativePath,
-        newContent,
-        `Replace text in ${relativePath}`
-      );
+        occurrences,
+        linesAdded,
+        linesRemoved,
+        oldLength: existingContent.length,
+        newLength: newContent.length,
+      });
+
+      return {
+        success: true,
+        message: `Successfully replaced text in ${relativePath}: ${occurrences} occurrence(s), ${linesAdded} lines added, ${linesRemoved} lines removed`,
+        isNewFile: false,
+        linesAdded,
+        linesRemoved,
+        occurrences,
+        oldLength: existingContent.length,
+        newLength: newContent.length,
+      };
     } catch (error) {
       logger.error("Failed to search and replace", { relativePath, error });
 
@@ -276,6 +356,12 @@ export class FileService {
         success: false,
         message: `Failed to search and replace in file: ${relativePath}`,
         error: error instanceof Error ? error.message : "Unknown error",
+        isNewFile: false,
+        linesAdded: 0,
+        linesRemoved: 0,
+        occurrences: 0,
+        oldLength: 0,
+        newLength: 0,
       };
     }
   }

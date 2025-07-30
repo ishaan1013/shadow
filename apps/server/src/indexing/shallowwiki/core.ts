@@ -6,7 +6,7 @@ import { OpenAI } from "openai";
 import path from "path";
 import Parser from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
-import TS from "tree-sitter-typescript";
+import { safeRequire } from "../languages";
 import { CodebaseUnderstandingStorage } from "./db-storage";
 
 // Configuration
@@ -46,10 +46,11 @@ interface Symbols {
 // Tree-sitter setup
 const parserJS = new Parser();
 parserJS.setLanguage(JavaScript as any);
+const TS = safeRequire("tree-sitter-typescript");
 const parserTS = new Parser();
-parserTS.setLanguage((TS as any).typescript);
+parserTS.setLanguage(TS?.typescript);
 const parserTSX = new Parser();
-parserTSX.setLanguage((TS as any).tsx);
+parserTSX.setLanguage(TS?.tsx);
 
 const LANGUAGES = {
   js: {
@@ -80,12 +81,12 @@ const LANGUAGES = {
     parser: parserTS,
     extensions: [".ts", ".mts", ".cts"],
     queryDefs: new Parser.Query(
-      (TS as any).typescript,
+      TS?.typescript,
       `(function_declaration name: (identifier) @def.name)`
     ),
-    queryCalls: new Parser.Query((TS as any).typescript, ``),
+    queryCalls: new Parser.Query(TS?.typescript, ``),
     queryImports: new Parser.Query(
-      (TS as any).typescript,
+      TS?.typescript,
       `(import_statement source: (string) @import.source)`
     ),
   },
@@ -93,12 +94,12 @@ const LANGUAGES = {
     parser: parserTSX,
     extensions: [".tsx"],
     queryDefs: new Parser.Query(
-      (TS as any).tsx,
+      TS?.tsx,
       `(function_declaration name: (identifier) @def.name)`
     ),
-    queryCalls: new Parser.Query((TS as any).tsx, ``),
+    queryCalls: new Parser.Query(TS?.tsx, ``),
     queryImports: new Parser.Query(
-      (TS as any).tsx,
+      TS?.tsx,
       `(import_statement source: (string) @import.source)`
     ),
   },

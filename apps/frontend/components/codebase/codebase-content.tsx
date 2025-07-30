@@ -25,7 +25,7 @@ export function CodebasePageContent() {
   const { codebaseId } = useParams<{ codebaseId: string }>();
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const { open, setOpen } = useSidebar();
+  const { open } = useSidebar();
 
   const { data: codebase, isLoading, error, refetch } = useCodebase(codebaseId);
   const summaries = useMemo(() => codebase?.summaries || [], [codebase]);
@@ -126,7 +126,7 @@ export function CodebasePageContent() {
         <div className="text-muted-foreground text-center">
           <FileText className="mx-auto mb-4 h-8 w-8" />
           <h3 className="mb-2 text-lg font-medium">No documentation found</h3>
-          <p className="text-sm mb-4">
+          <p className="mb-4 text-sm">
             Generate summaries for this repository to see documentation
           </p>
           {codebase.tasks?.[0]?.id && (
@@ -155,7 +155,7 @@ export function CodebasePageContent() {
 
   return (
     <div className="relative flex size-full max-h-svh flex-col overflow-y-auto">
-      <div className="bg-background sticky top-0 z-10 flex w-full items-center justify-start p-3 overflow-hidden shrink-0">
+      <div className="bg-background sticky top-0 z-10 flex w-full shrink-0 items-center justify-start overflow-hidden p-3">
         {!open && (
           <Tooltip>
             <TooltipTrigger asChild>

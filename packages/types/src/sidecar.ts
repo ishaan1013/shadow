@@ -34,6 +34,7 @@ export const FileWriteRequestSchema = z.object({
 });
 
 export const SearchReplaceRequestSchema = z.object({
+  path: z.string().optional(),
   oldString: z.string(),
   newString: z.string(),
 });
@@ -49,6 +50,15 @@ export interface FileWriteResponse extends SidecarResponse {
   isNewFile?: boolean;
   linesAdded?: number;
   linesRemoved?: number;
+}
+
+export interface SearchReplaceResponse extends SidecarResponse {
+  isNewFile: false;
+  linesAdded: number;
+  linesRemoved: number;
+  occurrences: number;
+  oldLength: number;
+  newLength: number;
 }
 
 export interface FileDeleteResponse extends SidecarResponse {
@@ -117,7 +127,7 @@ export interface TerminalHistoryResponse extends SidecarResponse {
     id: number;
     timestamp: number;
     data: string;
-    type: 'stdout' | 'stderr' | 'command' | 'system';
+    type: "stdout" | "stderr" | "command" | "system";
     processId?: number;
   }>;
   stats?: TerminalBufferStats;
@@ -174,10 +184,12 @@ export const GitCommitRequestSchema = z.object({
     name: z.string(),
     email: z.string(),
   }),
-  coAuthor: z.object({
-    name: z.string(),
-    email: z.string(),
-  }).optional(),
+  coAuthor: z
+    .object({
+      name: z.string(),
+      email: z.string(),
+    })
+    .optional(),
   message: z.string().min(1, "Commit message is required"),
 });
 
@@ -259,12 +271,12 @@ export interface WorkspaceStatusResponse extends SidecarResponse {
 // === Error Handling ===
 
 export enum SidecarErrorType {
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
-  CLIENT_ERROR = 'CLIENT_ERROR',
-  SERVER_ERROR = 'SERVER_ERROR',
-  CIRCUIT_BREAKER_OPEN = 'CIRCUIT_BREAKER_OPEN',
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+  NETWORK_ERROR = "NETWORK_ERROR",
+  TIMEOUT_ERROR = "TIMEOUT_ERROR",
+  CLIENT_ERROR = "CLIENT_ERROR",
+  SERVER_ERROR = "SERVER_ERROR",
+  CIRCUIT_BREAKER_OPEN = "CIRCUIT_BREAKER_OPEN",
+  UNKNOWN_ERROR = "UNKNOWN_ERROR",
 }
 
 export interface SidecarError extends Error {
@@ -284,4 +296,4 @@ export interface SidecarClientConfig {
   retryDelay?: number;
   circuitBreakerThreshold?: number;
   circuitBreakerTimeout?: number;
-} 
+}

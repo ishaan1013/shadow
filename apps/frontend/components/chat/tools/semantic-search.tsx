@@ -1,6 +1,7 @@
 import type { Message, SemanticSearchToolResult } from "@repo/types";
-import { Code, File, Folder, ScanSearch, Search } from "lucide-react";
-import { CollapsibleTool, ToolType } from "./collapsible-tool";
+import { Code, File, Folder, ScanSearch } from "lucide-react";
+import { ToolType } from "@repo/types";
+import { ToolComponent } from "./collapsible-tool";
 
 export function SemanticSearchTool({ message }: { message: Message }) {
   const toolMeta = message.metadata?.tool;
@@ -18,10 +19,11 @@ export function SemanticSearchTool({ message }: { message: Message }) {
   }
 
   return (
-    <CollapsibleTool
+    <ToolComponent
       icon={<ScanSearch />}
       type={ToolType.SEMANTIC_SEARCH}
       title={`"${query}"`}
+      collapsible
     >
       {targetDirectories && targetDirectories.length > 0 && (
         <div className="mb-2 flex items-center gap-1">
@@ -105,6 +107,6 @@ export function SemanticSearchTool({ message }: { message: Message }) {
           )}
         </div>
       )}
-    </CollapsibleTool>
+    </ToolComponent>
   );
 }

@@ -145,6 +145,43 @@ export function createFilesRouter(fileService: FileService): Router {
   );
 
   /**
+   * POST /files/search-replace
+   * Search and replace in file (alternative endpoint for FirecrackerToolExecutor)
+   */
+  router.post(
+    "/files/search-replace",
+    asyncHandler(async (req, res) => {
+      const body = SearchReplaceRequestSchema.parse(req.body);
+
+      if (!body.path) {
+        res.status(400).json({
+          success: false,
+          message: "Path is required for this endpoint",
+          error: "MISSING_PATH"
+        });
+        return;
+      }
+
+      const result = await fileService.searchReplace(
+        body.path,
+        body.oldString,
+        body.newString
+      );
+
+      if (!result.success) {
+        if (result.error === "TEXT_NOT_FOUND" || result.error === "TEXT_NOT_UNIQUE" || 
+            result.error === "EMPTY_OLD_STRING" || result.error === "IDENTICAL_STRINGS") {
+          res.status(400).json(result);
+        } else {
+          res.status(500).json(result);
+        }
+      } else {
+        res.json(result);
+      }
+    })
+  );
+
+  /**
    * GET /directory/:path
    * List directory contents
    */

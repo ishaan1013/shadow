@@ -23,6 +23,7 @@ import {
   GrepMatch,
   ReadFileOptions,
   WriteResult,
+  SearchReplaceResult,
   SemanticSearchToolResult,
   SearchOptions,
   WebSearchResult,
@@ -213,17 +214,71 @@ export class LocalToolExecutor implements ToolExecutor {
     filePath: string,
     oldString: string,
     newString: string
-  ): Promise<WriteResult> {
+  ): Promise<SearchReplaceResult> {
     try {
-      const resolvedPath = path.resolve(this.workspacePath, filePath);
-      const existingContent = await fs.readFile(resolvedPath, "utf-8");
+      // Input validation
+      if (!oldString) {
+        return {
+          success: false,
+          message: "Old string cannot be empty",
+          error: "EMPTY_OLD_STRING",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
 
+      if (oldString === newString) {
+        return {
+          success: false,
+          message: "Old string and new string are identical",
+          error: "IDENTICAL_STRINGS",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
+
+      const resolvedPath = path.resolve(this.workspacePath, filePath);
+      
+      // Read existing content
+      let existingContent: string;
+      try {
+        existingContent = await fs.readFile(resolvedPath, "utf-8");
+      } catch (error) {
+        return {
+          success: false,
+          message: `File not found: ${filePath}`,
+          error: error instanceof Error ? error.message : "File read error",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
+
+      // Count occurrences
       const occurrences = existingContent.split(oldString).length - 1;
 
       if (occurrences === 0) {
         return {
           success: false,
           message: `Text not found in file: ${filePath}`,
+          error: "TEXT_NOT_FOUND",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: existingContent.length,
+          newLength: existingContent.length,
         };
       }
 
@@ -231,21 +286,52 @@ export class LocalToolExecutor implements ToolExecutor {
         return {
           success: false,
           message: `Multiple occurrences found (${occurrences}). The old_string must be unique.`,
+          error: "TEXT_NOT_UNIQUE",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences,
+          oldLength: existingContent.length,
+          newLength: existingContent.length,
         };
       }
 
+      // Perform replacement and calculate metrics
       const newContent = existingContent.replace(oldString, newString);
+      
+      // Calculate line changes
+      const oldLines = existingContent.split("\n");
+      const newLines = newContent.split("\n");
+      const oldLineCount = oldLines.length;
+      const newLineCount = newLines.length;
+      
+      const linesAdded = Math.max(0, newLineCount - oldLineCount);
+      const linesRemoved = Math.max(0, oldLineCount - newLineCount);
+
+      // Write the new content
       await fs.writeFile(resolvedPath, newContent);
 
       return {
         success: true,
-        message: `Successfully replaced text in ${filePath}`,
+        message: `Successfully replaced text in ${filePath}: ${occurrences} occurrence(s), ${linesAdded} lines added, ${linesRemoved} lines removed`,
+        isNewFile: false,
+        linesAdded,
+        linesRemoved,
+        occurrences,
+        oldLength: existingContent.length,
+        newLength: newContent.length,
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
         message: `Failed to search and replace in file: ${filePath}`,
+        isNewFile: false,
+        linesAdded: 0,
+        linesRemoved: 0,
+        occurrences: 0,
+        oldLength: 0,
+        newLength: 0,
       };
     }
   }

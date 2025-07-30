@@ -1,5 +1,9 @@
 import { CodebaseUnderstanding } from "@repo/db";
-import { CodebaseSummary } from "@repo/types";
+import {
+  CodebaseSummary,
+  ShallowWikiContentSchema,
+  type TreeNode,
+} from "@repo/types";
 
 export function parseCodebaseSummaries(
   codebase: CodebaseUnderstanding
@@ -8,64 +12,62 @@ export function parseCodebaseSummaries(
   const codebaseContent = codebase.content;
 
   try {
-    // Handle new shallow wiki format
-    if (codebaseContent && typeof codebaseContent === 'object') {
-      const summaries: CodebaseSummary[] = [];
-      
-      // Add root summary if it exists
-      if (codebaseContent.rootSummary) {
-        summaries.push({
-          id: 'root_overview',
-          type: 'repo_summary',
-          fileName: 'root_overview',
-          filePath: 'root_overview',
-          language: 'markdown',
-          content: codebaseContent.rootSummary,
-        });
-      }
+    // Validate and parse the content using Zod
+    const parseResult = ShallowWikiContentSchema.safeParse(codebaseContent);
 
-      // Add file summaries from fileCache
-      if (codebaseContent.fileCache) {
-        Object.entries(codebaseContent.fileCache).forEach(([filePath, content]) => {
-          if (typeof content === 'string' && content.trim().length > 0) {
-            const fileName = filePath.split('/').pop() || filePath;
-            const fileExtension = fileName.split('.').pop() || '';
-            
-            summaries.push({
-              id: filePath.replace(/[^a-zA-Z0-9]/g, '_'),
-              type: 'file_summary',
-              fileName,
-              filePath,
-              language: fileExtension,
-              content: content,
-            });
-          }
-        });
-      }
-
-      // Add directory summaries from structure
-      if (codebaseContent.structure?.nodes) {
-        Object.values(codebaseContent.structure.nodes).forEach((node: any) => {
-          if (node.summary && node.id !== 'root' && node.children?.length > 0) {
-            summaries.push({
-              id: node.id,
-              type: 'directory_summary',
-              fileName: node.name,
-              filePath: node.relPath || node.name,
-              language: 'markdown',
-              content: node.summary,
-            });
-          }
-        });
-      }
-
-      console.log("Total parsed summaries:", summaries.length);
-      return summaries;
+    if (!parseResult.success) {
+      console.warn("Failed to parse codebase content:", parseResult.error);
+      return [];
     }
 
-    // Fallback for old format
-    console.log("Using fallback parsing for old format");
-    return [];
+    const content = parseResult.data;
+    const summaries: CodebaseSummary[] = [];
+
+    // Add root summary if it exists
+    if (content.rootSummary) {
+      summaries.push({
+        id: "root_overview",
+        type: "repo_summary",
+        fileName: "root_overview",
+        filePath: "root_overview",
+        language: "markdown",
+        content: content.rootSummary,
+      });
+    }
+
+    // Add file summaries from fileCache
+    Object.entries(content.fileCache).forEach(([filePath, content]) => {
+      if (content.trim().length > 0) {
+        const fileName = filePath.split("/").pop() || filePath;
+        const fileExtension = fileName.split(".").pop() || "";
+
+        summaries.push({
+          id: filePath.replace(/[^a-zA-Z0-9]/g, "_"),
+          type: "file_summary",
+          fileName,
+          filePath,
+          language: fileExtension,
+          content: content,
+        });
+      }
+    });
+
+    // Add directory summaries from structure
+    Object.values(content.structure.nodes).forEach((node: TreeNode) => {
+      if (node.summary && node.id !== "root" && node.children.length > 0) {
+        summaries.push({
+          id: node.id,
+          type: "directory_summary",
+          fileName: node.name,
+          filePath: node.relPath || node.name,
+          language: "markdown",
+          content: node.summary,
+        });
+      }
+    });
+
+    console.log("Total parsed summaries:", summaries.length);
+    return summaries;
   } catch (e) {
     console.error("Error parsing codebase content", e);
     return [];

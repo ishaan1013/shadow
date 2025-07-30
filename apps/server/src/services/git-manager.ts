@@ -30,7 +30,9 @@ export class GitManager {
     try {
       await this.execGit(`config user.name "${user.name}"`);
       await this.execGit(`config user.email "${user.email}"`);
-      console.log(`[GIT_MANAGER] Configured git user: ${user.name} <${user.email}>`);
+      console.log(
+        `[GIT_MANAGER] Configured git user: ${user.name} <${user.email}>`
+      );
     } catch (error) {
       console.error(`[GIT_MANAGER] Failed to configure git user:`, error);
       throw error;
@@ -40,7 +42,10 @@ export class GitManager {
   /**
    * Create and checkout a shadow branch for the task, and publish it to remote
    */
-  async createShadowBranch(baseBranch: string, shadowBranch: string): Promise<string> {
+  async createShadowBranch(
+    baseBranch: string,
+    shadowBranch: string
+  ): Promise<string> {
     try {
       // Ensure we're on the base branch first
       await this.execGit(`checkout ${baseBranch}`);
@@ -54,13 +59,20 @@ export class GitManager {
       // Immediately publish the branch to remote so it's available for collaboration
       try {
         await this.pushBranch(shadowBranch, true);
-        console.log(`[GIT_MANAGER] Published shadow branch to remote: ${shadowBranch}`);
+        console.log(
+          `[GIT_MANAGER] Published shadow branch to remote: ${shadowBranch}`
+        );
       } catch (pushError) {
-        console.warn(`[GIT_MANAGER] Failed to publish shadow branch (continuing locally):`, pushError);
+        console.warn(
+          `[GIT_MANAGER] Failed to publish shadow branch (continuing locally):`,
+          pushError
+        );
         // Don't fail the entire operation if push fails - branch still works locally
       }
 
-      console.log(`[GIT_MANAGER] Created shadow branch: ${shadowBranch} from ${baseBranch} (${baseCommitSha})`);
+      console.log(
+        `[GIT_MANAGER] Created shadow branch: ${shadowBranch} from ${baseBranch} (${baseCommitSha})`
+      );
       return baseCommitSha;
     } catch (error) {
       console.error(`[GIT_MANAGER] Failed to create shadow branch:`, error);
@@ -74,7 +86,14 @@ export class GitManager {
   async hasChanges(): Promise<boolean> {
     try {
       const { stdout } = await this.execGit("diff --name-only");
-      const { stdout: staged } = await this.execGit("diff --cached --name-only");
+      const { stdout: staged } = await this.execGit(
+        "diff --cached --name-only"
+      );
+
+      console.log(`[GIT_MANAGER] hasChanges:`, {
+        stdout: stdout.trim(),
+        staged: staged.trim(),
+      });
 
       return stdout.trim().length > 0 || staged.trim().length > 0;
     } catch (error) {
@@ -92,7 +111,9 @@ export class GitManager {
       const { stdout: unstagedDiff } = await this.execGit("diff");
       const { stdout: stagedDiff } = await this.execGit("diff --cached");
 
-      return [unstagedDiff, stagedDiff].filter(diff => diff.trim()).join("\n\n");
+      return [unstagedDiff, stagedDiff]
+        .filter((diff) => diff.trim())
+        .join("\n\n");
     } catch (error) {
       console.error(`[GIT_MANAGER] Failed to get diff:`, error);
       return "";
@@ -164,7 +185,10 @@ Commit message:`,
   /**
    * Push the current branch to remote
    */
-  async pushBranch(branchName: string, setUpstream: boolean = true): Promise<void> {
+  async pushBranch(
+    branchName: string,
+    setUpstream: boolean = true
+  ): Promise<void> {
     try {
       let pushCmd = `push`;
       if (setUpstream) {
@@ -210,7 +234,9 @@ Commit message:`,
   /**
    * Execute a git command in the workspace directory
    */
-  private async execGit(gitArgs: string): Promise<{ stdout: string; stderr: string }> {
+  private async execGit(
+    gitArgs: string
+  ): Promise<{ stdout: string; stderr: string }> {
     const command = `git ${gitArgs}`;
     const options = {
       cwd: this.workspacePath,
@@ -222,7 +248,11 @@ Commit message:`,
       return result;
     } catch (error: unknown) {
       // Log the command and error for debugging
-      const errorObj = error as { code?: string; stdout?: string; stderr?: string };
+      const errorObj = error as {
+        code?: string;
+        stdout?: string;
+        stderr?: string;
+      };
       console.error(`[GIT_MANAGER] Command failed: ${command}`, {
         code: errorObj.code,
         stdout: errorObj.stdout,
@@ -249,7 +279,10 @@ Commit message:`,
         await this.execGit("init");
         console.log(`[GIT_MANAGER] Initialized git repository`);
       } catch (error) {
-        console.error(`[GIT_MANAGER] Failed to initialize git repository:`, error);
+        console.error(
+          `[GIT_MANAGER] Failed to initialize git repository:`,
+          error
+        );
         throw error;
       }
     }
@@ -258,7 +291,10 @@ Commit message:`,
   /**
    * Commit changes after an LLM response if there are any
    */
-  async commitChangesIfAny(user: GitUser, coAuthor?: GitUser): Promise<boolean> {
+  async commitChangesIfAny(
+    user: GitUser,
+    coAuthor?: GitUser
+  ): Promise<boolean> {
     try {
       const hasChanges = await this.hasChanges();
       if (!hasChanges) {
@@ -276,7 +312,10 @@ Commit message:`,
         const currentBranch = await this.getCurrentBranch();
         await this.pushBranch(currentBranch);
       } catch (pushError) {
-        console.warn(`[GIT_MANAGER] Failed to push changes (continuing anyway):`, pushError);
+        console.warn(
+          `[GIT_MANAGER] Failed to push changes (continuing anyway):`,
+          pushError
+        );
         // Don't throw here - commit succeeded even if push failed
       }
 

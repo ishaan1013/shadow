@@ -7,7 +7,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { Toaster } from "sonner";
 import "./globals.css";
-import localFont from "next/font/local";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +17,6 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
 
 export const metadata: Metadata = {
   title: "Shadow",
@@ -48,7 +46,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-        <head>
+      <head>
         <link
           rel="preload"
           href="/fonts/DepartureMono-Regular.woff2"
@@ -56,7 +54,7 @@ export default async function RootLayout({
           type="font/woff2"
           crossOrigin="anonymous"
         />
-        </head>
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} overscroll-none antialiased`}
       >

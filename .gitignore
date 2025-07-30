@@ -5,6 +5,7 @@ node_modules
 .env
 .env.*
 !.env.template
+firecracker-cluster-config.env
 
 # Turbo
 .turbo

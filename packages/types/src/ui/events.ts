@@ -37,7 +37,7 @@ export interface ServerToClientEvents {
   }) => void;
   "stream-chunk": (chunk: StreamChunk) => void;
   "stream-complete": () => void;
-  "stream-error": (error: any) => void;
+  "stream-error": (error: unknown) => void;
   "stream-update": (data: {
     content: string;
     isIncremental: boolean;
@@ -69,6 +69,12 @@ export interface ClientToServerEvents {
     message: string;
     llmModel?: ModelType;
     queue?: boolean;
+  }) => void;
+  "edit-user-message": (data: {
+    taskId: string;
+    messageId: string;
+    message: string;
+    llmModel: ModelType;
   }) => void;
   "get-chat-history": (data: { taskId: string; complete: boolean }) => void;
   "stop-stream": (data: { taskId: string }) => void;

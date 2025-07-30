@@ -9,7 +9,6 @@ import {
 } from "shiki";
 import theme from "./theme.json";
 
-
 // Language must satisfy Shiki-supported languages
 // https://shiki.style/languages
 export const LANGUAGES: { id: BundledLanguage }[] = [
@@ -39,7 +38,7 @@ let monacoPatched = false;
 export async function getHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
-      themes: [theme as unknown as ThemeInput, 'github-dark'],
+      themes: [theme as unknown as ThemeInput, "github-dark"],
       langs: LANGUAGES.map((lang) => lang.id),
       engine: jsEngine,
     });
@@ -69,7 +68,7 @@ export async function patchMonacoWithShiki() {
       base: "vs",
       inherit: false,
       rules: [],
-      colors: theme.colors as any,
+      colors: theme.colors,
     });
 
     // Set as default theme

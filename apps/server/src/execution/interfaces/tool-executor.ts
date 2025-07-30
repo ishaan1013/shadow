@@ -10,6 +10,7 @@ import {
   ReadFileOptions,
   SearchOptions,
   WriteResult,
+  SearchReplaceResult,
   SemanticSearchToolResult,
   WebSearchResult,
   GitStatusResponse,
@@ -45,7 +46,7 @@ export interface ToolExecutor {
     filePath: string,
     oldString: string,
     newString: string
-  ): Promise<WriteResult>;
+  ): Promise<SearchReplaceResult>;
 
   // Directory operations
   listDirectory(relativeWorkspacePath: string): Promise<DirectoryListing>;

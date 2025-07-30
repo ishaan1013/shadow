@@ -3,6 +3,7 @@ import type {
   WriteResult,
   CommandResult,
   FileResult,
+  FileSearchResult,
   ToolResultTypes
 } from './results';
 
@@ -10,7 +11,7 @@ import type {
 export function getToolResult<T extends ToolResultTypes['toolName']>(
   toolMeta: MessageMetadata['tool'] | undefined,
   toolName: T
-): any | null {
+): Extract<ToolResultTypes, { toolName: T }>['result'] | null {
   if (!toolMeta?.result || toolMeta.name !== toolName) return null;
 
   try {
@@ -43,4 +44,11 @@ export function isFileResult(result: unknown): result is FileResult {
   return typeof result === 'object' && result !== null &&
     'success' in result && 'message' in result &&
     ('content' in result || 'totalLines' in result);
+}
+
+export function isFileSearchResult(result: unknown): result is FileSearchResult {
+  return typeof result === 'object' && result !== null &&
+    'success' in result && 'message' in result &&
+    'files' in result && Array.isArray((result as FileSearchResult).files) &&
+    'query' in result && 'count' in result;
 }

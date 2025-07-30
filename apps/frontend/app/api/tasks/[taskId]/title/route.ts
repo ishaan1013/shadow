@@ -1,12 +1,22 @@
+import { getTaskTitle } from "@/lib/db-operations/get-task-title";
 import { updateTaskTitle } from "@/lib/db-operations/update-task-title";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function PATCH(
+export async function GET(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<{ taskId: string }> }
+) {
+  const { taskId } = await params;
+  const title = await getTaskTitle(taskId);
+  return NextResponse.json({ title });
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
-    const { taskId } = params;
+    const { taskId } = await params;
     const { title } = await request.json();
 
     if (!title || typeof title !== "string") {

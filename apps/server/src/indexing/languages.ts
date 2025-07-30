@@ -18,6 +18,7 @@ interface ExtendedLanguageSpec extends LanguageSpec {
 // Loads Tree-sitter grammar by package name, returning the language object if valid or null if missing.
 function safeRequire(name: string): any {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require(name);
 
     // Extract language name from package name
@@ -160,4 +161,4 @@ export async function getLanguageForPath(
   return result;
 }
 
-export { EXT_MAP };
+export { EXT_MAP, safeRequire };

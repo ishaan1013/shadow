@@ -11,6 +11,7 @@ import {
   ReadFileOptions,
   SearchOptions,
   WriteResult,
+  SearchReplaceResult,
   SemanticSearchToolResult,
   WebSearchResult,
   GitStatusResponse,
@@ -192,9 +193,9 @@ export class FirecrackerToolExecutor implements ToolExecutor {
     filePath: string,
     oldString: string,
     newString: string
-  ): Promise<WriteResult> {
+  ): Promise<SearchReplaceResult> {
     try {
-      const response = await this.makeSidecarRequest<WriteResult>(
+      const response = await this.makeSidecarRequest<SearchReplaceResult>(
         `/api/files/search-replace`,
         {
           method: "POST",
@@ -212,6 +213,12 @@ export class FirecrackerToolExecutor implements ToolExecutor {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
         message: `Failed to search and replace in file: ${filePath}`,
+        isNewFile: false,
+        linesAdded: 0,
+        linesRemoved: 0,
+        occurrences: 0,
+        oldLength: 0,
+        newLength: 0,
       };
     }
   }

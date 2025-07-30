@@ -53,7 +53,9 @@ export const sharedConfigSchema = z.object({
 /**
  * Shared validation rule: At least one LLM API key must be provided
  */
-export const sharedValidationRules = (data: any) => {
+export const sharedValidationRules = (
+  data: z.infer<typeof sharedConfigSchema>
+) => {
   if (!data.ANTHROPIC_API_KEY && !data.OPENAI_API_KEY) {
     return {
       success: false,

@@ -3,28 +3,41 @@ import type {
   TextPart,
   ToolCallPart,
   ToolResultPart,
-  FinishReason
+  FinishReason,
 } from "ai";
 import { randomUUID } from "crypto";
 import { ToolExecutionStatusType } from "../tools/execution";
 import { ToolResultTypes } from "../tools/results";
+import type { PullRequestSnapshot } from "@repo/db";
 
-export type AssistantMessagePart = TextPart | ToolCallPart | ToolResultPart;
+// Error part type for AI SDK error chunks
+export interface ErrorPart {
+  type: "error";
+  error: string;
+  finishReason?: FinishReason;
+}
+
+export type AssistantMessagePart =
+  | TextPart
+  | ToolCallPart
+  | ToolResultPart
+  | ErrorPart;
 
 export type CompletionTokenUsage = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
-}
+};
 
-export interface BaseMessage {
+export type Message = {
   id: string;
   role: "user" | "assistant" | "tool" | "system";
   content: string;
   llmModel?: string; // Model used for this message (primarily for assistant messages)
   createdAt: string;
   metadata?: MessageMetadata;
-}
+  pullRequestSnapshot?: PullRequestSnapshot;
+};
 
 export interface MessageMetadata {
   // For assistant messages with thinking
@@ -38,7 +51,7 @@ export interface MessageMetadata {
     name: string;
     args: Record<string, unknown>;
     status: ToolExecutionStatusType;
-    result?: ToolResultTypes['result'] | string; // Support both new objects and legacy strings
+    result?: ToolResultTypes["result"] | string; // Support both new objects and legacy strings
   };
 
   // For structured assistant messages - required for chronological tool call ordering
@@ -57,8 +70,6 @@ export interface MessageMetadata {
   // Finish reason
   finishReason?: FinishReason;
 }
-
-export type Message = BaseMessage;
 
 // Type guards for runtime type checking
 export const isUserMessage = (
@@ -101,16 +112,16 @@ export function fromCoreMessage(
         ? coreMessage.content
         : Array.isArray(coreMessage.content)
           ? coreMessage.content
-            .map((part) =>
-              typeof part === "string"
-                ? part
-                : "text" in part
-                  ? part.text
-                  : "image" in part
-                    ? "[image]"
-                    : JSON.stringify(part)
-            )
-            .join("")
+              .map((part) =>
+                typeof part === "string"
+                  ? part
+                  : "text" in part
+                    ? part.text
+                    : "image" in part
+                      ? "[image]"
+                      : JSON.stringify(part)
+              )
+              .join("")
           : JSON.stringify(coreMessage.content),
   };
 }

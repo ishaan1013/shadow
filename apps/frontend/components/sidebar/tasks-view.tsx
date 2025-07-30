@@ -103,9 +103,7 @@ export function SidebarTasksView({
                           <a href={`/tasks/${task.id}`}>
                             <div className="flex w-full items-center gap-1.5">
                               <div className="line-clamp-1 flex-1">
-                                {task.title ||
-                                  task.description ||
-                                  "Untitled Task"}
+                                {task.title}
                               </div>
                             </div>
                             <div className="text-muted-foreground flex items-center gap-1 text-xs">

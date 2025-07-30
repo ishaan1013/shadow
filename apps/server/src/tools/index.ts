@@ -17,7 +17,7 @@ let terminalEntryId = 1;
 // Helper function to create and emit terminal entries
 function createAndEmitTerminalEntry(
   taskId: string,
-  type: TerminalEntry['type'],
+  type: TerminalEntry["type"],
   data: string,
   processId?: number
 ): void {
@@ -29,14 +29,22 @@ function createAndEmitTerminalEntry(
     processId,
   };
 
-  console.log(`[TERMINAL_OUTPUT] Emitting ${type} for task ${taskId}:`, data.slice(0, 100));
+  console.log(
+    `[TERMINAL_OUTPUT] Emitting ${type} for task ${taskId}:`,
+    data.slice(0, 100)
+  );
   emitTerminalOutput(taskId, entry);
 }
 
 // Helper function to read tool descriptions from markdown files
 function readDescription(toolName: string): string {
-  const descriptionPath = join(dirname(__filename), '../prompt/tools', toolName, "description.md");
-  return readFileSync(descriptionPath, 'utf-8').trim();
+  const descriptionPath = join(
+    dirname(__filename),
+    "../prompt/tools",
+    toolName,
+    "description.md"
+  );
+  return readFileSync(descriptionPath, "utf-8").trim();
 }
 
 // Factory function to create tools with task context using abstraction layer
@@ -56,9 +64,14 @@ export function createTools(taskId: string, workspacePath?: string) {
         const watcher = new LocalFileSystemWatcher(taskId);
         watcher.startWatching(workspacePath);
         activeFileSystemWatchers.set(taskId, watcher);
-        console.log(`[TOOLS] Started local filesystem watcher for task ${taskId}`);
+        console.log(
+          `[TOOLS] Started local filesystem watcher for task ${taskId}`
+        );
       } catch (error) {
-        console.error(`[TOOLS] Failed to start filesystem watcher for task ${taskId}:`, error);
+        console.error(
+          `[TOOLS] Failed to start filesystem watcher for task ${taskId}:`,
+          error
+        );
         // Continue without filesystem watching - not critical for basic operation
       }
     }
@@ -66,7 +79,7 @@ export function createTools(taskId: string, workspacePath?: string) {
 
   return {
     todo_write: tool({
-      description: readDescription('todo_write'),
+      description: readDescription("todo_write"),
       parameters: z.object({
         merge: z
           .boolean()
@@ -151,33 +164,44 @@ export function createTools(taskId: string, workspacePath?: string) {
             }
           }
 
-          const totalTodos = merge ? await prisma.todo.count({ where: { taskId } }) : todos.length;
-          const completedTodos = merge ? await prisma.todo.count({
-            where: {
-              taskId,
-              status: 'COMPLETED'
-            }
-          }) : todos.filter(t => t.status === 'completed').length;
+          const totalTodos = merge
+            ? await prisma.todo.count({ where: { taskId } })
+            : todos.length;
+          const completedTodos = merge
+            ? await prisma.todo.count({
+                where: {
+                  taskId,
+                  status: "COMPLETED",
+                },
+              })
+            : todos.filter((t) => t.status === "completed").length;
 
           const summary = `${merge ? "Merged" : "Replaced"} todos: ${results
             .map((r) => `${r.action} "${r.content}" (${r.status})`)
             .join(", ")}`;
 
           // Emit WebSocket event for real-time todo updates
-          emitStreamChunk({
-            type: "todo-update",
-            todoUpdate: {
-              todos: todos.map((todo, index) => ({
-                id: todo.id,
-                content: todo.content,
-                status: todo.status as 'pending' | 'in_progress' | 'completed' | 'cancelled',
-                sequence: index
-              })),
-              action: merge ? "updated" : "replaced",
-              totalTodos,
-              completedTodos
-            }
-          }, taskId);
+          emitStreamChunk(
+            {
+              type: "todo-update",
+              todoUpdate: {
+                todos: todos.map((todo, index) => ({
+                  id: todo.id,
+                  content: todo.content,
+                  status: todo.status as
+                    | "pending"
+                    | "in_progress"
+                    | "completed"
+                    | "cancelled",
+                  sequence: index,
+                })),
+                action: merge ? "updated" : "replaced",
+                totalTodos,
+                completedTodos,
+              },
+            },
+            taskId
+          );
 
           return {
             success: true,
@@ -198,9 +222,8 @@ export function createTools(taskId: string, workspacePath?: string) {
       },
     }),
 
-
     read_file: tool({
-      description: readDescription('read_file'),
+      description: readDescription("read_file"),
       parameters: z.object({
         target_file: z.string().describe("The path of the file to read"),
         should_read_entire_file: z
@@ -238,7 +261,7 @@ export function createTools(taskId: string, workspacePath?: string) {
     }),
 
     run_terminal_cmd: tool({
-      description: readDescription('run_terminal_cmd'),
+      description: readDescription("run_terminal_cmd"),
       parameters: z.object({
         command: z.string().describe("The terminal command to execute"),
         is_background: z
@@ -290,7 +313,7 @@ export function createTools(taskId: string, workspacePath?: string) {
     }),
 
     list_dir: tool({
-      description: readDescription('list_dir'),
+      description: readDescription("list_dir"),
       parameters: z.object({
         relative_workspace_path: z
           .string()
@@ -309,7 +332,7 @@ export function createTools(taskId: string, workspacePath?: string) {
     }),
 
     grep_search: tool({
-      description: readDescription('grep_search'),
+      description: readDescription("grep_search"),
       parameters: z.object({
         query: z.string().describe("The regex pattern to search for"),
         include_pattern: z
@@ -348,7 +371,7 @@ export function createTools(taskId: string, workspacePath?: string) {
     }),
 
     edit_file: tool({
-      description: readDescription('edit_file'),
+      description: readDescription("edit_file"),
       parameters: z.object({
         target_file: z.string().describe("The target file to modify"),
         instructions: z
@@ -362,13 +385,17 @@ export function createTools(taskId: string, workspacePath?: string) {
       }),
       execute: async ({ target_file, instructions, code_edit }) => {
         console.log(`[EDIT_FILE] ${instructions}`);
-        const result = await executor.writeFile(target_file, code_edit, instructions);
+        const result = await executor.writeFile(
+          target_file,
+          code_edit,
+          instructions
+        );
         return result;
       },
     }),
 
     search_replace: tool({
-      description: readDescription('search_replace'),
+      description: readDescription("search_replace"),
       parameters: z.object({
         file_path: z
           .string()
@@ -382,13 +409,17 @@ export function createTools(taskId: string, workspacePath?: string) {
       }),
       execute: async ({ file_path, old_string, new_string }) => {
         console.log(`[SEARCH_REPLACE] Replacing text in ${file_path}`);
-        const result = await executor.searchReplace(file_path, old_string, new_string);
+        const result = await executor.searchReplace(
+          file_path,
+          old_string,
+          new_string
+        );
         return result;
       },
     }),
 
     file_search: tool({
-      description: readDescription('file_search'),
+      description: readDescription("file_search"),
       parameters: z.object({
         query: z.string().describe("Fuzzy filename to search for"),
         explanation: z
@@ -405,7 +436,7 @@ export function createTools(taskId: string, workspacePath?: string) {
     }),
 
     delete_file: tool({
-      description: readDescription('delete_file'),
+      description: readDescription("delete_file"),
       parameters: z.object({
         target_file: z.string().describe("The path of the file to delete"),
         explanation: z
@@ -421,7 +452,7 @@ export function createTools(taskId: string, workspacePath?: string) {
       },
     }),
     semantic_search: tool({
-      description: readDescription('semantic_search'),
+      description: readDescription("semantic_search"),
       parameters: z.object({
         query: z.string().describe("The query to search the codebase for"),
         explanation: z
@@ -435,39 +466,44 @@ export function createTools(taskId: string, workspacePath?: string) {
 
         const task = await prisma.task.findUnique({
           where: { id: taskId },
-          select: { repoUrl: true }
+          select: { repoUrl: true },
         });
 
         if (!task) {
           throw new Error(`Task ${taskId} not found`);
         }
 
+        // eslint-disable-next-line no-useless-escape
         const repoMatch = task.repoUrl.match(/github\.com\/([^\/]+\/[^\/]+)/);
         const repo = repoMatch ? repoMatch[1] : task.repoUrl;
         if (!repo) {
-          console.warn(`[SEMANTIC_SEARCH] No repo found for task ${taskId}, falling back to grep_search`);
+          console.warn(
+            `[SEMANTIC_SEARCH] No repo found for task ${taskId}, falling back to grep_search`
+          );
           const grepResult = await executor.grepSearch(query);
-          
+
           // Convert GrepResult to SemanticSearchToolResult format
-          const results = grepResult.detailedMatches?.map((match, i) => ({
-            id: i + 1,
-            content: match.content,
-            relevance: 0.8,
-            filePath: match.file,
-            lineStart: match.lineNumber,
-            lineEnd: match.lineNumber,
-            language: "",
-            kind: "",
-          })) || grepResult.matches.map((match, i) => ({
-            id: i + 1,
-            content: match,
-            relevance: 0.8,
-            filePath: "",
-            lineStart: 0,
-            lineEnd: 0,
-            language: "",
-            kind: "",
-          }));
+          const results =
+            grepResult.detailedMatches?.map((match, i) => ({
+              id: i + 1,
+              content: match.content,
+              relevance: 0.8,
+              filePath: match.file,
+              lineStart: match.lineNumber,
+              lineEnd: match.lineNumber,
+              language: "",
+              kind: "",
+            })) ||
+            grepResult.matches.map((match, i) => ({
+              id: i + 1,
+              content: match,
+              relevance: 0.8,
+              filePath: "",
+              lineStart: 0,
+              lineEnd: 0,
+              language: "",
+              kind: "",
+            }));
 
           return {
             success: grepResult.success,
@@ -485,10 +521,13 @@ export function createTools(taskId: string, workspacePath?: string) {
       },
     }),
     web_search: tool({
-      description: readDescription('web_search'),
+      description: readDescription("web_search"),
       parameters: z.object({
         query: z.string().describe("The search query"),
-        domain: z.string().optional().describe("Optional domain to filter results to"),
+        domain: z
+          .string()
+          .optional()
+          .describe("Optional domain to filter results to"),
         explanation: z
           .string()
           .describe(
@@ -503,7 +542,6 @@ export function createTools(taskId: string, workspacePath?: string) {
     }),
   };
 }
-
 
 /**
  * Stop filesystem watcher for a specific task
@@ -521,7 +559,9 @@ export function stopFileSystemWatcher(taskId: string): void {
  * Stop all active filesystem watchers (for graceful shutdown)
  */
 export function stopAllFileSystemWatchers(): void {
-  console.log(`[TOOLS] Stopping ${activeFileSystemWatchers.size} active filesystem watchers`);
+  console.log(
+    `[TOOLS] Stopping ${activeFileSystemWatchers.size} active filesystem watchers`
+  );
 
   for (const [taskId, watcher] of activeFileSystemWatchers.entries()) {
     watcher.stop();
@@ -541,7 +581,7 @@ export function getFileSystemWatcherStats() {
   }
   return {
     activeWatchers: activeFileSystemWatchers.size,
-    watcherDetails: stats
+    watcherDetails: stats,
   };
 }
 
@@ -554,5 +594,5 @@ export const tools = new Proxy({} as ReturnType<typeof createTools>, {
       _defaultTools = createTools("placeholder-task-id");
     }
     return _defaultTools![prop as keyof ReturnType<typeof createTools>];
-  }
+  },
 });

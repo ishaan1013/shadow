@@ -1,18 +1,32 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { TaskWithDetails } from "@/lib/db-operations/get-task-with-details";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-interface UpdateTaskTitleParams {
-  taskId: string;
-  title: string;
+export function useTaskTitle(taskId: string) {
+  return useQuery({
+    queryKey: ["task-title", taskId],
+    queryFn: async () => {
+      const res = await fetch(`/api/tasks/${taskId}/title`);
+      if (!res.ok) throw new Error("Failed to fetch title");
+      const data = await res.json();
+      return data.title as string;
+    },
+    throwOnError: true,
+    enabled: !!taskId,
+  });
 }
 
 export function useUpdateTaskTitle() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ taskId, title }: UpdateTaskTitleParams) => {
+    mutationFn: async ({
+      taskId,
+      title,
+    }: {
+      taskId: string;
+      title: string;
+    }) => {
       const response = await fetch(`/api/tasks/${taskId}/title`, {
-        method: "PATCH",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },

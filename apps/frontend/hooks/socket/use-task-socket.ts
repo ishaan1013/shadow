@@ -408,13 +408,6 @@ export function useTaskSocket(taskId: string | undefined) {
         case "error": {
           setIsStreaming(false);
           console.error("Stream error:", chunk.error);
-
-          // Add error text part to structured assistant parts
-          const errorTextPart: TextPart = {
-            type: "text",
-            text: `\n\nError: ${chunk.error}`,
-          };
-          setStreamingAssistantParts((prev) => [...prev, errorTextPart]);
           break;
         }
 
@@ -526,19 +519,15 @@ export function useTaskSocket(taskId: string | undefined) {
 
       queryClient.invalidateQueries({ queryKey: ["task", taskId] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["task-messages", taskId] });
       queryClient.invalidateQueries({ queryKey: ["codebase-tree", taskId] });
     }
 
     function onStreamError(error: unknown) {
       setIsStreaming(false);
       console.error("Stream error:", error);
-
-      // Add error to structured parts
-      const errorTextPart: TextPart = {
-        type: "text",
-        text: "\n\nStream error occurred",
-      };
-      setStreamingAssistantParts((prev) => [...prev, errorTextPart]);
+      // Legacy stream errors are for unexpected system failures only
+      // Don't add error text parts - these errors won't have permanent message parts
     }
 
     function onMessageError(data: { error: string }) {

@@ -71,10 +71,9 @@ model Verification {
 }
 
 model Task {
-  id          String     @id @default(nanoid(16))
-  title       String
-  description String?
-  status      TaskStatus @default(INITIALIZING)
+  id     String     @id @default(nanoid())
+  title  String
+  status TaskStatus @default(INITIALIZING)
 
   // Repo full name "owner/repo"
   repoFullName String
@@ -84,7 +83,6 @@ model Task {
   workspacePath       String?
   lastCompletedStep   InitStepType?
   initializationError String?
-  mode                TaskMode          @default(FULL_AUTO)
   workspaceCleanedUp  Boolean           @default(false)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
@@ -92,6 +90,7 @@ model Task {
   baseBranch          String
   baseCommitSha       String
   shadowBranch        String
+  pullRequestNumber   Int?
   messages            ChatMessage[]
   user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions            TaskSession[]
@@ -118,19 +117,21 @@ model Todo {
 }
 
 model ChatMessage {
-  id               String      @id @default(cuid())
-  content          String
-  role             MessageRole
-  llmModel         String?
-  metadata         Json?
-  sequence         Int
-  promptTokens     Int?
-  completionTokens Int?
-  totalTokens      Int?
-  finishReason     String?
-  createdAt        DateTime    @default(now())
-  taskId           String
-  task             Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  id                  String               @id @default(cuid())
+  content             String
+  role                MessageRole
+  llmModel            String?
+  metadata            Json?
+  sequence            Int
+  promptTokens        Int?
+  completionTokens    Int?
+  totalTokens         Int?
+  finishReason        String?
+  createdAt           DateTime             @default(now())
+  editedAt            DateTime?
+  taskId              String
+  task                Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  pullRequestSnapshot PullRequestSnapshot?
 
   @@index([taskId, sequence])
   @@index([taskId, role, sequence])
@@ -167,7 +168,7 @@ model TaskSession {
 }
 
 model CodebaseUnderstanding {
-  id           String   @id @default(nanoid(16))
+  id           String   @id @default(nanoid())
   repoFullName String   @unique
   repoUrl      String
   content      Json
@@ -181,6 +182,26 @@ model CodebaseUnderstanding {
   @@index([repoFullName])
 }
 
+model PullRequestSnapshot {
+  id String @id @default(cuid())
+
+  status      PullRequestStatus
+  title       String
+  description String
+
+  filesChanged Int
+  linesAdded   Int
+  linesRemoved Int
+  commitSha    String
+
+  createdAt DateTime @default(now())
+
+  messageId String      @unique
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("pull_request_snapshot")
+}
+
 enum TaskStatus {
   STOPPED
   INITIALIZING
@@ -191,10 +212,9 @@ enum TaskStatus {
   CANCELLED
 }
 
-enum TaskMode {
-  FULL_AUTO
-  INTELLIGENT_AUTO
-  MANUAL
+enum PullRequestStatus {
+  CREATED
+  UPDATED
 }
 
 enum MessageRole {

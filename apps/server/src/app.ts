@@ -88,7 +88,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
     }
 
     console.log(
-      `[TASK_INITIATE] Starting task ${taskId}: ${task.repoUrl}:${task.baseBranch || 'unknown'}`
+      `[TASK_INITIATE] Starting task ${taskId}: ${task.repoUrl}:${task.baseBranch || "unknown"}`
     );
 
     try {
@@ -145,18 +145,6 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       );
 
       await updateTaskStatus(taskId, "FAILED", "INIT");
-
-      if (
-        initError instanceof Error &&
-        initError.message.includes("authentication")
-      ) {
-        await prisma.task.update({
-          where: { id: taskId },
-          data: {
-            description: `${task.description}\n\nError: ${initError.message}`,
-          },
-        });
-      }
 
       if (
         initError instanceof Error &&
@@ -225,7 +213,7 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
         status: true,
         workspacePath: true,
         workspaceCleanedUp: true,
-        repoUrl: true
+        repoUrl: true,
       },
     });
 
@@ -233,7 +221,7 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
       console.warn(`[TASK_CLEANUP] Task ${taskId} not found`);
       return res.status(404).json({
         success: false,
-        error: "Task not found"
+        error: "Task not found",
       });
     }
 
@@ -247,25 +235,30 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
         task: {
           id: taskId,
           status: task.status,
-          workspaceCleanedUp: true
-        }
+          workspaceCleanedUp: true,
+        },
       });
     }
 
     // Create workspace manager using abstraction layer
     const workspaceManager = createWorkspaceManager();
 
-    console.log(`[TASK_CLEANUP] Cleaning up workspace for task ${taskId} using ${workspaceManager.isRemote() ? 'remote' : 'local'} mode`);
+    console.log(
+      `[TASK_CLEANUP] Cleaning up workspace for task ${taskId} using ${workspaceManager.isRemote() ? "remote" : "local"} mode`
+    );
 
     // Perform cleanup
     const cleanupResult = await workspaceManager.cleanupWorkspace(taskId);
 
     if (!cleanupResult.success) {
-      console.error(`[TASK_CLEANUP] Cleanup failed for task ${taskId}:`, cleanupResult.message);
+      console.error(
+        `[TASK_CLEANUP] Cleanup failed for task ${taskId}:`,
+        cleanupResult.message
+      );
       return res.status(500).json({
         success: false,
         error: "Workspace cleanup failed",
-        details: cleanupResult.message
+        details: cleanupResult.message,
       });
     }
 
@@ -275,7 +268,9 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
       data: { workspaceCleanedUp: true },
     });
 
-    console.log(`[TASK_CLEANUP] Successfully cleaned up workspace for task ${taskId}`);
+    console.log(
+      `[TASK_CLEANUP] Successfully cleaned up workspace for task ${taskId}`
+    );
 
     res.json({
       success: true,
@@ -283,20 +278,22 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
       task: {
         id: taskId,
         status: task.status,
-        workspaceCleanedUp: true
+        workspaceCleanedUp: true,
       },
       cleanupDetails: {
-        mode: workspaceManager.isRemote() ? 'remote' : 'local',
-        workspacePath: task.workspacePath
-      }
+        mode: workspaceManager.isRemote() ? "remote" : "local",
+        workspacePath: task.workspacePath,
+      },
     });
-
   } catch (error) {
-    console.error(`[TASK_CLEANUP] Error cleaning up task ${req.params.taskId}:`, error);
+    console.error(
+      `[TASK_CLEANUP] Error cleaning up task ${req.params.taskId}:`,
+      error
+    );
     res.status(500).json({
       success: false,
       error: "Failed to cleanup task",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });

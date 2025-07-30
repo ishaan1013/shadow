@@ -1,7 +1,0 @@
-.prompt-form-border {
-  background: linear-gradient(
-    var(--border),
-    var(--border),
-    var(--highlight)
-  );
-}

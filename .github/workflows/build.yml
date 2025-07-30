@@ -1,0 +1,54 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Turbo globally
+        run: npm install -g turbo
+
+      - name: Generate Prisma types
+        run: npm run generate
+
+      - name: Run type checking
+        run: npm run check-types
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Build all packages and apps
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.sha }}
+          path: |
+            apps/*/dist/
+            packages/*/dist/
+            packages/db/generated/
+          retention-days: 7
+          if-no-files-found: warn

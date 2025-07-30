@@ -1,6 +1,7 @@
 import { prisma } from "@repo/db";
 import {
   AssistantMessagePart,
+  ErrorPart,
   Message,
   MessageMetadata,
   ModelType,
@@ -11,6 +12,8 @@ import { type ChatMessage } from "../../../packages/db/src/client";
 import { LLMService } from "./llm";
 import { systemPrompt } from "./prompt/system-prompt";
 import { GitManager } from "./services/git-manager";
+import { PRManager } from "./services/pr-manager";
+import { GitHubService } from "./github";
 import {
   emitStreamChunk,
   endStream,
@@ -25,6 +28,7 @@ export const DEFAULT_MODEL: ModelType = "gpt-4o";
 
 export class ChatService {
   private llmService: LLMService;
+  private githubService: GitHubService;
   private activeStreams: Map<string, AbortController> = new Map();
   private stopRequested: Set<string> = new Set();
   private queuedMessages: Map<
@@ -34,6 +38,7 @@ export class ChatService {
 
   constructor() {
     this.llmService = new LLMService();
+    this.githubService = new GitHubService();
   }
 
   private async getNextSequence(taskId: string): Promise<number> {
@@ -48,6 +53,7 @@ export class ChatService {
   async saveUserMessage(
     taskId: string,
     content: string,
+    llmModel?: string,
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
     const sequence = await this.getNextSequence(taskId);
@@ -57,6 +63,8 @@ export class ChatService {
         content,
         role: "USER",
         sequence,
+        llmModel,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         metadata: (metadata as any) || undefined,
       },
     });
@@ -79,6 +87,7 @@ export class ChatService {
         role: "ASSISTANT",
         llmModel,
         sequence,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         metadata: (metadata as any) || undefined,
         // Denormalized usage fields for easier querying
         promptTokens: usage?.promptTokens,
@@ -92,7 +101,7 @@ export class ChatService {
   async saveToolMessage(
     taskId: string,
     toolName: string,
-    toolArgs: Record<string, any>,
+    toolArgs: Record<string, unknown>,
     toolResult: string,
     sequence: number,
     metadata?: MessageMetadata
@@ -104,6 +113,7 @@ export class ChatService {
         role: "TOOL",
         sequence,
         metadata: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(metadata as any),
           tool: {
             name: toolName,
@@ -111,6 +121,7 @@ export class ChatService {
             status: "COMPLETED",
             result: toolResult,
           },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
       },
     });
@@ -122,7 +133,7 @@ export class ChatService {
   private async commitChangesIfAny(
     taskId: string,
     workspacePath?: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       // Get task info including user and workspace details
       const task = await prisma.task.findUnique({
@@ -132,14 +143,14 @@ export class ChatService {
 
       if (!task) {
         console.warn(`[CHAT] Task not found for git commit: ${taskId}`);
-        return;
+        return false;
       }
 
       if (!task.shadowBranch) {
         console.warn(
           `[CHAT] No shadow branch configured for task ${taskId}, skipping git commit`
         );
-        return;
+        return false;
       }
 
       // Determine workspace path - use provided path or fall back to task workspace path
@@ -148,7 +159,7 @@ export class ChatService {
         console.warn(
           `[CHAT] No workspace path available for task ${taskId}, skipping git commit`
         );
-        return;
+        return false;
       }
 
       // For firecracker mode, we use the tool executor to make API calls to the sidecar
@@ -159,7 +170,7 @@ export class ChatService {
         const hasChanges = await gitManager.hasChanges();
         if (!hasChanges) {
           console.log(`[CHAT] No changes to commit for task ${taskId}`);
-          return;
+          return false;
         }
 
         // Commit changes with user and Shadow co-author
@@ -179,8 +190,10 @@ export class ChatService {
             `[CHAT] Successfully committed changes for task ${taskId}`
           );
         }
+
+        return committed;
       } else {
-        await this.commitChangesFirecrackerMode(taskId, task);
+        return await this.commitChangesFirecrackerMode(taskId, task);
       }
     } catch (error) {
       console.error(
@@ -192,12 +205,81 @@ export class ChatService {
   }
 
   /**
+   * Create a PR if needed after changes are committed
+   */
+  private async createPRIfNeeded(
+    taskId: string,
+    workspacePath?: string,
+    messageId?: string
+  ): Promise<void> {
+    try {
+      console.log(`[CHAT] Attempting to create PR for task ${taskId}`);
+
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        include: { user: true },
+      });
+
+      if (!task) {
+        console.warn(`[CHAT] Task not found for PR creation: ${taskId}`);
+        return;
+      }
+
+      if (!task.shadowBranch) {
+        console.warn(
+          `[CHAT] No shadow branch configured for task ${taskId}, skipping PR creation`
+        );
+        return;
+      }
+
+      const resolvedWorkspacePath = workspacePath || task.workspacePath;
+      if (!resolvedWorkspacePath) {
+        console.warn(
+          `[CHAT] No workspace path available for task ${taskId}, skipping PR creation`
+        );
+        return;
+      }
+
+      const gitManager = new GitManager(resolvedWorkspacePath);
+      const prManager = new PRManager(
+        this.githubService,
+        gitManager,
+        this.llmService
+      );
+
+      if (!messageId) {
+        console.warn(
+          `[CHAT] No messageId provided for PR creation for task ${taskId}`
+        );
+        return;
+      }
+
+      await prManager.createPRIfNeeded({
+        taskId,
+        repoFullName: task.repoFullName,
+        shadowBranch: task.shadowBranch,
+        baseBranch: task.baseBranch,
+        userId: task.userId,
+        taskTitle: task.title,
+        wasTaskCompleted: task.status === "COMPLETED",
+        messageId,
+      });
+    } catch (error) {
+      console.error(`[CHAT] Failed to create PR for task ${taskId}:`, error);
+      // Non-blocking - don't throw
+    }
+  }
+
+  /**
    * Commit changes in firecracker mode using tool executor git APIs
    */
   private async commitChangesFirecrackerMode(
     taskId: string,
-    task: { user: { name: string; email: string }; shadowBranch: string | null }
-  ): Promise<void> {
+    task: {
+      user: { name: string; email: string };
+      shadowBranch: string | null;
+    }
+  ): Promise<boolean> {
     try {
       console.log(
         `[CHAT] Checking for changes to commit in firecracker mode for task ${taskId}`
@@ -213,14 +295,14 @@ export class ChatService {
         console.error(
           `[CHAT] Failed to check git status for task ${taskId}: ${statusResponse.message}`
         );
-        return;
+        return false;
       }
 
       if (!statusResponse.hasChanges) {
         console.log(
           `[CHAT] No changes to commit for task ${taskId} in firecracker mode`
         );
-        return;
+        return false;
       }
 
       // Get diff from tool executor to generate commit message on server side
@@ -252,7 +334,7 @@ export class ChatService {
         console.error(
           `[CHAT] Failed to commit changes for task ${taskId}: ${commitResponse.message}`
         );
-        return;
+        return false;
       }
 
       // Push the commit
@@ -260,7 +342,7 @@ export class ChatService {
         console.warn(
           `[CHAT] No shadow branch configured for task ${taskId}, skipping push`
         );
-        return;
+        return false;
       }
 
       const pushResponse = await toolExecutor.pushBranch({
@@ -278,12 +360,14 @@ export class ChatService {
       console.log(
         `[CHAT] Successfully committed changes for task ${taskId} in firecracker mode`
       );
+      return true;
     } catch (error) {
       console.error(
         `[CHAT] Error in firecracker mode git commit for task ${taskId}:`,
         error
       );
       // Don't throw here - we don't want git failures to break the chat flow
+      return false;
     }
   }
 
@@ -358,7 +442,7 @@ export class ChatService {
 
     // Save user message to database (unless skipped, e.g. on task initialization)
     if (!skipUserMessageSave) {
-      await this.saveUserMessage(taskId, userMessage);
+      await this.saveUserMessage(taskId, userMessage, llmModel);
     }
 
     const history = await this.getChatHistory(taskId);
@@ -458,6 +542,7 @@ export class ChatService {
                   metadata: {
                     isStreaming: true,
                     parts: assistantParts,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   } as any,
                 },
               });
@@ -490,6 +575,7 @@ export class ChatService {
                 metadata: {
                   isStreaming: true,
                   parts: assistantParts,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any,
               },
             });
@@ -558,6 +644,7 @@ export class ChatService {
                 metadata: {
                   isStreaming: true,
                   parts: assistantParts,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any,
               },
             });
@@ -586,8 +673,10 @@ export class ChatService {
                 data: {
                   content: resultString,
                   metadata: {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     ...(toolMessage.metadata as any),
                     tool: {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       ...(toolMessage.metadata as any)?.tool,
                       status: "COMPLETED",
                       result: chunk.toolResult.result, // Keep as object for type safety
@@ -603,6 +692,58 @@ export class ChatService {
             `[TOOL_RESULT] ${chunk.toolResult.id}:`,
             chunk.toolResult.result
           );
+        }
+
+        // Handle error chunks from LLM service
+        if (chunk.type === "error") {
+          console.error(
+            `[CHAT] Received error chunk for task ${taskId}:`,
+            chunk.error
+          );
+          finishReason = chunk.finishReason || "error";
+
+          // Add error part to assistant message parts
+          const errorPart: ErrorPart = {
+            type: "error",
+            error: chunk.error || "Unknown error occurred",
+            finishReason: chunk.finishReason,
+          };
+          assistantParts.push(errorPart);
+
+          // Update assistant message with error part if we have one
+          if (assistantMessageId) {
+            const fullContent = assistantParts
+              .filter((part) => part.type === "text")
+              .map((part) => (part as TextPart).text)
+              .join("");
+
+            await prisma.chatMessage.update({
+              where: { id: assistantMessageId },
+              data: {
+                content: fullContent,
+                metadata: {
+                  isStreaming: false,
+                  parts: assistantParts,
+                  finishReason,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                } as any,
+              },
+            });
+          }
+
+          // Update task status to failed
+          await updateTaskStatus(taskId, "FAILED", "CHAT");
+
+          // Clean up stream tracking
+          this.activeStreams.delete(taskId);
+          this.stopRequested.delete(taskId);
+          endStream(taskId);
+
+          // Clear any queued messages (don't process them after error)
+          this.clearQueuedMessage(taskId);
+
+          // Exit the streaming loop
+          break;
         }
 
         // Track usage information
@@ -636,6 +777,7 @@ export class ChatService {
           where: { id: assistantMessageId },
           data: {
             content: fullContent,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             metadata: finalMetadata as any,
             promptTokens: usageMetadata.promptTokens,
             completionTokens: usageMetadata.completionTokens,
@@ -657,7 +799,19 @@ export class ChatService {
 
         // Commit changes if there are any (only for successfully completed responses)
         try {
-          await this.commitChangesIfAny(taskId, workspacePath);
+          const changesCommitted = await this.commitChangesIfAny(
+            taskId,
+            workspacePath
+          );
+
+          // Create PR if changes were committed
+          if (changesCommitted && assistantMessageId) {
+            await this.createPRIfNeeded(
+              taskId,
+              workspacePath,
+              assistantMessageId
+            );
+          }
         } catch (error) {
           console.error(
             `[CHAT] Failed to commit changes for task ${taskId}:`,
@@ -756,5 +910,94 @@ export class ChatService {
 
     // Update task status to stopped when manually stopped by user
     await updateTaskStatus(taskId, "STOPPED", "CHAT");
+  }
+
+  async editUserMessage({
+    taskId,
+    messageId,
+    newContent,
+    newModel,
+    workspacePath,
+  }: {
+    taskId: string;
+    messageId: string;
+    newContent: string;
+    newModel: ModelType;
+    workspacePath?: string;
+  }): Promise<void> {
+    console.log(`[CHAT] Editing user message ${messageId} in task ${taskId}`);
+
+    // First, stop any active stream and clear queued messages
+    if (this.activeStreams.has(taskId)) {
+      await this.stopStream(taskId);
+    }
+    this.clearQueuedMessage(taskId);
+
+    // Update the message in database
+    await prisma.chatMessage.update({
+      where: { id: messageId },
+      data: {
+        content: newContent,
+        llmModel: newModel,
+        editedAt: new Date(),
+      },
+    });
+
+    // Get the sequence of the edited message
+    const editedMessage = await prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      select: { sequence: true },
+    });
+
+    if (!editedMessage) {
+      throw new Error("Edited message not found");
+    }
+
+    // Delete all messages that come after the edited message
+    await prisma.chatMessage.deleteMany({
+      where: {
+        taskId,
+        sequence: {
+          gt: editedMessage.sequence,
+        },
+      },
+    });
+
+    console.log(
+      `[CHAT] Deleted messages after sequence ${editedMessage.sequence} in task ${taskId}`
+    );
+
+    // Get chat history up to the edited message
+    const history = await this.getChatHistory(taskId);
+
+    // Process the edited message as if it were a new message
+    // Filter out tool messages and use the updated content
+    const messages: Message[] = history
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .map((msg) => {
+        if (msg.id === messageId) {
+          return {
+            ...msg,
+            content: newContent,
+            llmModel: newModel,
+          };
+        }
+        return msg;
+      });
+
+    console.log(
+      `[CHAT] Re-processing from edited message with ${messages.length} context messages`
+    );
+
+    // Start streaming from the edited message
+    await this.processUserMessage({
+      taskId,
+      userMessage: newContent,
+      llmModel: newModel,
+      enableTools: true,
+      skipUserMessageSave: true, // Don't save again, already updated
+      workspacePath,
+      queue: false,
+    });
   }
 }

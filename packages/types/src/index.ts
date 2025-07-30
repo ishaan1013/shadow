@@ -6,6 +6,7 @@ export * from "./chat/streaming";
 export * from "./tools/results";
 export * from "./tools/execution";
 export * from "./tools/guards";
+export * from "./tools/types";
 
 // === LLM Integration Types ===
 export * from "./llm/models";

@@ -17,8 +17,11 @@ export default function Terminal() {
   const taskId = params?.taskId as string;
 
   // Use our hook architecture but with enhanced terminal functionality
-  const { terminalEntries, isTerminalConnected, clearTerminal } =
-    useTerminalSocket(taskId);
+  const {
+    terminalEntries,
+    isTerminalConnected,
+    clearTerminal: _clearTerminal,
+  } = useTerminalSocket(taskId);
 
   // Terminal entry formatting with ANSI colors
   const writeToTerminal = (entry: TerminalEntry) => {

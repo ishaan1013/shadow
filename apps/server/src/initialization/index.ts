@@ -1,16 +1,17 @@
 import { InitStepType, prisma } from "@repo/db";
-import {
-  getStepsForMode,
-  InitializationProgress,
-} from "@repo/types";
+import { getStepsForMode, InitializationProgress } from "@repo/types";
 import { emitStreamChunk } from "../socket";
-import { createWorkspaceManager, createToolExecutor, getAgentMode } from "../execution";
+import {
+  createWorkspaceManager,
+  createToolExecutor,
+  getAgentMode,
+} from "../execution";
 import type { WorkspaceManager as AbstractWorkspaceManager } from "../execution";
 import {
   setTaskInProgress,
   setTaskCompleted,
   setTaskFailed,
-  clearTaskProgress
+  clearTaskProgress,
 } from "../utils/task-status";
 
 // Helper for async delays
@@ -121,7 +122,11 @@ export class TaskInitializationEngine {
           );
 
           // Mark as failed with error details
-          await setTaskFailed(taskId, step, error instanceof Error ? error.message : "Unknown error");
+          await setTaskFailed(
+            taskId,
+            step,
+            error instanceof Error ? error.message : "Unknown error"
+          );
 
           // Emit error
           this.emitProgress(taskId, {
@@ -176,7 +181,6 @@ export class TaskInitializationEngine {
         await this.executePrepareWorkspace(taskId, userId);
         break;
 
-
       // Firecracker-specific steps
       case "CREATE_VM":
         await this.executeCreateVM(taskId, userId);
@@ -210,7 +214,9 @@ export class TaskInitializationEngine {
   ): Promise<void> {
     const agentMode = getAgentMode();
     if (agentMode !== "local") {
-      throw new Error(`PREPARE_WORKSPACE step should only be used in local mode, but agent mode is: ${agentMode}`);
+      throw new Error(
+        `PREPARE_WORKSPACE step should only be used in local mode, but agent mode is: ${agentMode}`
+      );
     }
 
     console.log(`[TASK_INIT] ${taskId}: Preparing local workspace`);
@@ -218,7 +224,12 @@ export class TaskInitializationEngine {
     // Get task info
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: { repoFullName: true, repoUrl: true, baseBranch: true, shadowBranch: true },
+      select: {
+        repoFullName: true,
+        repoUrl: true,
+        baseBranch: true,
+        shadowBranch: true,
+      },
     });
 
     if (!task) {
@@ -226,17 +237,20 @@ export class TaskInitializationEngine {
     }
 
     // Use workspace manager to prepare local workspace and clone repo
-    const workspaceResult = await this.abstractWorkspaceManager.prepareWorkspace({
-      id: taskId,
-      repoFullName: task.repoFullName,
-      repoUrl: task.repoUrl,
-      baseBranch: task.baseBranch || 'main',
-      shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
-      userId,
-    });
+    const workspaceResult =
+      await this.abstractWorkspaceManager.prepareWorkspace({
+        id: taskId,
+        repoFullName: task.repoFullName,
+        repoUrl: task.repoUrl,
+        baseBranch: task.baseBranch || "main",
+        shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
+        userId,
+      });
 
     if (!workspaceResult.success) {
-      throw new Error(workspaceResult.error || "Failed to prepare local workspace");
+      throw new Error(
+        workspaceResult.error || "Failed to prepare local workspace"
+      );
     }
 
     // Update task with workspace path
@@ -246,9 +260,6 @@ export class TaskInitializationEngine {
     });
   }
 
-
-
-
   /**
    * Create VM step - firecracker mode only
    * Creates Firecracker VM pod (VM startup script handles repository cloning)
@@ -256,7 +267,9 @@ export class TaskInitializationEngine {
   private async executeCreateVM(taskId: string, userId: string): Promise<void> {
     const agentMode = getAgentMode();
     if (agentMode !== "firecracker") {
-      throw new Error(`CREATE_VM step should only be used in firecracker mode, but agent mode is: ${agentMode}`);
+      throw new Error(
+        `CREATE_VM step should only be used in firecracker mode, but agent mode is: ${agentMode}`
+      );
     }
 
     console.log(`[TASK_INIT] ${taskId}: Creating Firecracker VM for execution`);
@@ -265,7 +278,12 @@ export class TaskInitializationEngine {
       // Get task info
       const task = await prisma.task.findUnique({
         where: { id: taskId },
-        select: { repoFullName: true, repoUrl: true, baseBranch: true, shadowBranch: true },
+        select: {
+          repoFullName: true,
+          repoUrl: true,
+          baseBranch: true,
+          shadowBranch: true,
+        },
       });
 
       if (!task) {
@@ -273,14 +291,15 @@ export class TaskInitializationEngine {
       }
 
       // Use abstract workspace manager to prepare workspace (creates VM in firecracker mode)
-      const workspaceInfo = await this.abstractWorkspaceManager.prepareWorkspace({
-        id: taskId,
-        repoFullName: task.repoFullName,
-        repoUrl: task.repoUrl,
-        baseBranch: task.baseBranch || 'main',
-        shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
-        userId,
-      });
+      const workspaceInfo =
+        await this.abstractWorkspaceManager.prepareWorkspace({
+          id: taskId,
+          repoFullName: task.repoFullName,
+          repoUrl: task.repoUrl,
+          baseBranch: task.baseBranch || "main",
+          shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
+          userId,
+        });
 
       if (!workspaceInfo.success) {
         throw new Error(`Failed to create VM: ${workspaceInfo.error}`);
@@ -306,7 +325,9 @@ export class TaskInitializationEngine {
         },
       });
 
-      console.log(`[TASK_INIT] ${taskId}: Successfully created VM ${workspaceInfo.podName}`);
+      console.log(
+        `[TASK_INIT] ${taskId}: Successfully created VM ${workspaceInfo.podName}`
+      );
     } catch (error) {
       console.error(`[TASK_INIT] ${taskId}: Failed to create VM:`, error);
       throw error;
@@ -317,7 +338,9 @@ export class TaskInitializationEngine {
    * Wait for VM ready step - Wait for VM boot and sidecar API to become healthy
    */
   private async executeWaitVMReady(taskId: string): Promise<void> {
-    console.log(`[TASK_INIT] ${taskId}: Waiting for sidecar service and repository clone to complete`);
+    console.log(
+      `[TASK_INIT] ${taskId}: Waiting for sidecar service and repository clone to complete`
+    );
 
     try {
       // Get the tool executor for this task (will contain sidecar endpoint info)
@@ -333,22 +356,35 @@ export class TaskInitializationEngine {
           const listing = await executor.listDirectory(".");
 
           // Check that both sidecar is responding AND workspace has content
-          if (listing.success && listing.contents && listing.contents.length > 0) {
-            console.log(`[TASK_INIT] ${taskId}: Sidecar ready and repository cloned (attempt ${attempt})`);
+          if (
+            listing.success &&
+            listing.contents &&
+            listing.contents.length > 0
+          ) {
+            console.log(
+              `[TASK_INIT] ${taskId}: Sidecar ready and repository cloned (attempt ${attempt})`
+            );
             return;
           } else {
             throw new Error("Sidecar responding but workspace appears empty");
           }
         } catch (error) {
           if (attempt === maxRetries) {
-            throw new Error(`Sidecar/clone failed to become ready after ${maxRetries} attempts: ${error}`);
+            throw new Error(
+              `Sidecar/clone failed to become ready after ${maxRetries} attempts: ${error}`
+            );
           }
-          console.log(`[TASK_INIT] ${taskId}: Sidecar or clone not ready yet (attempt ${attempt}/${maxRetries}), retrying...`);
+          console.log(
+            `[TASK_INIT] ${taskId}: Sidecar or clone not ready yet (attempt ${attempt}/${maxRetries}), retrying...`
+          );
           await delay(retryDelay);
         }
       }
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed waiting for sidecar and clone:`, error);
+      console.error(
+        `[TASK_INIT] ${taskId}: Failed waiting for sidecar and clone:`,
+        error
+      );
       throw error;
     }
   }
@@ -356,8 +392,13 @@ export class TaskInitializationEngine {
   /**
    * Verify VM workspace step - Verify workspace is ready and contains repository
    */
-  private async executeVerifyVMWorkspace(taskId: string, _userId: string): Promise<void> {
-    console.log(`[TASK_INIT] ${taskId}: Verifying workspace is ready and contains repository`);
+  private async executeVerifyVMWorkspace(
+    taskId: string,
+    _userId: string
+  ): Promise<void> {
+    console.log(
+      `[TASK_INIT] ${taskId}: Verifying workspace is ready and contains repository`
+    );
 
     try {
       // Get task info
@@ -374,17 +415,30 @@ export class TaskInitializationEngine {
       const executor = createToolExecutor(taskId);
 
       // Final verification that workspace is fully ready with repository content
-      console.log(`[TASK_INIT] ${taskId}: Performing final workspace verification`);
+      console.log(
+        `[TASK_INIT] ${taskId}: Performing final workspace verification`
+      );
 
       // Verify the workspace is ready by checking contents
       const listing = await executor.listDirectory(".");
-      if (!listing.success || !listing.contents || listing.contents.length === 0) {
-        throw new Error("Workspace verification failed - workspace appears empty");
+      if (
+        !listing.success ||
+        !listing.contents ||
+        listing.contents.length === 0
+      ) {
+        throw new Error(
+          "Workspace verification failed - workspace appears empty"
+        );
       }
 
-      console.log(`[TASK_INIT] ${taskId}: Successfully verified workspace is ready with repository content`);
+      console.log(
+        `[TASK_INIT] ${taskId}: Successfully verified workspace is ready with repository content`
+      );
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed to verify workspace:`, error);
+      console.error(
+        `[TASK_INIT] ${taskId}: Failed to verify workspace:`,
+        error
+      );
       throw error;
     }
   }
@@ -416,15 +470,17 @@ export class TaskInitializationEngine {
     }
   }
 
-
   /**
    * Emit progress events via WebSocket
    */
   private emitProgress(taskId: string, progress: InitializationProgress): void {
-    emitStreamChunk({
-      type: "init-progress",
-      initProgress: progress,
-    }, taskId);
+    emitStreamChunk(
+      {
+        type: "init-progress",
+        initProgress: progress,
+      },
+      taskId
+    );
   }
 
   /**

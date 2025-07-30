@@ -14,7 +14,7 @@ import { TodoWriteTool } from "./todo-write";
 import { WebSearchTool } from "./web-search";
 
 // Export ToolType enum
-export { ToolType } from "./collapsible-tool";
+export { ToolType } from "@repo/types";
 
 // Tool component registry
 const TOOL_COMPONENTS = {
