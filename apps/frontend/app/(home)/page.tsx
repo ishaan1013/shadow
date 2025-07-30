@@ -7,6 +7,7 @@ import {
 } from "@/lib/github/github-api";
 import { getModels } from "@/lib/actions/get-models";
 import { getGitSelectorCookie } from "@/lib/actions/git-selector-cookie";
+import { getApiKeys } from "@/lib/actions/api-keys";
 import type { GitHubStatus } from "@/lib/github/types";
 import {
   dehydrate,
@@ -50,6 +51,14 @@ export default async function Home() {
       })
       .catch((error) => {
         console.log("Could not prefetch models:", error?.message || error);
+      }),
+    queryClient
+      .prefetchQuery({
+        queryKey: ["api-keys"],
+        queryFn: getApiKeys,
+      })
+      .catch((error) => {
+        console.log("Could not prefetch API keys:", error?.message || error);
       }),
   ];
   await Promise.allSettled(prefetchPromises);

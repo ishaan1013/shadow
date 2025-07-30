@@ -1,6 +1,7 @@
 import { SidebarViews } from "@/components/sidebar";
 import { AgentEnvironmentProvider } from "@/components/agent-environment/agent-environment-context";
 import { getModels } from "@/lib/actions/get-models";
+import { getApiKeys } from "@/lib/actions/api-keys";
 import { getUser } from "@/lib/auth/get-user";
 import { getTaskMessages } from "@/lib/db-operations/get-task-messages";
 import { getTaskWithDetails } from "@/lib/db-operations/get-task-with-details";
@@ -63,6 +64,10 @@ export default async function TaskLayout({
     queryClient.prefetchQuery({
       queryKey: ["task-title", taskId],
       queryFn: () => task.title,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ["api-keys"],
+      queryFn: getApiKeys,
     }),
   ]);
 
