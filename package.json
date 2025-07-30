@@ -36,5 +36,8 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "tree-sitter-typescript": "^0.23.2"
+  }
 }

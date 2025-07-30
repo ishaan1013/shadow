@@ -23,6 +23,13 @@ function safeRequire(name: string): any {
 
     // Extract language name from package name
     const langName = name.replace("tree-sitter-", "");
+    
+    // Special handling for tree-sitter-typescript which exports both typescript and tsx
+    if (name === "tree-sitter-typescript") {
+      // Return the typescript language by default, but preserve access to both
+      return mod.typescript;
+    }
+    
     const language = mod[langName] || mod.default || mod;
 
     // Validate that this is a proper Tree-sitter language object

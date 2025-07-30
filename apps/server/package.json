@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/server.js",
     "dev": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/server.ts",
     "lint": "eslint 'src/**/*.ts'",
@@ -19,8 +19,8 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/openai": "^1.3.23",
     "@kubernetes/client-node": "^1.0.0",
-    "@repo/db": "*",
     "@repo/command-security": "*",
+    "@repo/db": "*",
     "@repo/types": "*",
     "ai": "^4.3.19",
     "cors": "^2.8.5",
@@ -61,6 +61,7 @@
     "prettier-plugin-organize-imports": "^4.1.0",
     "supertest": "^7.1.3",
     "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.8.3"
   },
