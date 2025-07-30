@@ -16,7 +16,10 @@ export interface StreamChunk {
   | "tool-result"
   | "init-progress"
   | "fs-change"
-  | "todo-update";
+  | "todo-update"
+  | "parallel-tool-batch-start"
+  | "parallel-tool-batch-complete"
+  | "parallel-tool-progress";
 
   // For content chunks
   content?: string;
@@ -46,6 +49,28 @@ export interface StreamChunk {
   toolResult?: {
     id: string;
     result: ToolResultTypes['result']
+  };
+
+  // For parallel tool execution
+  parallelToolBatch?: {
+    batchId: string;
+    toolCallIds?: string[];
+    results?: Array<{
+      toolCallId: string;
+      result: unknown;
+      error?: string;
+      executionTimeMs: number;
+    }>;
+    totalExecutionTimeMs?: number;
+  };
+
+  parallelToolProgress?: {
+    batchId: string;
+    toolCallId: string;
+    status: "started" | "completed" | "error";
+    result?: unknown;
+    error?: string;
+    executionTimeMs?: number;
   };
 
   // For initialization progress

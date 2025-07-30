@@ -21,6 +21,35 @@ export interface ToolResultChunk {
   result: unknown;
 }
 
+// New types for parallel tool execution
+export interface ParallelToolBatchStartChunk {
+  type: "parallel-tool-batch-start";
+  batchId: string;
+  toolCallIds: string[];
+}
+
+export interface ParallelToolBatchCompleteChunk {
+  type: "parallel-tool-batch-complete";
+  batchId: string;
+  results: Array<{
+    toolCallId: string;
+    result: unknown;
+    error?: string;
+    executionTimeMs: number;
+  }>;
+  totalExecutionTimeMs: number;
+}
+
+export interface ParallelToolProgressChunk {
+  type: "parallel-tool-progress";
+  batchId: string;
+  toolCallId: string;
+  status: "started" | "completed" | "error";
+  result?: unknown;
+  error?: string;
+  executionTimeMs?: number;
+}
+
 export interface FinishChunk {
   type: "finish";
   usage?: CompletionTokenUsage;
@@ -37,5 +66,27 @@ export type AIStreamChunk =
   | TextDeltaChunk
   | ToolCallChunk
   | ToolResultChunk
+  | ParallelToolBatchStartChunk
+  | ParallelToolBatchCompleteChunk
+  | ParallelToolProgressChunk
   | FinishChunk
   | ErrorChunk;
+
+// Types for parallel execution management
+export interface ParallelToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface ParallelExecutionContext {
+  batchId: string;
+  toolCalls: ParallelToolCall[];
+  startTime: number;
+  results: Map<string, {
+    result?: unknown;
+    error?: string;
+    executionTimeMs?: number;
+    status: "pending" | "started" | "completed" | "error";
+  }>;
+}

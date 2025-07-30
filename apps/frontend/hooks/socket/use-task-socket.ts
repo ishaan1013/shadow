@@ -514,6 +514,76 @@ export function useTaskSocket(taskId: string | undefined) {
             );
           }
           break;
+
+        case "parallel-tool-batch-start":
+          if (chunk.parallelToolBatch) {
+            console.log(
+              `Parallel tool batch started: ${chunk.parallelToolBatch.batchId} with ${chunk.parallelToolBatch.toolCallIds?.length || 0} tools`
+            );
+            // Could add a UI indicator here for parallel execution
+          }
+          break;
+
+        case "parallel-tool-progress":
+          if (chunk.parallelToolProgress) {
+            const progress = chunk.parallelToolProgress;
+            console.log(
+              `Parallel tool progress: ${progress.toolCallId} ${progress.status} ${progress.executionTimeMs ? `(${progress.executionTimeMs}ms)` : ''}`
+            );
+            
+            // Update the corresponding tool call part in streaming assistant parts
+            setStreamingAssistantParts((prev) => {
+              return prev.map((part) => {
+                if (part.type === "tool-call" && part.toolCallId === progress.toolCallId) {
+                  // Add execution status to the tool call part
+                  return {
+                    ...part,
+                    executionStatus: progress.status,
+                    executionTimeMs: progress.executionTimeMs,
+                    error: progress.error,
+                  } as any;
+                }
+                return part;
+              });
+            });
+
+            // Add tool result part when completed
+            if (progress.status === "completed" || progress.status === "error") {
+              const toolResultPart: ToolResultPart = {
+                type: "tool-result",
+                toolCallId: progress.toolCallId,
+                toolName: "", // Will be set below
+                result: progress.status === "completed" ? progress.result : `Error: ${progress.error}`,
+              };
+
+              // Find the corresponding tool call to get the tool name
+              setStreamingAssistantParts((prev) => {
+                const correspondingCall = prev.find(
+                  (part) =>
+                    part.type === "tool-call" &&
+                    part.toolCallId === progress.toolCallId
+                );
+                if (correspondingCall && correspondingCall.type === "tool-call") {
+                  toolResultPart.toolName = correspondingCall.toolName;
+                }
+                return [...prev, toolResultPart];
+              });
+            }
+          }
+          break;
+
+        case "parallel-tool-batch-complete":
+          if (chunk.parallelToolBatch) {
+            const batch = chunk.parallelToolBatch;
+            const successfulTools = batch.results?.filter(r => !r.error).length || 0;
+            const failedTools = batch.results?.filter(r => r.error).length || 0;
+            
+            console.log(
+              `Parallel tool batch completed: ${batch.batchId} in ${batch.totalExecutionTimeMs}ms - ${successfulTools} successful, ${failedTools} failed`
+            );
+            // Could add a completion notification here
+          }
+          break;
       }
     }
 

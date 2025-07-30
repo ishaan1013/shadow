@@ -613,6 +613,62 @@ export class ChatService {
             totalTokens: chunk.usage.totalTokens,
           };
         }
+
+        // Handle parallel tool execution events
+        if (chunk.type === "parallel-tool-batch-start" && chunk.parallelToolBatch) {
+          console.log(
+            `[PARALLEL_TOOL_BATCH] Started batch ${chunk.parallelToolBatch.batchId} with ${chunk.parallelToolBatch.toolCallIds?.length || 0} tools`
+          );
+        }
+
+        if (chunk.type === "parallel-tool-progress" && chunk.parallelToolProgress) {
+          const progress = chunk.parallelToolProgress;
+          console.log(
+            `[PARALLEL_TOOL_PROGRESS] Tool ${progress.toolCallId} in batch ${progress.batchId}: ${progress.status} ${progress.executionTimeMs ? `(${progress.executionTimeMs}ms)` : ''}`
+          );
+          
+          // Update the corresponding tool message if it exists
+          const toolSequence = toolCallSequences.get(progress.toolCallId);
+          if (toolSequence) {
+            try {
+              await prisma.chatMessage.updateMany({
+                where: {
+                  taskId,
+                  sequence: toolSequence,
+                  role: "TOOL",
+                },
+                data: {
+                  content: progress.status === "completed" 
+                    ? JSON.stringify(progress.result, null, 2)
+                    : progress.status === "error"
+                    ? `Error: ${progress.error}`
+                    : "Running...",
+                  metadata: {
+                    tool: {
+                      status: progress.status.toUpperCase(),
+                      result: progress.result,
+                      error: progress.error,
+                      executionTimeMs: progress.executionTimeMs,
+                    },
+                    isStreaming: progress.status !== "completed" && progress.status !== "error",
+                  } as any,
+                },
+              });
+            } catch (error) {
+              console.error(`[PARALLEL_TOOL_PROGRESS] Failed to update tool message:`, error);
+            }
+          }
+        }
+
+        if (chunk.type === "parallel-tool-batch-complete" && chunk.parallelToolBatch) {
+          const batch = chunk.parallelToolBatch;
+          const successfulTools = batch.results?.filter(r => !r.error).length || 0;
+          const failedTools = batch.results?.filter(r => r.error).length || 0;
+          
+          console.log(
+            `[PARALLEL_TOOL_BATCH] Completed batch ${batch.batchId} in ${batch.totalExecutionTimeMs}ms: ${successfulTools} successful, ${failedTools} failed`
+          );
+        }
       }
 
       // Check if stream was stopped early

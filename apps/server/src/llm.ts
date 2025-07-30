@@ -7,15 +7,19 @@ import {
   StreamChunk,
   getModelProvider,
   toCoreMessage,
+  ParallelToolCall,
 } from "@repo/types";
 import { CoreMessage, LanguageModel, generateText, streamText } from "ai";
 import { DEFAULT_MODEL } from "./chat";
 import config from "./config";
 import { createTools } from "./tools";
+import { ParallelToolExecutor } from "./parallel-tool-executor";
 
 const MAX_STEPS = 50;
 
 export class LLMService {
+  private parallelExecutor = new ParallelToolExecutor();
+
   private getModel(modelId: ModelType): LanguageModel {
     const provider = getModelProvider(modelId);
 
@@ -70,6 +74,10 @@ export class LLMService {
 
       const result = streamText(streamConfig);
 
+      // Track pending tool calls for parallel execution
+      const pendingToolCalls: ParallelToolCall[] = [];
+      let isProcessingParallelBatch = false;
+
       // Use fullStream to get real-time tool calls and results
       for await (const chunk of result.fullStream as AsyncIterable<AIStreamChunk>) {
         switch (chunk.type) {
@@ -83,7 +91,17 @@ export class LLMService {
             break;
           }
 
-          case "tool-call":
+          case "tool-call": {
+            const toolCall: ParallelToolCall = {
+              id: chunk.toolCallId,
+              name: chunk.toolName,
+              args: chunk.args,
+            };
+
+            pendingToolCalls.push(toolCall);
+
+            // For now, just emit the individual tool call
+            // The parallel execution will be handled in the step-finish phase
             yield {
               type: "tool-call",
               toolCall: {
@@ -93,16 +111,109 @@ export class LLMService {
               },
             };
             break;
+          }
 
-          case "tool-result":
-            yield {
-              type: "tool-result",
-              toolResult: {
-                id: chunk.toolCallId,
-                result: chunk.result as any, // Cast to avoid unknown type issues
-              },
-            };
+          case "tool-result": {
+            // Tool results come from the AI SDK's internal execution
+            // If we're not using parallel execution, pass them through
+            if (!isProcessingParallelBatch) {
+              yield {
+                type: "tool-result",
+                toolResult: {
+                  id: chunk.toolCallId,
+                  result: chunk.result as any,
+                },
+              };
+            }
             break;
+          }
+
+          // Handle step-finish or other step completion events
+          // Note: The AI SDK may use different chunk types for step completion
+          default: {
+            // Check for any step completion logic
+            if ((chunk as any).type === "step-finish" || 
+                (chunk as any).type === "step-start" ||
+                pendingToolCalls.length > 0) {
+              
+              // At step completion, check if we should execute tools in parallel
+              if (pendingToolCalls.length > 1 && taskId && workspacePath) {
+                const canExecuteInParallel = this.parallelExecutor.canExecuteInParallel(pendingToolCalls);
+                
+                if (canExecuteInParallel) {
+                  isProcessingParallelBatch = true;
+                  console.log(`[LLM_SERVICE] Executing ${pendingToolCalls.length} tools in parallel`);
+
+                                  // Execute tools in parallel and emit progress updates
+                // We need to collect the progress chunks and yield them after the execution
+                const progressChunks: StreamChunk[] = [];
+                
+                await this.parallelExecutor.executeInParallel(
+                  taskId,
+                  workspacePath,
+                  pendingToolCalls,
+                  (progressChunk) => {
+                    // Convert parallel execution chunks to StreamChunk format
+                    let streamChunk: StreamChunk;
+                    switch (progressChunk.type) {
+                      case "parallel-tool-batch-start":
+                        streamChunk = {
+                          type: "parallel-tool-batch-start",
+                          parallelToolBatch: {
+                            batchId: progressChunk.batchId,
+                            toolCallIds: progressChunk.toolCallIds,
+                          },
+                        };
+                        break;
+
+                      case "parallel-tool-progress":
+                        streamChunk = {
+                          type: "parallel-tool-progress",
+                          parallelToolProgress: {
+                            batchId: progressChunk.batchId,
+                            toolCallId: progressChunk.toolCallId,
+                            status: progressChunk.status,
+                            result: progressChunk.result,
+                            error: progressChunk.error,
+                            executionTimeMs: progressChunk.executionTimeMs,
+                          },
+                        };
+                        break;
+
+                      case "parallel-tool-batch-complete":
+                        streamChunk = {
+                          type: "parallel-tool-batch-complete",
+                          parallelToolBatch: {
+                            batchId: progressChunk.batchId,
+                            results: progressChunk.results,
+                            totalExecutionTimeMs: progressChunk.totalExecutionTimeMs,
+                          },
+                        };
+                        break;
+
+                      default:
+                        return; // Skip unknown chunk types
+                    }
+                    progressChunks.push(streamChunk);
+                  }
+                );
+
+                // Yield all collected progress chunks
+                for (const progressChunk of progressChunks) {
+                  yield progressChunk;
+                }
+
+                  isProcessingParallelBatch = false;
+                } else {
+                  console.log(`[LLM_SERVICE] Tools cannot be executed in parallel, using sequential execution`);
+                }
+              }
+
+              // Clear pending tool calls for next step
+              pendingToolCalls.length = 0;
+            }
+            break;
+          }
 
           case "finish":
             // Emit final usage and completion
@@ -203,5 +314,10 @@ export class LLMService {
     }
 
     return models;
+  }
+
+  // Get parallel execution statistics
+  getParallelExecutionStats() {
+    return this.parallelExecutor.getActiveExecutions();
   }
 }
