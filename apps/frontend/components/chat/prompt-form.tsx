@@ -9,9 +9,10 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { useModels } from "@/hooks/use-models";
+import { useApiKeys } from "@/hooks/use-api-keys";
 import { createTask } from "@/lib/actions/create-task";
 import { cn } from "@/lib/utils";
-import { AvailableModels, ModelInfos, type ModelType } from "@repo/types";
+import { AvailableModels, ModelInfos, type ModelType, getModelProvider } from "@repo/types";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUp,
@@ -75,6 +76,22 @@ export function PromptForm({
 
   const queryClient = useQueryClient();
   const { data: availableModels = [] } = useModels();
+  const { data: apiKeys } = useApiKeys();
+
+  // Filter models based on available API keys
+  const filteredModels = availableModels.filter((model) => {
+    const provider = getModelProvider(model.id as ModelType);
+    if (provider === "openai") {
+      return !!(apiKeys?.openai);
+    }
+    if (provider === "anthropic") {
+      return !!(apiKeys?.anthropic);
+    }
+    return true;
+  });
+
+  // Check if no API keys are configured
+  const hasNoApiKeys = !apiKeys?.openai && !apiKeys?.anthropic;
 
   const [isMessageOptionsOpen, setIsMessageOptionsOpen] = useState(false);
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
@@ -450,18 +467,39 @@ export function PromptForm({
                 align="start"
                 className="flex flex-col gap-0.5 rounded-lg p-1"
               >
-                {availableModels.map((model) => (
-                  <Button
-                    key={model.id}
-                    size="sm"
-                    variant="ghost"
-                    className="hover:bg-accent justify-start font-normal"
-                    onClick={() => setSelectedModel(model.id as ModelType)}
-                  >
-                    <Square className="size-4" />
-                    {model.name}
-                  </Button>
-                ))}
+                {filteredModels.length > 0 ? (
+                  filteredModels.map((model) => (
+                    <Button
+                      key={model.id}
+                      size="sm"
+                      variant="ghost"
+                      className="hover:bg-accent justify-start font-normal"
+                      onClick={() => setSelectedModel(model.id as ModelType)}
+                    >
+                      <Square className="size-4" />
+                      {model.name}
+                    </Button>
+                  ))
+                ) : (
+                  <div className="p-2 text-center">
+                    <p className="text-muted-foreground text-sm mb-2">
+                      No models available. Configure your API keys to access models.
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setIsModelSelectorOpen(false);
+                        // Open settings modal to models tab
+                        const event = new CustomEvent('open-settings-modal', { 
+                          detail: { tab: 'models' } 
+                        });
+                        window.dispatchEvent(event);
+                      }}
+                    >
+                      Configure API Keys
+                    </Button>
+                  </div>
+                )}
               </PopoverContent>
             </Popover>
 

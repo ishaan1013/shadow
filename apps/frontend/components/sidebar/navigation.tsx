@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { BookOpenText, FileCode, LayoutGrid, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { SidebarView } from ".";
-import { SettingsDialog } from "../auth/settings-dialog";
+import { SettingsDialog } from "../auth/settings-modal";
 import { UserMenu } from "../auth/user-menu";
 import { Button } from "../ui/button";
 import { useSidebar } from "../ui/sidebar";
