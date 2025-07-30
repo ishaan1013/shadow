@@ -2,17 +2,14 @@
   "name": "@repo/db",
   "version": "1.0.0",
   "exports": {
-    ".": "./dist/client.js"
+    ".": "./src/client.ts"
   },
-  "main": "./dist/client.js",
-  "types": "./dist/client.d.ts",
   "scripts": {
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:push:reset": "prisma db push --force-reset",
     "db:studio": "prisma studio",
-    "build": "tsc",
     "dev": "tsup src/* --watch",
     "lint": "eslint 'src/**/*.ts'",
     "format": "prisma format",
