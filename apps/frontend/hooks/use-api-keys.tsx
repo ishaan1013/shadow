@@ -1,48 +1,31 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-
-interface ApiKeys {
-  openai: string;
-  anthropic: string;
-}
-
-async function fetchApiKeys(): Promise<ApiKeys> {
-  const response = await fetch("/api/api-keys");
-  if (!response.ok) {
-    throw new Error("Failed to fetch API keys");
-  }
-  return response.json();
-}
-
-async function saveApiKey({ provider, key }: { provider: string; key: string }) {
-  const response = await fetch("/api/api-keys", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ provider, key }),
-  });
-  
-  if (!response.ok) {
-    throw new Error("Failed to save API key");
-  }
-  
-  return response.json();
-}
+import {
+  getApiKeys,
+  saveApiKey as saveApiKeyAction,
+  clearApiKey as clearApiKeyAction,
+  type ApiKeyProvider,
+} from "@/lib/actions/api-keys";
 
 export function useApiKeys() {
   return useQuery({
     queryKey: ["api-keys"],
-    queryFn: fetchApiKeys,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    queryFn: getApiKeys,
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }
 
 export function useSaveApiKey() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: saveApiKey,
+    mutationFn: ({
+      provider,
+      key,
+    }: {
+      provider: ApiKeyProvider;
+      key: string;
+    }) => saveApiKeyAction(provider, key),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     },
@@ -51,11 +34,9 @@ export function useSaveApiKey() {
 
 export function useClearApiKey() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async (provider: string) => {
-      return saveApiKey({ provider, key: "" });
-    },
+    mutationFn: (provider: ApiKeyProvider) => clearApiKeyAction(provider),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     },
