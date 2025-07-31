@@ -4,24 +4,56 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useApiKeys, useSaveApiKey, useClearApiKey } from "@/hooks/use-api-keys";
-import { useSettings } from "@/hooks/use-settings";
+import {
+  useApiKeys,
+  useSaveApiKey,
+  useClearApiKey,
+} from "@/hooks/use-api-keys";
 import { useGitHubStatus } from "@/hooks/use-github-status";
 import { useGitHubRepositories } from "@/hooks/use-github-repositories";
-import { Loader2, Settings, X, Eye, EyeOff, User, Cpu, Github, ExternalLink } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import {
+  Loader2,
+  Settings,
+  X,
+  Box,
+  User2,
+  Check,
+  ArrowUpRight,
+} from "lucide-react";
+import React, { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth/auth-client";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { GithubLogo } from "../logo/github-logo";
+import { useAuthSession } from "./session-provider";
+
+const tabs = [
+  {
+    title: "GitHub Connection",
+    sidebarLabel: "GitHub",
+    icon: <GithubLogo className="size-4" />,
+    value: "github",
+  },
+  {
+    title: "Models",
+    sidebarLabel: "Models",
+    icon: <Box className="size-4" />,
+    value: "models",
+  },
+  {
+    title: "User Info",
+    sidebarLabel: "User",
+    icon: <User2 className="size-4" />,
+    value: "user",
+  },
+];
 
 interface SettingsModalProps {
   open?: boolean;
@@ -29,51 +61,33 @@ interface SettingsModalProps {
   defaultTab?: string;
 }
 
-export function SettingsModal({ open, onOpenChange, defaultTab = "user" }: SettingsModalProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const [showOpenAIKey, setShowOpenAIKey] = useState(false);
-  const [showAnthropicKey, setShowAnthropicKey] = useState(false);
-  const [openaiKey, setOpenaiKey] = useState("");
-  const [anthropicKey, setAnthropicKey] = useState("");
+export function SettingsModal({
+  open,
+  onOpenChange,
+  defaultTab = "user",
+}: SettingsModalProps) {
+  const { session, isLoading: isLoadingSession } = useAuthSession();
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const currentTab = tabs.find((tab) => tab.value === activeTab);
 
-  const isOpen = open !== undefined ? open : internalOpen;
-  const setIsOpen = onOpenChange || setInternalOpen;
+  const { data: apiKeys, isLoading: isLoadingApiKeys } = useApiKeys();
 
-  const { data: settingsData, isLoading: isLoadingSettings, error: settingsError } = useSettings(isOpen);
-  const { data: apiKeys, isLoading: isLoadingApiKeys, error: apiKeysError } = useApiKeys();
-  const { data: githubStatus, isLoading: isLoadingGithub } = useGitHubStatus(isOpen);
-  const { data: githubRepos, isLoading: isLoadingRepos } = useGitHubRepositories(
-    isOpen && !!githubStatus?.isAppInstalled
+  const [openaiInput, setOpenaiInput] = useState(apiKeys?.openai ?? "");
+  const [anthropicInput, setAnthropicInput] = useState(
+    apiKeys?.anthropic ?? ""
   );
+
+  useEffect(() => {
+    setOpenaiInput(apiKeys?.openai ?? "");
+    setAnthropicInput(apiKeys?.anthropic ?? "");
+  }, [apiKeys]);
+
+  const { data: githubStatus, isLoading: isLoadingGithub } = useGitHubStatus();
+  const { data: githubRepos, isLoading: isLoadingRepos } =
+    useGitHubRepositories(!!githubStatus?.isAppInstalled);
 
   const saveApiKeyMutation = useSaveApiKey();
   const clearApiKeyMutation = useClearApiKey();
-
-  // Initialize form values when API keys are loaded
-  React.useEffect(() => {
-    if (apiKeys) {
-      setOpenaiKey(apiKeys.openai || "");
-      setAnthropicKey(apiKeys.anthropic || "");
-    }
-  }, [apiKeys]);
-
-  // Listen for custom events to open modal to specific tab
-  React.useEffect(() => {
-    const handleOpenModal = (event: CustomEvent) => {
-      const { tab } = event.detail;
-      if (tab) {
-        setActiveTab(tab);
-      }
-      setIsOpen(true);
-    };
-
-    window.addEventListener('open-settings-modal', handleOpenModal as EventListener);
-    
-    return () => {
-      window.removeEventListener('open-settings-modal', handleOpenModal as EventListener);
-    };
-  }, [setIsOpen]);
 
   const handleSignOut = async () => {
     try {
@@ -90,12 +104,16 @@ export function SettingsModal({ open, onOpenChange, defaultTab = "user" }: Setti
   };
 
   const handleSaveApiKey = async (provider: "openai" | "anthropic") => {
-    const key = provider === "openai" ? openaiKey : anthropicKey;
+    const key = provider === "openai" ? openaiInput : anthropicInput;
     try {
       await saveApiKeyMutation.mutateAsync({ provider, key });
-      toast.success(`${provider === "openai" ? "OpenAI" : "Anthropic"} API key saved successfully`);
-    } catch (error) {
-      toast.error(`Failed to save ${provider === "openai" ? "OpenAI" : "Anthropic"} API key`);
+      toast.success(
+        `${provider === "openai" ? "OpenAI" : "Anthropic"} API key saved successfully`
+      );
+    } catch (_error) {
+      toast.error(
+        `Failed to save ${provider === "openai" ? "OpenAI" : "Anthropic"} API key`
+      );
     }
   };
 
@@ -103,313 +121,256 @@ export function SettingsModal({ open, onOpenChange, defaultTab = "user" }: Setti
     try {
       await clearApiKeyMutation.mutateAsync(provider);
       if (provider === "openai") {
-        setOpenaiKey("");
+        setOpenaiInput("");
       } else {
-        setAnthropicKey("");
+        setAnthropicInput("");
       }
-      toast.success(`${provider === "openai" ? "OpenAI" : "Anthropic"} API key cleared`);
-    } catch (error) {
-      toast.error(`Failed to clear ${provider === "openai" ? "OpenAI" : "Anthropic"} API key`);
+      toast.success(
+        `${provider === "openai" ? "OpenAI" : "Anthropic"} API key cleared`
+      );
+    } catch (_error) {
+      toast.error(
+        `Failed to clear ${provider === "openai" ? "OpenAI" : "Anthropic"} API key`
+      );
     }
   };
 
   const UserInfoTab = () => (
     <div className="space-y-6">
-      {isLoadingSettings ? (
-        <div className="text-muted-foreground flex items-center justify-center gap-1.5 py-12">
-          <Loader2 className="size-3.5 animate-spin" />
-          <span className="text-[13px]">Loading user info...</span>
+      {isLoadingSession ? (
+        <div className="text-muted-foreground flex items-center gap-1">
+          Loading user info... <Loader2 className="size-3.5 animate-spin" />
         </div>
-      ) : settingsError ? (
-        <div className="text-muted-foreground flex items-center justify-center gap-1.5 py-12">
-          <X className="text-destructive size-3.5" />
-          <span className="text-[13px]">Failed to load user info</span>
+      ) : !session?.user ? (
+        <div className="flex items-center gap-1.5 text-red-400">
+          Failed to load user info <X className="size-3.5" />
         </div>
-      ) : settingsData?.user ? (
+      ) : (
         <>
           <div className="flex items-center gap-3">
-            {settingsData.user.image && (
-              <img
-                src={settingsData.user.image}
-                alt={settingsData.user.name || "User"}
-                className="size-16 rounded-full"
+            {session.user.image && (
+              <Image
+                src={session.user.image}
+                alt={session.user.name || "User"}
+                className="rounded-full"
+                width={48}
+                height={48}
               />
             )}
             <div className="flex flex-col">
-              <span className="text-lg font-semibold">{settingsData.user.name}</span>
-              <span className="text-muted-foreground">{settingsData.user.email}</span>
+              <span className="font-medium">{session.user.name}</span>
+              <span className="text-muted-foreground text-sm">
+                {session.user.email}
+              </span>
             </div>
           </div>
-
-          {settingsData.stats && (
-            <div className="grid w-full grid-cols-2 gap-4 border-t pt-4 text-sm">
-              <div className="flex flex-col">
-                <span className="text-muted-foreground">Joined</span>
-                <span>
-                  {settingsData.stats.joinedAt
-                    ? new Date(settingsData.stats.joinedAt).toLocaleDateString()
-                    : "N/A"}
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-muted-foreground">Total Tasks</span>
-                <span>{settingsData.stats.taskCount}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-muted-foreground">Completed</span>
-                <span>{settingsData.stats.completedTasks}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-muted-foreground">Pending</span>
-                <span>{settingsData.stats.pendingTasks}</span>
-              </div>
-            </div>
-          )}
 
           <div className="flex w-full pt-2">
             <Button
               variant="destructive"
               onClick={() => {
                 handleSignOut();
-                setIsOpen(false);
+                onOpenChange?.(false);
               }}
             >
               Sign Out
             </Button>
           </div>
         </>
-      ) : (
-        <p>You are not signed in.</p>
       )}
     </div>
   );
 
   const ModelsTab = () => (
-    <div className="space-y-6">
+    <>
       {isLoadingApiKeys ? (
-        <div className="text-muted-foreground flex items-center justify-center gap-1.5 py-12">
-          <Loader2 className="size-3.5 animate-spin" />
-          <span className="text-[13px]">Loading API keys...</span>
-        </div>
+        <>
+          <div className="text-muted-foreground flex items-center gap-1">
+            Loading... <Loader2 className="size-3.5 animate-spin" />
+          </div>
+        </>
       ) : (
         <>
-          {/* OpenAI Section */}
-          <div className="space-y-3">
-            <Label htmlFor="openai-key" className="text-sm font-medium">
-              OpenAI API Key
-            </Label>
-            <div className="space-y-2">
-              <div className="relative">
+          <div className="flex w-full grow flex-col gap-6">
+            {/* OpenAI Section */}
+            <div className="flex w-full flex-col gap-2">
+              <Label htmlFor="openai-key" className="font-normal">
+                OpenAI API Key
+              </Label>
+              <div className="flex gap-2">
                 <Input
                   id="openai-key"
-                  type={showOpenAIKey ? "text" : "password"}
-                  placeholder="sk-..."
-                  value={openaiKey}
-                  onChange={(e) => setOpenaiKey(e.target.value)}
-                  className="pr-10"
+                  placeholder="sk-placeholder..."
+                  value={openaiInput}
+                  onChange={(e) => setOpenaiInput(e.target.value)}
                 />
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-1 top-1 h-7 w-7 p-0"
-                  onClick={() => setShowOpenAIKey(!showOpenAIKey)}
-                >
-                  {showOpenAIKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                </Button>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
                   onClick={() => handleSaveApiKey("openai")}
-                  disabled={saveApiKeyMutation.isPending}
+                  size="icon"
+                  disabled={saveApiKeyMutation.isPending || !openaiInput}
                 >
                   {saveApiKeyMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    "Save"
+                    <Check className="size-4" />
                   )}
                 </Button>
                 {apiKeys?.openai && (
                   <Button
-                    size="sm"
-                    variant="outline"
+                    variant="secondary"
+                    size="icon"
                     onClick={() => handleClearApiKey("openai")}
                     disabled={clearApiKeyMutation.isPending}
                   >
-                    Clear
+                    <X className="size-4" />
                   </Button>
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Anthropic Section */}
-          <div className="space-y-3">
-            <Label htmlFor="anthropic-key" className="text-sm font-medium">
-              Anthropic API Key
-            </Label>
-            <div className="space-y-2">
-              <div className="relative">
+            {/* Anthropic Section */}
+            <div className="flex w-full flex-col gap-2">
+              <Label htmlFor="anthropic-key" className="font-normal">
+                Anthropic API Key
+              </Label>
+              <div className="flex gap-2">
                 <Input
                   id="anthropic-key"
-                  type={showAnthropicKey ? "text" : "password"}
-                  placeholder="sk-ant-..."
-                  value={anthropicKey}
-                  onChange={(e) => setAnthropicKey(e.target.value)}
-                  className="pr-10"
+                  placeholder="sk-ant-placeholder..."
+                  value={anthropicInput}
+                  onChange={(e) => setAnthropicInput(e.target.value)}
                 />
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-1 top-1 h-7 w-7 p-0"
-                  onClick={() => setShowAnthropicKey(!showAnthropicKey)}
-                >
-                  {showAnthropicKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                </Button>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
                   onClick={() => handleSaveApiKey("anthropic")}
-                  disabled={saveApiKeyMutation.isPending}
+                  size="icon"
+                  disabled={saveApiKeyMutation.isPending || !anthropicInput}
                 >
                   {saveApiKeyMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    "Save"
+                    <Check className="size-4" />
                   )}
                 </Button>
                 {apiKeys?.anthropic && (
                   <Button
-                    size="sm"
-                    variant="outline"
+                    variant="secondary"
+                    size="icon"
                     onClick={() => handleClearApiKey("anthropic")}
                     disabled={clearApiKeyMutation.isPending}
                   >
-                    Clear
+                    <X className="size-4" />
                   </Button>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="text-muted-foreground text-xs space-y-1 border-t pt-4">
-            <p>• API keys are stored securely in your browser cookies</p>
-            <p>• Keys are required to use OpenAI or Anthropic models</p>
-            <p>• Keys are only sent to the respective provider APIs</p>
+          <div className="text-muted-foreground flex w-full flex-col gap-1 border-t pt-4 text-xs">
+            <span>
+              Shadow is BYOK; you must provide an API key to use models.
+            </span>
+            <span>
+              Keys are stored securely in browser cookies and never stored
+              remotely.
+            </span>
+            <span>
+              Please ensure your keys have high enough rate limits for the
+              agent!
+            </span>
           </div>
         </>
       )}
-    </div>
+    </>
   );
 
   const GitHubTab = () => (
-    <div className="space-y-6">
+    <>
       {isLoadingGithub ? (
-        <div className="text-muted-foreground flex items-center justify-center gap-1.5 py-12">
-          <Loader2 className="size-3.5 animate-spin" />
-          <span className="text-[13px]">Loading GitHub status...</span>
-        </div>
-      ) : !githubStatus || !githubStatus.isAppInstalled ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Image
-              src="/github.svg"
-              alt="GitHub"
-              className="size-5"
-              width={20}
-              height={20}
-            />
-            <h3 className="font-medium">Connect GitHub</h3>
+        <>
+          <div className="text-muted-foreground flex items-center gap-1">
+            Loading... <Loader2 className="size-3.5 animate-spin" />
           </div>
-          <p className="text-muted-foreground text-sm">
-            Install Shadow into your GitHub organization for full access to repositories.
-          </p>
-          {githubStatus?.installationUrl && (
-            <Button
-              onClick={() => {
-                window.open(githubStatus.installationUrl, "_blank");
-              }}
-              className="w-full"
-            >
-              Install GitHub App
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Image
-                src="/github.svg"
-                alt="GitHub"
-                className="size-5"
-                width={20}
-                height={20}
-              />
-              <h3 className="font-medium">GitHub Connected</h3>
+        </>
+      ) : githubStatus?.isAppInstalled ? (
+        <>
+          <div className="flex flex-col gap-3">
+            <div className="text-muted-foreground flex items-center gap-1.5">
+              Connected <Check className="size-3.5 text-green-400" />
             </div>
-            <div className="text-green-600 text-sm">✓ Connected</div>
+            <Button className="w-auto" variant="secondary" asChild>
+              <Link
+                href={`https://github.com/settings/installations/${githubStatus?.installationId}`}
+                target="_blank"
+                className="font-normal"
+              >
+                Manage on GitHub <ArrowUpRight />
+              </Link>
+            </Button>
           </div>
-          
           {isLoadingRepos ? (
-            <div className="text-muted-foreground flex items-center justify-center gap-1.5 py-8">
+            <div className="text-muted-foreground flex items-center gap-1">
+              Loading Repositories...{" "}
               <Loader2 className="size-3.5 animate-spin" />
-              <span className="text-[13px]">Loading repositories...</span>
             </div>
           ) : githubRepos?.groups ? (
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium">Your Repositories</h4>
-              <div className="max-h-48 overflow-y-auto space-y-2">
-                {githubRepos.groups.slice(0, 2).map((group) =>
-                  group.repositories.slice(0, 5).map((repo) => (
-                    <div
-                      key={repo.id}
-                      className="flex items-center justify-between p-2 border rounded hover:bg-accent"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{repo.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{repo.full_name}</p>
-                      </div>
+            <div className="flex w-full flex-col gap-3">
+              <div className="text-muted-foreground">Your Repositories</div>
+              <div className="flex w-full flex-col gap-2">
+                {githubRepos.groups.map((group) => (
+                  <>
+                    {group.repositories.slice(0, 10).map((repo) => (
                       <Button
-                        size="sm"
-                        variant="ghost"
-                        asChild
-                        className="ml-2"
+                        key={repo.id}
+                        variant="secondary"
+                        className="w-full justify-between overflow-hidden"
                       >
-                        <Link
-                          href={`https://github.com/${repo.full_name}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </Link>
+                        <span className="truncate font-normal">
+                          {repo.full_name}
+                        </span>
+                        <ArrowUpRight />
                       </Button>
-                    </div>
-                  ))
-                )}
+                    ))}
+                    {group.repositories.length > 10 && (
+                      <div className="text-muted-foreground px-3 text-xs">
+                        + {group.repositories.length - 10} more
+                      </div>
+                    )}
+                  </>
+                ))}
               </div>
             </div>
           ) : null}
-
-          <Link
-            href={`https://github.com/settings/installations/${githubStatus?.installationId}`}
-            target="_blank"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <Image src="/github.svg" alt="GitHub" width={16} height={16} />
-            <span>Manage GitHub Connection</span>
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-1.5 text-red-400">
+              Not Connected <X className="size-3.5" />
+            </div>
+            <div className="text-muted-foreground">
+              For full access, install Shadow into your organization. If
+              you&apos;re seeing this and already installed, hit
+              &apos;Save&apos; in Github.
+            </div>
+          </div>
+          {githubStatus?.installationUrl && (
+            <Button className="w-auto" variant="secondary" asChild>
+              <Link
+                href={githubStatus?.installationUrl}
+                target="_blank"
+                className="font-normal"
+              >
+                Install Github App <ArrowUpRight />
+              </Link>
+            </Button>
+          )}
+        </>
       )}
-    </div>
+    </>
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button
           size="iconSm"
@@ -419,52 +380,52 @@ export function SettingsModal({ open, onOpenChange, defaultTab = "user" }: Setti
           <Settings />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl! h-full max-h-[500px] overflow-hidden p-0">
+        <div className="flex max-h-full overflow-hidden">
+          {/* Left sidebar */}
+          <div className="bg-card w-40 shrink-0 border-r px-2 py-4">
+            <DialogTitle className="mb-4 px-2 text-base font-medium">
+              Settings
+            </DialogTitle>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="user" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              User Info
-            </TabsTrigger>
-            <TabsTrigger value="models" className="flex items-center gap-2">
-              <Cpu className="h-4 w-4" />
-              Models
-            </TabsTrigger>
-            <TabsTrigger value="github" className="flex items-center gap-2">
-              <Github className="h-4 w-4" />
-              GitHub
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="user" className="mt-6">
-            <UserInfoTab />
-          </TabsContent>
-          
-          <TabsContent value="models" className="mt-6">
-            <ModelsTab />
-          </TabsContent>
-          
-          <TabsContent value="github" className="mt-6">
-            <GitHubTab />
-          </TabsContent>
-        </Tabs>
+            <div className="flex flex-col gap-1">
+              {tabs.map((tab) => (
+                <Button
+                  key={tab.value}
+                  variant="ghost"
+                  className={cn(
+                    "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent px-2! w-full justify-start border border-transparent font-normal",
+                    activeTab === tab.value &&
+                      "bg-accent text-foreground border-sidebar-border"
+                  )}
+                  onClick={() => setActiveTab(tab.value)}
+                >
+                  {tab.icon}
+                  {tab.sidebarLabel}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right content area */}
+          <div className="flex grow flex-col gap-6">
+            <div className="p-4 pb-0 font-medium">{currentTab?.title}</div>
+
+            <div className="flex w-full grow flex-col items-start gap-6 overflow-y-auto p-4 pt-0 text-sm">
+              {activeTab === "user" && <UserInfoTab />}
+              {activeTab === "models" && <ModelsTab />}
+              {activeTab === "github" && <GitHubTab />}
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-// Create a wrapper that allows opening with a specific tab
-export function SettingsDialog() {
-  return <SettingsModal />;
-}
-
 // Export a version that can be controlled externally
 export function openSettingsModal(tab?: string) {
   // This will be used by the model selector to open the modal to the models tab
-  const event = new CustomEvent('open-settings-modal', { detail: { tab } });
+  const event = new CustomEvent("open-settings-modal", { detail: { tab } });
   window.dispatchEvent(event);
 }

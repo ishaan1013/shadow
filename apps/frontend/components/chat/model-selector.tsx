@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Layers, Square } from "lucide-react";
+import { Key, Layers, Square } from "lucide-react";
 import { useModels } from "@/hooks/use-models";
 import { useApiKeys } from "@/hooks/use-api-keys";
 
@@ -82,39 +82,51 @@ export function ModelSelector({
         align="start"
         className="flex flex-col gap-0.5 rounded-lg p-1"
       >
-        {filteredModels.length > 0 ? (
-          filteredModels.map((model) => (
-            <Button
-              key={model.id}
-              size="sm"
-              variant="ghost"
-              className="hover:bg-accent justify-start font-normal"
-              onClick={() => handleSelectModel(model.id as ModelType)}
-            >
-              <Square className="size-4" />
-              {model.name}
-            </Button>
-          ))
-        ) : (
-          <div className="p-2 text-center">
-            <p className="text-muted-foreground mb-2 text-sm">
-              No models available. Configure your API keys to access models.
-            </p>
-            <Button
-              size="sm"
-              onClick={() => {
-                setIsModelSelectorOpen(false);
-                // Open settings modal to models tab
-                const event = new CustomEvent("open-settings-modal", {
-                  detail: { tab: "models" },
-                });
-                window.dispatchEvent(event);
-              }}
-            >
-              Configure API Keys
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-col gap-0.5 rounded-lg p-1">
+          {filteredModels.length > 0 ? (
+            filteredModels.map((model) => (
+              <Button
+                key={model.id}
+                size="sm"
+                variant="ghost"
+                className="hover:bg-accent justify-start font-normal"
+                onClick={() => handleSelectModel(model.id as ModelType)}
+              >
+                <Square className="size-4" />
+                {model.name}
+              </Button>
+            ))
+          ) : (
+            <div className="p-2 text-center">
+              <p className="text-muted-foreground mb-2 text-sm">
+                No models available. Configure your API keys to access models.
+              </p>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setIsModelSelectorOpen(false);
+                  // Open settings modal to models tab
+                  const event = new CustomEvent("open-settings-modal", {
+                    detail: { tab: "models" },
+                  });
+                  window.dispatchEvent(event);
+                }}
+              >
+                Configure API Keys
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="p-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="hover:bg-accent justify-start font-normal"
+          >
+            <Key className="size-4" />
+            Manage API Keys
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );

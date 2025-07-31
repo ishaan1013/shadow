@@ -31,6 +31,7 @@ import type { FilteredRepository as Repository } from "@/lib/github/types";
 import Image from "next/image";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { GithubLogo } from "../logo/github-logo";
 
 export function GithubConnection({
   isOpen,
@@ -325,7 +326,7 @@ export function GithubConnection({
         target="_blank"
         className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-2 text-sm transition-colors"
       >
-        <Image src="/github.svg" alt="GitHub" width={16} height={16} />
+        <GithubLogo className="size-4" />
         <span>Manage Github</span>
       </Link>
     </div>
@@ -378,7 +379,7 @@ export function GithubConnection({
         target="_blank"
         className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-2 text-sm transition-colors"
       >
-        <Image src="/github.svg" alt="GitHub" width={16} height={16} />
+        <GithubLogo className="size-4" />
         <span>Manage Github</span>
       </Link>
     </div>

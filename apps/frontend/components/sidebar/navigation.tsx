@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { BookOpenText, FileCode, LayoutGrid, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { SidebarView } from ".";
-import { SettingsDialog } from "../auth/settings-modal";
+import { SettingsModal } from "../auth/settings-modal";
 import { UserMenu } from "../auth/user-menu";
 import { Button } from "../ui/button";
 import { useSidebar } from "../ui/sidebar";
@@ -185,7 +185,7 @@ export function SidebarNavigation({
       <div className="flex flex-col gap-4">
         <Tooltip>
           <TooltipTrigger asChild>
-            <SettingsDialog />
+            <SettingsModal />
           </TooltipTrigger>
           <TooltipContent side="right">Settings</TooltipContent>
         </Tooltip>
