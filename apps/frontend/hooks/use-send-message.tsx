@@ -16,7 +16,7 @@ export function useSendMessage() {
       // The actual sending happens through socket.emit in the component
       return { taskId, message, model };
     },
-    onMutate: async ({ taskId, message }) => {
+    onMutate: async ({ taskId, message, model }) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["task-messages", taskId] });
 
@@ -31,6 +31,7 @@ export function useSendMessage() {
         id: `temp-${Date.now()}`,
         role: "user",
         content: message.trim(),
+        llmModel: model,
         createdAt: new Date().toISOString(),
         metadata: { isStreaming: false },
       };
