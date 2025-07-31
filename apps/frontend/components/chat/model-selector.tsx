@@ -12,7 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Key, Layers, Square } from "lucide-react";
+import { Box, Layers, Square } from "lucide-react";
 import { useModels } from "@/hooks/use-models";
 import { useApiKeys } from "@/hooks/use-api-keys";
 
@@ -105,14 +105,14 @@ export function ModelSelector({
             </div>
           )}
         </div>
-        <button 
+        <button
           className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-3 text-sm transition-colors"
           onClick={() => {
             setIsModelSelectorOpen(false);
-            openSettingsModal('models');
+            openSettingsModal("models");
           }}
         >
-          <Key className="size-4" />
+          <Box className="size-4" />
           <span>Manage API Keys</span>
         </button>
       </PopoverContent>

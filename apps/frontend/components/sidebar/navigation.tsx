@@ -1,5 +1,12 @@
 import { cn } from "@/lib/utils";
-import { BookOpenText, FileCode, LayoutGrid, Play, Plus, Settings } from "lucide-react";
+import {
+  BookOpenText,
+  FileCode,
+  LayoutGrid,
+  Play,
+  Plus,
+  Settings,
+} from "lucide-react";
 import Link from "next/link";
 import { SidebarView } from ".";
 import { useModal } from "../layout/modal-context";
@@ -195,7 +202,9 @@ export function SidebarNavigation({
               <Settings />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Settings</TooltipContent>
+          <TooltipContent side="right" shortcut="⌘K">
+            Settings
+          </TooltipContent>
         </Tooltip>
         <UserMenu />
       </div>

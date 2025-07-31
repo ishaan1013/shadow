@@ -1,14 +1,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useModal } from "@/components/layout/modal-context";
 import { Box, User2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
 import { GithubLogo } from "../../logo/github-logo";
 import { UserSettings } from "./user-settings";
 import { ModelSettings } from "./model-settings";
@@ -41,10 +38,23 @@ export function SettingsModal() {
     settingsModalTab,
     closeSettingsModal,
     setSettingsModalTab,
+    openSettingsModal,
   } = useModal();
 
   const activeTab = settingsModalTab;
   const currentTab = tabs.find((tab) => tab.value === activeTab);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        openSettingsModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [openSettingsModal]);
 
   const renderTabContent = () => {
     switch (activeTab) {

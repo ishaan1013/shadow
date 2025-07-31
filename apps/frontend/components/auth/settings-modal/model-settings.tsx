@@ -102,9 +102,6 @@ export function ModelSettings() {
         cancelAnthropicSave();
         setSavingAnthropic(false);
       }
-      toast.success(
-        `${provider === "openai" ? "OpenAI" : "Anthropic"} API key cleared`
-      );
     } catch (_error) {
       toast.error(
         `Failed to clear ${provider === "openai" ? "OpenAI" : "Anthropic"} API key`
@@ -124,15 +121,16 @@ export function ModelSettings() {
     <>
       <div className="flex w-full grow flex-col gap-6">
         {/* OpenAI Section */}
-        <div className="flex w-full flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="openai-key" className="font-normal">
-              OpenAI API Key
-            </Label>
+        <div className="flex w-full flex-col gap-2">
+          <Label
+            htmlFor="openai-key"
+            className="flex h-5 items-center font-normal"
+          >
+            OpenAI API Key
             {savingOpenai && (
               <Loader2 className="text-muted-foreground size-3 animate-spin" />
             )}
-          </div>
+          </Label>
           <div className="flex gap-2">
             <Input
               id="openai-key"
@@ -162,15 +160,16 @@ export function ModelSettings() {
         </div>
 
         {/* Anthropic Section */}
-        <div className="flex w-full flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="anthropic-key" className="font-normal">
-              Anthropic API Key
-            </Label>
+        <div className="flex w-full flex-col gap-2">
+          <Label
+            htmlFor="anthropic-key"
+            className="flex h-5 items-center font-normal"
+          >
+            Anthropic API Key
             {savingAnthropic && (
               <Loader2 className="text-muted-foreground size-3 animate-spin" />
             )}
-          </div>
+          </Label>
           <div className="flex gap-2">
             <Input
               id="anthropic-key"

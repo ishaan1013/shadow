@@ -23,7 +23,7 @@ export function GitHubSettings() {
     return (
       <>
         <div className="flex flex-col gap-3">
-          <div className="text-muted-foreground flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             Connected <Check className="size-3.5 text-green-400" />
           </div>
           <Button className="w-auto" asChild>
@@ -43,7 +43,7 @@ export function GitHubSettings() {
           </div>
         ) : githubRepos?.groups ? (
           <div className="flex w-full flex-col gap-3">
-            <div className="text-muted-foreground">Your Repositories</div>
+            <div>Your Repositories</div>
             <div className="flex w-full flex-col gap-2">
               {githubRepos.groups.map((group) => (
                 <>
