@@ -4,6 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useApiKeys,
   useSaveApiKey,
   useClearApiKey,
@@ -12,11 +17,17 @@ import { Loader2, Trash } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useDebounceCallbackWithCancel } from "@/lib/debounce";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function ModelSettings() {
   const { data: apiKeys, isLoading: isLoadingApiKeys } = useApiKeys();
   const saveApiKeyMutation = useSaveApiKey();
   const clearApiKeyMutation = useClearApiKey();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    console.log("apiKeys", apiKeys);
+  }, [apiKeys]);
 
   const [openaiInput, setOpenaiInput] = useState(apiKeys?.openai ?? "");
   const [anthropicInput, setAnthropicInput] = useState(
@@ -31,10 +42,10 @@ export function ModelSettings() {
   }, [apiKeys]);
 
   const saveApiKey = async (provider: "openai" | "anthropic", key: string) => {
-    // Only save if key is not empty and different from current saved value
+    // Only save if key is different from current saved value
     const currentKey =
       provider === "openai" ? apiKeys?.openai : apiKeys?.anthropic;
-    if (!key || key === currentKey) {
+    if (key === currentKey) {
       if (provider === "openai") setSavingOpenai(false);
       else setSavingAnthropic(false);
       return;
@@ -42,7 +53,7 @@ export function ModelSettings() {
 
     try {
       await saveApiKeyMutation.mutateAsync({ provider, key });
-      // No success toast for autosave - too noisy
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     } catch (_error) {
       toast.error(
         `Failed to save ${provider === "openai" ? "OpenAI" : "Anthropic"} API key`
@@ -129,16 +140,23 @@ export function ModelSettings() {
               value={openaiInput}
               onChange={(e) => handleOpenaiChange(e.target.value)}
             />
-            {apiKeys?.openai && (
-              <Button
-                variant="secondary"
-                className="text-muted-foreground hover:text-foreground"
-                size="icon"
-                onClick={() => handleClearApiKey("openai")}
-                disabled={clearApiKeyMutation.isPending}
-              >
-                <Trash className="size-4" />
-              </Button>
+            {apiKeys?.openai && apiKeys.openai.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    className="text-muted-foreground hover:text-foreground"
+                    size="icon"
+                    onClick={() => handleClearApiKey("openai")}
+                    disabled={clearApiKeyMutation.isPending}
+                  >
+                    <Trash className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="end">
+                  Clear OpenAI API key
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -160,16 +178,23 @@ export function ModelSettings() {
               value={anthropicInput}
               onChange={(e) => handleAnthropicChange(e.target.value)}
             />
-            {apiKeys?.anthropic && (
-              <Button
-                variant="secondary"
-                className="text-muted-foreground hover:text-foreground"
-                size="icon"
-                onClick={() => handleClearApiKey("anthropic")}
-                disabled={clearApiKeyMutation.isPending}
-              >
-                <Trash className="size-4" />
-              </Button>
+            {apiKeys?.anthropic && apiKeys.anthropic.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    className="text-muted-foreground hover:text-foreground"
+                    size="icon"
+                    onClick={() => handleClearApiKey("anthropic")}
+                    disabled={clearApiKeyMutation.isPending}
+                  >
+                    <Trash className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="end">
+                  Clear Anthropic API key
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>

@@ -26,7 +26,7 @@ export function GitHubSettings() {
           <div className="text-muted-foreground flex items-center gap-1.5">
             Connected <Check className="size-3.5 text-green-400" />
           </div>
-          <Button className="w-auto" variant="secondary" asChild>
+          <Button className="w-auto" asChild>
             <Link
               href={`https://github.com/settings/installations/${githubStatus?.installationId}`}
               target="_blank"
@@ -80,9 +80,8 @@ export function GitHubSettings() {
           Not Connected <X className="size-3.5" />
         </div>
         <div className="text-muted-foreground">
-          For full access, install Shadow into your organization. If
-          you&apos;re seeing this and already installed, hit
-          &apos;Save&apos; in Github.
+          For full access, install Shadow into your organization. If you&apos;re
+          seeing this and already installed, hit &apos;Save&apos; in Github.
         </div>
       </div>
       {githubStatus?.installationUrl && (
