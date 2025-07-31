@@ -16,6 +16,7 @@ import {
 } from "@/hooks/use-api-keys";
 import { useGitHubStatus } from "@/hooks/use-github-status";
 import { useGitHubRepositories } from "@/hooks/use-github-repositories";
+import { useModal } from "@/components/layout/modal-context";
 import {
   Loader2,
   Settings,
@@ -55,19 +56,16 @@ const tabs = [
   },
 ];
 
-interface SettingsModalProps {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  defaultTab?: string;
-}
-
-export function SettingsModal({
-  open,
-  onOpenChange,
-  defaultTab = "user",
-}: SettingsModalProps) {
+export function SettingsModal() {
   const { session, isLoading: isLoadingSession } = useAuthSession();
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  const {
+    isSettingsModalOpen,
+    settingsModalTab,
+    closeSettingsModal,
+    setSettingsModalTab,
+  } = useModal();
+
+  const activeTab = settingsModalTab;
   const currentTab = tabs.find((tab) => tab.value === activeTab);
 
   const { data: apiKeys, isLoading: isLoadingApiKeys } = useApiKeys();
@@ -170,7 +168,7 @@ export function SettingsModal({
               variant="destructive"
               onClick={() => {
                 handleSignOut();
-                onOpenChange?.(false);
+                closeSettingsModal();
               }}
             >
               Sign Out
@@ -370,16 +368,7 @@ export function SettingsModal({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button
-          size="iconSm"
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-        >
-          <Settings />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isSettingsModalOpen} onOpenChange={closeSettingsModal}>
       <DialogContent className="max-w-2xl! h-full max-h-[500px] overflow-hidden p-0">
         <div className="flex max-h-full overflow-hidden">
           {/* Left sidebar */}
@@ -398,7 +387,11 @@ export function SettingsModal({
                     activeTab === tab.value &&
                       "bg-accent text-foreground border-sidebar-border"
                   )}
-                  onClick={() => setActiveTab(tab.value)}
+                  onClick={() =>
+                    setSettingsModalTab(
+                      tab.value as "user" | "models" | "github"
+                    )
+                  }
                 >
                   {tab.icon}
                   {tab.sidebarLabel}

@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
-import { BookOpenText, FileCode, LayoutGrid, Play, Plus } from "lucide-react";
+import { BookOpenText, FileCode, LayoutGrid, Play, Plus, Settings } from "lucide-react";
 import Link from "next/link";
 import { SidebarView } from ".";
-import { SettingsModal } from "../auth/settings-modal";
+import { useModal } from "../layout/modal-context";
 import { UserMenu } from "../auth/user-menu";
 import { Button } from "../ui/button";
 import { useSidebar } from "../ui/sidebar";
@@ -26,6 +26,7 @@ export function SidebarNavigation({
 }) {
   const { open, toggleSidebar } = useSidebar();
   const { task } = useTask(currentTaskId ?? "");
+  const { openSettingsModal } = useModal();
 
   const currentTaskStatus = task?.status;
 
@@ -185,7 +186,14 @@ export function SidebarNavigation({
       <div className="flex flex-col gap-4">
         <Tooltip>
           <TooltipTrigger asChild>
-            <SettingsModal />
+            <Button
+              size="iconSm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+              onClick={() => openSettingsModal()}
+            >
+              <Settings />
+            </Button>
           </TooltipTrigger>
           <TooltipContent side="right">Settings</TooltipContent>
         </Tooltip>

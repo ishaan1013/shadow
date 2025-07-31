@@ -1,7 +1,9 @@
 import { SessionProvider } from "@/components/auth/session-provider";
+import { ModalProvider } from "@/components/layout/modal-context";
 import { QueryClientProvider } from "@/components/layout/query-client-provider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { SettingsModal } from "@/components/auth/settings-modal";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
@@ -65,12 +67,15 @@ export default async function RootLayout({
             disableTransitionOnChange
           >
             <SessionProvider>
-              {/* SidebarProvider also provides a TooltipProvider inside */}
-              <SidebarProvider defaultOpen={defaultOpen}>
-                {/* Don't render the sidebar here; we have individual layouts for route groups to render different variants of the sidebar */}
-                {children}
-                <Toaster />
-              </SidebarProvider>
+              <ModalProvider>
+                {/* SidebarProvider also provides a TooltipProvider inside */}
+                <SidebarProvider defaultOpen={defaultOpen}>
+                  {/* Don't render the sidebar here; we have individual layouts for route groups to render different variants of the sidebar */}
+                  {children}
+                  <SettingsModal />
+                  <Toaster />
+                </SidebarProvider>
+              </ModalProvider>
             </SessionProvider>
           </ThemeProvider>
         </QueryClientProvider>

@@ -1,5 +1,6 @@
 import { ModelInfos, ModelType, getModelProvider } from "@repo/types";
 import { useEffect, useState } from "react";
+import { useModal } from "@/components/layout/modal-context";
 import {
   Popover,
   PopoverContent,
@@ -25,6 +26,7 @@ export function ModelSelector({
   handleSelectModel: (model: ModelType) => void;
 }) {
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
+  const { openSettingsModal } = useModal();
 
   const { data: availableModels = [] } = useModels();
   const { data: apiKeys } = useApiKeys();
@@ -83,7 +85,7 @@ export function ModelSelector({
         className="flex flex-col gap-0.5 overflow-hidden rounded-lg p-0"
       >
         <div className="flex flex-col gap-0.5 rounded-lg p-1.5">
-          {filteredModels.length < 0 ? (
+          {filteredModels.length > 0 ? (
             filteredModels.map((model) => (
               <Button
                 key={model.id}
@@ -103,7 +105,13 @@ export function ModelSelector({
             </div>
           )}
         </div>
-        <button className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-3 text-sm transition-colors">
+        <button 
+          className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-3 text-sm transition-colors"
+          onClick={() => {
+            setIsModelSelectorOpen(false);
+            openSettingsModal('models');
+          }}
+        >
           <Key className="size-4" />
           <span>Manage API Keys</span>
         </button>
