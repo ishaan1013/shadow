@@ -31,9 +31,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native dependencies
-        run: npm rebuild
-
       - name: Install Turbo globally
         run: npm install -g turbo
 
