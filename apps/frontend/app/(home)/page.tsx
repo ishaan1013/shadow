@@ -7,7 +7,9 @@ import {
 } from "@/lib/github/github-api";
 import { getModels } from "@/lib/actions/get-models";
 import { getGitSelectorCookie } from "@/lib/actions/git-selector-cookie";
+import { getModelSelectorCookie } from "@/lib/actions/model-selector-cookie";
 import { getApiKeys } from "@/lib/actions/api-keys";
+import { getModelProvider, AvailableModels } from "@repo/types";
 import type { GitHubStatus } from "@/lib/github/types";
 import {
   dehydrate,
@@ -20,6 +22,8 @@ export default async function Home() {
   const user = await getUser();
   const queryClient = new QueryClient();
   const initialGitCookieState = await getGitSelectorCookie();
+  const savedModel = await getModelSelectorCookie();
+  const apiKeys = await getApiKeys();
 
   const prefetchPromises = [
     queryClient
@@ -72,6 +76,33 @@ export default async function Home() {
   const shouldDeleteGitCookie =
     !!initialGitCookieState && !!githubStatus && !githubStatus.isAppInstalled;
 
+  // Validate saved model against available API keys
+  let initialSelectedModel = savedModel;
+  if (savedModel) {
+    try {
+      // Check if the saved model is valid (exists in AvailableModels)
+      const isValidModel = Object.values(AvailableModels).includes(savedModel);
+      
+      if (isValidModel) {
+        // Check if the model's provider has a valid API key
+        const provider = getModelProvider(savedModel);
+        const hasValidKey = provider === "openai" 
+          ? !!apiKeys.openai && apiKeys.openai.length > 0
+          : !!apiKeys.anthropic && apiKeys.anthropic.length > 0;
+        
+        if (!hasValidKey) {
+          initialSelectedModel = null;
+        }
+      } else {
+        // Invalid model, clear it
+        initialSelectedModel = null;
+      }
+    } catch (error) {
+      // Error validating model, clear it
+      initialSelectedModel = null;
+    }
+  }
+
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
       <HomeLayoutWrapper>
@@ -79,6 +110,7 @@ export default async function Home() {
           initialGitCookieState={
             shouldDeleteGitCookie ? null : initialGitCookieState
           }
+          initialSelectedModel={initialSelectedModel}
         />
         {/* There's no way to delete cookies from a server component so pass down to client component */}
         <GitCookieDestroyer shouldDeleteGitCookie={shouldDeleteGitCookie} />

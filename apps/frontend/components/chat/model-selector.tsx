@@ -22,8 +22,8 @@ export function ModelSelector({
   handleSelectModel,
 }: {
   isHome?: boolean;
-  selectedModel: ModelType;
-  handleSelectModel: (model: ModelType) => void;
+  selectedModel: ModelType | null;
+  handleSelectModel: (model: ModelType | null) => void;
 }) {
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const { openSettingsModal } = useModal();
@@ -69,7 +69,7 @@ export function ModelSelector({
               <span>
                 {selectedModel
                   ? ModelInfos[selectedModel].name
-                  : "Select model"}
+                  : "No Model Selected"}
               </span>
             </Button>
           </PopoverTrigger>

@@ -41,6 +41,12 @@ export function UserMessage({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [selectedModel, setSelectedModel] = useState<ModelType>(initialModel);
 
+  const handleSelectModel = useCallback((model: ModelType | null) => {
+    if (model) {
+      setSelectedModel(model);
+    }
+  }, []);
+
   const handleStartEditing = () => {
     if (!isEditing) {
       queryClient.setQueryData(["edit-message-id", taskId], message.id);
@@ -141,7 +147,7 @@ export function UserMessage({
             >
               <ModelSelector
                 selectedModel={selectedModel}
-                handleSelectModel={setSelectedModel}
+                handleSelectModel={handleSelectModel}
               />
 
               <div className="flex items-center gap-2">

@@ -4,14 +4,17 @@ import { useState } from "react";
 import { LogoHover } from "../logo/logo-hover";
 import { PromptForm } from "./prompt-form";
 import type { FilteredRepository } from "@/lib/github/types";
+import type { ModelType } from "@repo/types";
 
 export function HomePageContent({
   initialGitCookieState,
+  initialSelectedModel,
 }: {
   initialGitCookieState?: {
     repo: FilteredRepository | null;
     branch: { name: string; commitSha: string } | null;
   } | null;
+  initialSelectedModel?: ModelType | null;
 }) {
   const [isFocused, setIsFocused] = useState(true);
 
@@ -29,6 +32,7 @@ export function HomePageContent({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         initialGitCookieState={initialGitCookieState}
+        initialSelectedModel={initialSelectedModel}
       />
     </div>
   );
