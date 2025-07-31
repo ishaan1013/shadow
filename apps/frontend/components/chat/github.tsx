@@ -261,17 +261,17 @@ export function GithubConnection({
   const renderRepos = (
     <div>
       <div className="relative border-b">
-        <Search className="text-muted-foreground absolute left-2 top-1/2 size-3.5 -translate-y-1/2 transform" />
+        <Search className="text-muted-foreground absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 transform" />
         <input
           placeholder="Search repositories..."
           value={repoSearch}
           autoFocus
           onChange={(e) => setRepoSearch(e.target.value)}
-          className="h-9 w-full pl-7 pr-3 text-sm focus:outline-none"
+          className="h-9 w-full pl-8 pr-3 text-sm focus:outline-none"
         />
       </div>
 
-      <div className="flex h-64 flex-col gap-2 overflow-y-auto py-2">
+      <div className="flex h-64 flex-col gap-2 overflow-y-auto py-2 pb-6">
         {isLoadingRepos ? (
           <div className="text-muted-foreground mt-1 flex h-7 items-center justify-center gap-1.5">
             <Loader2 className="size-3.5 animate-spin" />
@@ -321,21 +321,16 @@ export function GithubConnection({
           ))
         )}
       </div>
-      <Link
-        href={`https://github.com/settings/installations/${githubStatus?.installationId}`}
-        target="_blank"
-        className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-2 text-sm transition-colors"
-      >
-        <GithubLogo className="size-4" />
-        <span>Manage Github</span>
-      </Link>
+      <ManageGithubButton
+        link={`https://github.com/settings/installations/${githubStatus?.installationId}`}
+      />
     </div>
   );
 
   const renderBranches = (
     <div>
       <button
-        className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-b px-2 text-sm transition-colors"
+        className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-b px-2.5 text-sm transition-colors"
         onClick={handleBackToRepos}
       >
         <ArrowLeft className="size-3.5" />
@@ -343,17 +338,17 @@ export function GithubConnection({
       </button>
 
       <div className="relative border-b">
-        <Search className="text-muted-foreground absolute left-2 top-1/2 size-3.5 -translate-y-1/2 transform" />
+        <Search className="text-muted-foreground absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 transform" />
         <input
           placeholder="Search branches..."
           value={branchSearch}
           autoFocus
           onChange={(e) => setBranchSearch(e.target.value)}
-          className="h-9 w-full pl-7 pr-3 text-sm focus:outline-none"
+          className="h-9 w-full pl-8 pr-3 text-sm focus:outline-none"
         />
       </div>
 
-      <div className="flex h-64 flex-col gap-1 overflow-y-auto p-2">
+      <div className="flex h-64 flex-col gap-1 overflow-y-auto p-2 pb-6">
         {isLoadingBranches ? (
           <div className="text-muted-foreground mt-1 flex h-7 items-center justify-center gap-1.5">
             <Loader2 className="size-3.5 animate-spin" />
@@ -374,14 +369,9 @@ export function GithubConnection({
         )}
       </div>
 
-      <Link
-        href={`https://github.com/settings/installations/${githubStatus?.installationId}`}
-        target="_blank"
-        className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-2 text-sm transition-colors"
-      >
-        <GithubLogo className="size-4" />
-        <span>Manage Github</span>
-      </Link>
+      <ManageGithubButton
+        link={`https://github.com/settings/installations/${githubStatus?.installationId}`}
+      />
     </div>
   );
 
@@ -407,7 +397,7 @@ export function GithubConnection({
       </Tooltip>
 
       <PopoverContent
-        className="w-80 p-0"
+        className="w-80 overflow-hidden p-0"
         align="end"
         onClick={(e) => {
           e.preventDefault();
@@ -428,5 +418,21 @@ export function GithubConnection({
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function ManageGithubButton({ link }: { link: string }) {
+  return (
+    <div className="relative h-9 w-full">
+      <div className="from-card via-card/70 pointer-events-none absolute -top-6 h-6 w-full bg-gradient-to-t to-transparent" />
+      <Link
+        href={link}
+        target="_blank"
+        className="hover:bg-sidebar-accent flex size-full cursor-pointer items-center gap-2 border-t px-2.5 text-sm transition-colors"
+      >
+        <GithubLogo className="size-4" />
+        <span>Manage Github</span>
+      </Link>
+    </div>
   );
 }

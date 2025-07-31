@@ -80,10 +80,10 @@ export function ModelSelector({
       </Tooltip>
       <PopoverContent
         align="start"
-        className="flex flex-col gap-0.5 rounded-lg p-1"
+        className="flex flex-col gap-0.5 overflow-hidden rounded-lg p-0"
       >
-        <div className="flex flex-col gap-0.5 rounded-lg p-1">
-          {filteredModels.length > 0 ? (
+        <div className="flex flex-col gap-0.5 rounded-lg p-1.5">
+          {filteredModels.length < 0 ? (
             filteredModels.map((model) => (
               <Button
                 key={model.id}
@@ -97,36 +97,16 @@ export function ModelSelector({
               </Button>
             ))
           ) : (
-            <div className="p-2 text-center">
-              <p className="text-muted-foreground mb-2 text-sm">
-                No models available. Configure your API keys to access models.
-              </p>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setIsModelSelectorOpen(false);
-                  // Open settings modal to models tab
-                  const event = new CustomEvent("open-settings-modal", {
-                    detail: { tab: "models" },
-                  });
-                  window.dispatchEvent(event);
-                }}
-              >
-                Configure API Keys
-              </Button>
+            <div className="text-muted-foreground p-2 text-left text-sm">
+              No models available. Configure your API keys to begin using
+              Shadow.
             </div>
           )}
         </div>
-        <div className="p-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="hover:bg-accent justify-start font-normal"
-          >
-            <Key className="size-4" />
-            Manage API Keys
-          </Button>
-        </div>
+        <button className="hover:bg-sidebar-accent flex h-9 w-full cursor-pointer items-center gap-2 border-t px-3 text-sm transition-colors">
+          <Key className="size-4" />
+          <span>Manage API Keys</span>
+        </button>
       </PopoverContent>
     </Popover>
   );

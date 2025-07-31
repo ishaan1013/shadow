@@ -422,10 +422,3 @@ export function SettingsModal({
     </Dialog>
   );
 }
-
-// Export a version that can be controlled externally
-export function openSettingsModal(tab?: string) {
-  // This will be used by the model selector to open the modal to the models tab
-  const event = new CustomEvent("open-settings-modal", { detail: { tab } });
-  window.dispatchEvent(event);
-}
