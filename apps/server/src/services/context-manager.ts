@@ -105,7 +105,7 @@ export class ContextManager {
       return messages;
     }
 
-    const compressionLevels: CompressionLevel[] = ["LIGHT", "MEDIUM", "HEAVY"];
+    const compressionLevels: CompressionLevel[] = ["LIGHT", "MEDIUM", "HEAVY", "HEAVIEST"];
     let currentMessages = [...messages];
 
     for (const level of compressionLevels) {
@@ -284,6 +284,7 @@ export class ContextManager {
           light: 0,
           medium: 0,
           heavy: 0,
+          heaviest: 0,
         },
       };
     }
@@ -303,6 +304,7 @@ export class ContextManager {
       light: 0,
       medium: 0,
       heavy: 0,
+      heaviest: 0,
     };
 
     let compressedMessages = 0;
@@ -324,6 +326,9 @@ export class ContextManager {
           break;
         case "HEAVY":
           compressionBreakdown.heavy++;
+          break;
+        case "HEAVIEST":
+          compressionBreakdown.heaviest++;
           break;
         default:
           compressionBreakdown.none++;

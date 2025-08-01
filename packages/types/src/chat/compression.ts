@@ -1,6 +1,6 @@
 import type { MessageMetadata } from "./messages";
 
-export type CompressionLevel = "NONE" | "LIGHT" | "MEDIUM" | "HEAVY"; // Iterative compression levels
+export type CompressionLevel = "NONE" | "LIGHT" | "MEDIUM" | "HEAVY" | "HEAVIEST"; // Iterative compression levels
 
 export interface CompressedMessageVersion {
   content: string;
@@ -13,6 +13,7 @@ export interface CompressedVersions {
   LIGHT?: CompressedMessageVersion;
   MEDIUM?: CompressedMessageVersion;
   HEAVY?: CompressedMessageVersion;
+  HEAVIEST?: CompressedMessageVersion;
 }
 
 export interface CompressionConfig {
@@ -42,7 +43,7 @@ export interface CompressedMessage {
 }
 
 export const isCompressionLevel = (value: string): value is CompressionLevel => {
-  return ["NONE", "LIGHT", "MEDIUM", "HEAVY"].includes(value);
+  return ["NONE", "LIGHT", "MEDIUM", "HEAVY", "HEAVIEST"].includes(value);
 };
 
 export const hasCompressionLevel = (
@@ -68,5 +69,6 @@ export interface ContextUsageStats {
     light: number;
     medium: number;
     heavy: number;
+    heaviest: number;
   };
 }

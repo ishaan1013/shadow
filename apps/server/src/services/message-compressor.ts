@@ -146,7 +146,10 @@ export class MessageCompressor {
         return this.mediumCompression(content, metadata);
       
       case "HEAVY":
-        return await this.heavyCompression(content, metadata, model);
+        return await this.mediumCompression(content, metadata);
+
+      case "HEAVIEST":
+        return await this.heaviestCompression(content, metadata, model);
       
       default:
         return content;
@@ -293,7 +296,47 @@ Summary:`;
       return this.mediumCompression(content, metadata);
     }
   }
+  // Heaviest compression: Full LLM-powered summarization of the summary
+  // TODO: By default this uses our server API key rather than the user's API key
+  private async heaviestCompression(
+    content: string, 
+    metadata: unknown, 
+    model: ModelType
+  ): Promise<string> {
+    try {
+      const compressionPrompt = `Please summarize the following message content in 1-3 sentences, preserving only the most essential information, key decisions, and important context:
 
+${content}
+
+Summary:`;
+
+
+      const messages = [{
+        id: "compress-" + Date.now(),
+        role: "user" as const,
+        content: compressionPrompt,
+        llmModel: model,
+        createdAt: new Date().toISOString()
+      }];
+
+      let summary = "";
+      for await (const chunk of this.llmService.createMessageStream(
+        "You are a helpful assistant that summarizes content concisely.",
+        messages,
+        model,
+        false // No tools for compression
+      )) {
+        if (chunk.type === "content" && chunk.content) {
+          summary += chunk.content;
+        }
+      }
+
+      return summary.trim() || this.mediumCompression(content, metadata);
+    } catch (error) {
+      console.warn("Heaviest compression failed, falling back to medium:", error);
+      return this.mediumCompression(content, metadata);
+    }
+  }
   // Compress metadata by removing verbose parts
   private compressMetadata(metadata: unknown, level: CompressionLevel): MessageMetadata | undefined {
     if (!metadata || level === "NONE") {
@@ -315,7 +358,7 @@ Summary:`;
       }
     }
 
-    if (level === "MEDIUM" || level === "HEAVY") {
+    if (level === "MEDIUM" || level === "HEAVY" || level === "HEAVIEST") {
       // Keep only essential metadata
       return {
         usage: meta.usage,
