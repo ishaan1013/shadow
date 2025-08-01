@@ -494,42 +494,10 @@ export class ChatService {
     workspacePath?: string;
     queue?: boolean;
   }) {
-    if (queue) {
-      if (this.activeStreams.has(taskId)) {
-        console.log(
-          `[CHAT] Queuing message for task ${taskId} (stream in progress)`
-        );
-
-        // Support only one queued message at a time for now, can extend to a list later
-        // Override the existing queued message if it exists
-        this.queuedMessages.set(taskId, {
-          message: userMessage,
-          model: llmModel,
-          workspacePath,
-        });
-        return;
-      }
-    } else {
-      // queue=false: interrupt any active stream and process immediately
-      if (this.activeStreams.has(taskId)) {
-        console.log(
-          `[CHAT] Interrupting active stream for task ${taskId} due to new message`
-        );
-        await this.stopStream(taskId);
-
-        // Override queued message if it exists
-        if (this.queuedMessages.has(taskId)) {
-          this.queuedMessages.delete(taskId);
-        }
-
-        // Cleanup time buffer
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-
-    // Save user message to database (unless skipped, e.g. on task initialization)
+    console.log("[LOG] Processing user message:", userMessage);
+    // Save user message to database (unless skipped)
     if (!skipUserMessageSave) {
-      await this.saveUserMessage(taskId, userMessage, llmModel);
+      await this.saveUserMessage(taskId, userMessage);
     }
 
     const history = await this.getChatHistory(taskId);

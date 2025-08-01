@@ -95,7 +95,6 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
   const { updateSelectedFilePath, expandRightPanel } = useAgentEnvironment();
 
   const [isIndexing, setIsIndexing] = useState(false);
-  const { data: contextStatistics } = useContextStatistics(taskId);
 
   const completedTodos = useMemo(
     () => todos.filter((todo) => todo.status === "COMPLETED").length,
