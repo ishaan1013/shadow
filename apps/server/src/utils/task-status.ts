@@ -100,7 +100,6 @@ export async function scheduleTaskCleanup(
   await prisma.task.update({
     where: { id: taskId },
     data: {
-      status: "COMPLETED",
       scheduledCleanupAt: scheduledAt,
     },
   });
