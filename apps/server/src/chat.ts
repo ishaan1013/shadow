@@ -418,7 +418,10 @@ export class ChatService {
       }
 
       // Handle COMPLETED or STOPPED tasks with scheduled cleanup
-      if ((task.status === "COMPLETED" || task.status === "STOPPED") && task.scheduledCleanupAt) {
+      if (
+        (task.status === "COMPLETED" || task.status === "STOPPED") &&
+        task.scheduledCleanupAt
+      ) {
         console.log(
           `[CHAT] Following up on ${task.status.toLowerCase()} task ${taskId}, cancelling cleanup`
         );
@@ -430,7 +433,10 @@ export class ChatService {
       }
 
       // Handle COMPLETED or STOPPED tasks without scheduled cleanup (need re-initialization)
-      if ((task.status === "COMPLETED" || task.status === "STOPPED") && !task.scheduledCleanupAt) {
+      if (
+        (task.status === "COMPLETED" || task.status === "STOPPED") &&
+        !task.scheduledCleanupAt
+      ) {
         console.log(
           `[CHAT] Following up on ${task.status.toLowerCase()} task ${taskId}, requires re-initialization`
         );
@@ -866,10 +872,9 @@ export class ChatService {
       // Update task status and schedule cleanup based on how stream ended
       if (wasStoppedEarly) {
         await updateTaskStatus(taskId, "STOPPED", "CHAT");
-        // Schedule cleanup for STOPPED tasks too (same as COMPLETED)
         await scheduleTaskCleanup(taskId, 10);
       } else {
-        // Schedule cleanup for remote mode (10-minute delay)
+        await updateTaskStatus(taskId, "COMPLETED", "CHAT");
         await scheduleTaskCleanup(taskId, 10);
 
         // Commit changes if there are any (only for successfully completed responses)

@@ -97,10 +97,24 @@ export async function scheduleTaskCleanup(
 
   const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
 
+  // Get current task to preserve its status
+  const currentTask = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { status: true },
+  });
+
+  if (!currentTask) {
+    throw new Error(`Task ${taskId} not found`);
+  }
+
+  // Only schedule cleanup for COMPLETED or STOPPED tasks
+  if (currentTask.status !== "COMPLETED" && currentTask.status !== "STOPPED") {
+    return;
+  }
+
   await prisma.task.update({
     where: { id: taskId },
     data: {
-      status: "COMPLETED",
       scheduledCleanupAt: scheduledAt,
     },
   });
