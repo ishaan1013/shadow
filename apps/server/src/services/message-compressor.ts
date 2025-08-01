@@ -13,11 +13,10 @@ import { LLMService } from "../llm";
 
 // Does the actual compression of messages
 /**
- * MessageCompressor has 3 levels:
+ * MessageCompressor has 2 levels:
  * - NONE: No compression
  * - LIGHT: Remove verbose metadata, compress code blocks
- * - MEDIUM: Summarize tool outputs and long responses
- * - HEAVY: Full summarization, fallback to medium if heavy fails
+ * - HEAVY: Full LLM-powered summarization, fallback to light if heavy fails
  * 
  */
 export class MessageCompressor {
@@ -142,15 +141,11 @@ export class MessageCompressor {
       case "LIGHT":
         return this.lightCompression(content, metadata);
       
-      case "MEDIUM":
-        return this.mediumCompression(content, metadata);
       
       case "HEAVY":
-        return await this.mediumCompression(content, metadata);
+        return await this.heavyCompression(content, metadata, model);
 
-      case "HEAVIEST":
-        return await this.heaviestCompression(content, metadata, model);
-      
+
       default:
         return content;
     }
@@ -210,95 +205,10 @@ export class MessageCompressor {
     return compressed;
   }
 
-  // Medium compression: Summarize tool outputs and long responses
-  // More conservative than original - preserves context while reducing size
-  private mediumCompression(content: string, metadata: unknown): string {
-    let compressed = this.lightCompression(content, metadata);
-
-    // Compress tool results to summaries
-    compressed = compressed.replace(
-      /Tool result:|Command output:|Search results:/gi, // Tool result:|Command output:|Search results:
-      (match, offset, string) => {
-        const section = string.slice(offset, offset + 500);
-        const words = section.split(' ').length;
-        if (words > 50) {
-          return `${match} [Result summarized - ${words} words]`;
-        }
-        return match;
-      }
-    );
-
-    // Compress very long paragraphs (8+ sentences) - keep first sentence + summary
-    compressed = compressed.replace(
-      /([A-Z][^.!?]*[.!?])(\s+[A-Z][^.!?]*[.!?]){7,}/g,
-      (match) => {
-        const sentences = match.split(/[.!?]/).filter(s => s.trim());
-        if (sentences.length >= 8) {
-          const firstSentence = sentences[0]?.trim() || "";
-          const remainingCount = sentences.length - 1;
-          return `${firstSentence}. [${remainingCount} additional sentences compressed]`;
-        }
-        return match;
-      }
-    );
-
-    // Compress extremely long single sentences (>300 characters)
-    compressed = compressed.replace(
-      /[A-Z][^.!?]{300,}[.!?]/g,
-      (match) => {
-        const truncated = match.substring(0, 100);
-        const charCount = match.length;
-        return `${truncated}... [sentence truncated - ${charCount} chars total]`;
-      }
-    );
-
-    return compressed;
-  }
 
   // Heavy compression: Full LLM-powered summarization
   // TODO: By default this uses our server API key rather than the user's API key
   private async heavyCompression(
-    content: string, 
-    metadata: unknown, 
-    model: ModelType
-  ): Promise<string> {
-    try {
-      const compressionPrompt = `Please summarize the following message content in 2-3 sentences, preserving only the most essential information, key decisions, and important context:
-
-${content}
-
-Summary:`;
-
-
-      const messages = [{
-        id: "compress-" + Date.now(),
-        role: "user" as const,
-        content: compressionPrompt,
-        llmModel: model,
-        createdAt: new Date().toISOString()
-      }];
-
-      let summary = "";
-      for await (const chunk of this.llmService.createMessageStream(
-        "You are a helpful assistant that summarizes content concisely.",
-        messages,
-        model,
-        false // No tools for compression
-      )) {
-        if (chunk.type === "content" && chunk.content) {
-          summary += chunk.content;
-        }
-      }
-
-      return summary.trim() || this.mediumCompression(content, metadata);
-    } catch (error) {
-      console.warn("Heavy compression failed, falling back to medium:", error);
-      return this.mediumCompression(content, metadata);
-    }
-  }
-  // Heaviest compression: Full LLM-powered summarization of the summary
-  // TODO: By default this uses our server API key rather than the user's API key
-  private async heaviestCompression(
     content: string, 
     metadata: unknown, 
     model: ModelType
@@ -331,10 +241,10 @@ Summary:`;
         }
       }
 
-      return summary.trim() || this.mediumCompression(content, metadata);
+      return summary.trim() || this.lightCompression(content, metadata);
     } catch (error) {
-      console.warn("Heaviest compression failed, falling back to medium:", error);
-      return this.mediumCompression(content, metadata);
+      console.warn("Heavy compression failed, falling back to light:", error);
+      return this.lightCompression(content, metadata);
     }
   }
   // Compress metadata by removing verbose parts
@@ -358,7 +268,7 @@ Summary:`;
       }
     }
 
-    if (level === "MEDIUM" || level === "HEAVY" || level === "HEAVIEST") {
+    if (level === "HEAVY") {
       // Keep only essential metadata
       return {
         usage: meta.usage,
