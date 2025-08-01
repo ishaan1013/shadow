@@ -12,10 +12,10 @@ export const AvailableModels = {
   CLAUDE_SONNET_4: "claude-sonnet-4-20250514",
   CLAUDE_OPUS_4: "claude-opus-4-20250514",
   // OpenAI models
-  GPT_4O: "gpt-4o",
   GPT_4O_MINI: "gpt-4o-mini",
   O3: "o3",
-  O4_MINI_HIGH: "o4-mini-high",
+  GPT_4_1: "gpt-4.1-2025-04-14",
+  GPT_4O: "gpt-4o",
 } as const;
 
 export type ModelType = (typeof AvailableModels)[keyof typeof AvailableModels];
@@ -42,6 +42,11 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
     name: "GPT-4o",
     provider: "openai",
   },
+  [AvailableModels.GPT_4_1]: {
+    id: AvailableModels.GPT_4_1,
+    name: "GPT-4.1",
+    provider: "openai",
+  },
   [AvailableModels.GPT_4O_MINI]: {
     id: AvailableModels.GPT_4O_MINI,
     name: "GPT-4o Mini",
@@ -50,11 +55,6 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
   [AvailableModels.O3]: {
     id: AvailableModels.O3,
     name: "o3",
-    provider: "openai",
-  },
-  [AvailableModels.O4_MINI_HIGH]: {
-    id: AvailableModels.O4_MINI_HIGH,
-    name: "o4 Mini High",
     provider: "openai",
   },
 };
