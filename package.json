@@ -2,9 +2,9 @@
   "name": "shadow-monorepo",
   "private": true,
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "build": "turbo run build --filter=!website",
+    "dev": "turbo run dev --filter=!website",
+    "lint": "turbo run lint --filter=!website",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "db:migrate:deploy": "turbo run db:migrate:deploy",
@@ -26,7 +26,10 @@
     "docker:logs": "docker-compose logs -f",
     "docker:server": "docker build -f apps/server/Dockerfile -t shadow-server .",
     "docker:sidecar": "docker build -f apps/sidecar/Dockerfile -t shadow-sidecar .",
-    "prod:server": "./scripts/start-server-prod.sh"
+    "prod:server": "./scripts/start-server-prod.sh",
+    "dev:website": "turbo run dev --filter=website",
+    "build:website": "turbo run build --filter=website",
+    "lint:website": "turbo run lint --filter=website"
   },
   "prisma": {
     "schema": "packages/db/prisma/schema.prisma"
