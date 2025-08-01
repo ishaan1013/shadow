@@ -3,49 +3,15 @@ import {
   ModelType,
   Message,
   CompressionLevel,
-  ModelCompressionSettings,
   ContextUsageStats,
 } from "@repo/types";
 import { TokenCounterService } from "./token-counter";
 import { MessageCompressor } from "./message-compressor";
+import { compressionSettings, getCompressionSettings } from "../config/compression-settings";
 
 export class ContextManager {
   private tokenCounter: TokenCounterService;
   private messageCompressor: MessageCompressor;
-
-  // CONSTANTS: Compression settings for different models
-  /**
-   * Sliding window is the number of recent messages to keep uncompressed
-   * Compression threshold is the percentage of the token limit that can be used for compression (total tokens must be under this)
-   * TODO: Should move the compression settings to its own file
-   */
-  private compressionSettings: ModelCompressionSettings = {
-    "claude-sonnet-4-20250514": {
-      tokenLimit: 200000,
-      compressionThreshold: 0.05,
-      slidingWindowSize: 10,
-    },
-    "claude-opus-4-20250514": {
-      tokenLimit: 200000,
-      compressionThreshold: 0.05,
-      slidingWindowSize: 10,
-    },
-    "gpt-4o": {
-      tokenLimit: 128000,
-      compressionThreshold: 0.05,
-      slidingWindowSize: 8,
-    },
-    "o3": {
-      tokenLimit: 128000,
-      compressionThreshold: 0.05,
-      slidingWindowSize: 8,
-    },
-    "o4-mini-high": {
-      tokenLimit: 128000,
-      compressionThreshold: 0.5,
-      slidingWindowSize: 8,
-    },
-  };
 
   constructor() {
     this.tokenCounter = new TokenCounterService();
@@ -69,12 +35,7 @@ export class ContextManager {
     }
 
     // Get compression settings for model
-    const settings =
-      this.compressionSettings[model] ||
-      this.compressionSettings["gpt-4o"];
-    if (!settings) {
-      throw new Error(`No compression settings found for model ${model}`); // This should never happen
-    }
+    const settings = getCompressionSettings(model);
     const targetTokens = Math.floor(
       settings.tokenLimit * settings.compressionThreshold
     ); // Calculate target tokens
@@ -278,24 +239,14 @@ export class ContextManager {
       }));
   }
 
-  // Get compression settings for a model
-  getCompressionSettings(model: ModelType) {
-    const settings =
-      this.compressionSettings[model] ||
-      this.compressionSettings["gpt-4o"];
-    if (!settings) {
-      throw new Error(`No compression settings found for model ${model}`);
-    }
-    return settings;
-  }
 
   // Update compression settings for a model
   updateCompressionSettings(
     model: ModelType,
-    settings: Partial<(typeof this.compressionSettings)[ModelType]>
+    settings: Partial<(typeof compressionSettings)[ModelType]>
   ) {
-    const existingSettings = this.getCompressionSettings(model);
-    this.compressionSettings[model] = {
+    const existingSettings = getCompressionSettings(model);
+    compressionSettings[model] = {
       ...existingSettings,
       ...settings,
     };
@@ -313,7 +264,7 @@ export class ContextManager {
     });
 
     if (dbMessages.length === 0) {
-      const settings = this.getCompressionSettings(model);
+      const settings = getCompressionSettings(model);
       return {
         taskId,
         model,
@@ -335,7 +286,7 @@ export class ContextManager {
       };
     }
 
-    const settings = this.getCompressionSettings(model);
+    const settings = getCompressionSettings(model);
     const messages = this.convertDbMessages(dbMessages, model);
 
     // Calculate total tokens
