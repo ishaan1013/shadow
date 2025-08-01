@@ -4,10 +4,12 @@ import {
   Message,
   CompressionLevel,
   ContextUsageStats,
+  MessageMetadata,
 } from "@repo/types";
 import { TokenCounterService } from "./token-counter";
 import { MessageCompressor } from "./message-compressor";
 import { compressionSettings, getCompressionSettings } from "../config/compression-settings";
+import { ChatMessage } from "@repo/db";
 
 export class ContextManager {
   private tokenCounter: TokenCounterService;
@@ -25,7 +27,7 @@ export class ContextManager {
     model: ModelType
   ): Promise<Message[]> {
     // Get all messages for the task
-    const dbMessages = await prisma.chatMessage.findMany({
+    const dbMessages: ChatMessage[] = await prisma.chatMessage.findMany({
       where: { taskId },
       orderBy: [{ sequence: "asc" }, { createdAt: "asc" }],
     });
@@ -226,7 +228,7 @@ export class ContextManager {
   /**
    * Convert database messages to our internal format
    */
-  private convertDbMessages(dbMessages: any[], model: ModelType): Message[] {
+  private convertDbMessages(dbMessages: ChatMessage[], model: ModelType): Message[] {
     return dbMessages
       .filter((msg) => msg.role === "USER" || msg.role === "ASSISTANT") // Only include user/assistant messages
       .map((msg) => ({
@@ -235,7 +237,7 @@ export class ContextManager {
         content: msg.content,
         llmModel: msg.llmModel || model,
         createdAt: msg.createdAt.toISOString(),
-        metadata: msg.metadata,
+        metadata: msg.metadata as MessageMetadata,
       }));
   }
 
@@ -258,7 +260,7 @@ export class ContextManager {
     model: ModelType
   ): Promise<ContextUsageStats> {
     // Get all messages for the task
-    const dbMessages = await prisma.chatMessage.findMany({
+    const dbMessages: ChatMessage[] = await prisma.chatMessage.findMany({
       where: { taskId },
       orderBy: [{ sequence: "asc" }, { createdAt: "asc" }],
     });
