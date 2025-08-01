@@ -374,6 +374,9 @@ export class ChatService {
   async getChatHistory(taskId: string): Promise<Message[]> {
     const dbMessages = await prisma.chatMessage.findMany({
       where: { taskId },
+      include: {
+        pullRequestSnapshot: true,
+      },
       orderBy: [
         { sequence: "asc" }, // Primary ordering by sequence
         { createdAt: "asc" }, // Fallback ordering by timestamp
@@ -384,9 +387,10 @@ export class ChatService {
       id: msg.id,
       role: msg.role.toLowerCase() as Message["role"],
       content: msg.content,
-      llmModel: msg.llmModel || undefined,
+      llmModel: msg.llmModel,
       createdAt: msg.createdAt.toISOString(),
       metadata: msg.metadata as MessageMetadata | undefined,
+      pullRequestSnapshot: msg.pullRequestSnapshot || undefined,
     }));
   }
 
@@ -458,6 +462,7 @@ export class ChatService {
           role: "user",
           content: userMessage,
           createdAt: new Date().toISOString(),
+          llmModel,
         },
       ]);
 

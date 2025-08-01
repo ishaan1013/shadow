@@ -1,6 +1,5 @@
 import { TaskMessages } from "@/lib/db-operations/get-task-messages";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
 
 export function useTaskMessages(taskId: string) {
   return useQuery({
