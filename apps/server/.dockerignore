@@ -30,7 +30,6 @@ README.md
 # Testing
 coverage
 .nyc_output
-jest.config.*
 *.test.ts
 *.spec.ts
 

@@ -17,6 +17,7 @@ node_modules
 out/
 build
 dist
+dist_temp
 
 # Debug
 npm-debug.log*

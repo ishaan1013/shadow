@@ -7,6 +7,10 @@ metadata:
     app: shadow
     component: agents
     environment: production
+    # Pod Security Standards - allow privileged pods for Firecracker VMs
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
 ---
 # Network policy to isolate agent pods
 apiVersion: networking.k8s.io/v1

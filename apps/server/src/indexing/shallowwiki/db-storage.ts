@@ -1,319 +1,119 @@
 import { db } from "@repo/db";
-import { createHash } from "crypto";
 
-interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
-
-interface SummaryMetadata {
-  type: 'file_summary' | 'directory_summary' | 'root_overview';
-  repoPath?: string;
-  filePath?: string;
-  language?: string;
-  symbols?: string[];
-  dependencies?: string[];
-  complexity?: number;
-  lastUpdated: string;
-  tokenUsage?: TokenUsage;
-}
-
-export class DbWikiStorage {
+/**
+ * Simple database storage for codebase understanding summaries
+ * Uses the new Prisma CodebaseUnderstanding model linked to tasks
+ */
+export class CodebaseUnderstandingStorage {
   private taskId: string;
 
   constructor(taskId: string) {
     this.taskId = taskId;
   }
 
-  private generateId(type: string, path: string): string {
-    return createHash('sha256').update(`${type}_${path}`).digest('hex').slice(0, 16);
-  }
-
   /**
-   * Clear all CodebaseUnderstanding entries for this task
+   * Store or update summary for a task
+   * Creates/updates a single CodebaseUnderstanding record linked to the task
    */
-  async clearRepository(): Promise<void> {
+  async storeSummary(
+    repoFullName: string,
+    repoUrl: string,
+    summaryContent: any,
+    userId: string
+  ): Promise<string> {
     try {
-      await db.codebaseUnderstanding.deleteMany({
-        where: {
-          taskId: this.taskId
-        }
+      // Check if task already has a codebase understanding
+      const task = await db.task.findUnique({
+        where: { id: this.taskId },
+        include: { codebaseUnderstanding: true },
       });
-      console.log(`🗑️  Cleared CodebaseUnderstanding data for task: ${this.taskId}`);
-    } catch (error) {
-      console.error(`Failed to clear CodebaseUnderstanding for task ${this.taskId}:`, error);
-    }
-  }
 
-  /**
-   * Store or update file summary in the database.
-   * If a summary for this file already exists, it will be overwritten.
-   */
-  async storeFileSummary(
-    repoPath: string,
-    filePath: string,
-    summary: string,
-    symbols: string[] = [],
-    dependencies: string[] = [],
-    language?: string,
-    complexity: number = 0,
-    tokenUsage?: TokenUsage
-  ): Promise<void> {
-    // Create the content for storage - include metadata in the content
-    const metadata: SummaryMetadata = {
-      type: 'file_summary',
-      repoPath,
-      filePath,
-      language,
-      symbols,
-      dependencies,
-      complexity,
-      lastUpdated: new Date().toISOString(),
-      tokenUsage
-    };
-
-    const fullContent = JSON.stringify({
-      metadata,
-      summary
-    });
-
-    await this.upsertRecord(filePath, fullContent);
-  }
-
-  /**
-   * Store or update directory summary in the database.
-   * If a summary for this directory already exists, it will be overwritten.
-   */
-  async storeDirectorySummary(
-    repoPath: string,
-    dirPath: string,
-    summary: string,
-    childFiles: string[] = [],
-    childDirs: string[] = [],
-    tokenUsage?: TokenUsage
-  ): Promise<void> {
-    // Create the content for storage - include metadata in the content
-    const metadata: SummaryMetadata = {
-      type: 'directory_summary',
-      repoPath,
-      filePath: dirPath,
-      symbols: childFiles,
-      dependencies: childDirs,
-      complexity: childFiles.length + childDirs.length,
-      lastUpdated: new Date().toISOString(),
-      tokenUsage
-    };
-
-    const fullContent = JSON.stringify({
-      metadata,
-      summary
-    });
-
-    await this.upsertRecord(dirPath, fullContent);
-  }
-
-  /**
-   * Store or update root overview in the database.
-   * If a root overview already exists, it will be overwritten.
-   */
-  async storeRootOverview(
-    repoPath: string,
-    overview: string,
-    totalFiles: number,
-    totalDirs: number,
-    tokenUsage?: TokenUsage
-  ): Promise<void> {
-    // Create the content for storage - include metadata in the content
-    const metadata: SummaryMetadata = {
-      type: 'root_overview',
-      repoPath,
-      symbols: [],
-      dependencies: [],
-      complexity: totalFiles + totalDirs,
-      lastUpdated: new Date().toISOString(),
-      tokenUsage
-    };
-
-    const fullContent = JSON.stringify({
-      metadata,
-      summary: overview
-    });
-
-    await this.upsertRecord('root_overview', fullContent);
-  }
-
-  /**
-   * Internal method to create or update a record in the database
-   */
-  private async upsertRecord(
-    fileName: string,
-    content: string
-  ): Promise<void> {
-    try {
-      // Generate a unique ID for the file
-      const recordId = this.generateId(fileName, this.taskId);
-      
-      // Parse content to extract metadata
-      let parsedContent;
-      let type = "file_summary";
-      let filePath = "";
-      let language = null;
-      
-      try {
-        parsedContent = JSON.parse(content);
-        if (parsedContent.metadata?.type) {
-          type = parsedContent.metadata.type;
-        }
-        if (parsedContent.metadata?.filePath) {
-          filePath = parsedContent.metadata.filePath;
-        }
-        if (parsedContent.metadata?.language) {
-          language = parsedContent.metadata.language;
-        }
-      } catch (e) {
-        console.warn("Could not parse content JSON", e);
-        parsedContent = { content };
+      if (!task) {
+        throw new Error(`Task ${this.taskId} not found`);
       }
-      
-      const now = new Date();
-      
-      // Create or update the record
-      await db.codebaseUnderstanding.upsert({
-        where: {
-          id: recordId
-        },
-        update: {
-          content: content,
-          type: type,
-          filePath: filePath,
-          language: language,
-          updatedAt: now
-        },
-        create: {
-          id: recordId,
-          taskId: this.taskId,
-          fileName: fileName,
-          content: content,
-          type: type,
-          filePath: filePath,
-          language: language,
-          createdAt: now,
-          updatedAt: now
-        }
-      });
 
-      console.log(`💾 Stored ${fileName}`);
+      let codebaseUnderstanding;
+
+      if (task.codebaseUnderstanding) {
+        // Update existing
+        codebaseUnderstanding = await db.codebaseUnderstanding.update({
+          where: { id: task.codebaseUnderstanding.id },
+          data: {
+            content: summaryContent,
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        // Create new
+        codebaseUnderstanding = await db.codebaseUnderstanding.create({
+          data: {
+            repoFullName,
+            repoUrl,
+            content: summaryContent,
+            userId,
+          },
+        });
+
+        // Link to task
+        await db.task.update({
+          where: { id: this.taskId },
+          data: { codebaseUnderstandingId: codebaseUnderstanding.id },
+        });
+      }
+
+      console.log(`💾 Stored summary for task: ${this.taskId}`);
+      return codebaseUnderstanding.id;
     } catch (error) {
-      console.error(`Failed to store record for ${fileName}:`, error);
+      console.error(`Failed to store summary for task ${this.taskId}:`, error);
       throw error;
     }
   }
 
   /**
-   * Get all summaries for this task
+   * Get summary for a task
    */
-  async getAllSummaries(): Promise<any[]> {
+  async getSummary(): Promise<any | null> {
     try {
-      const records = await db.codebaseUnderstanding.findMany({
-        where: {
-          taskId: this.taskId
-        }
+      const task = await db.task.findUnique({
+        where: { id: this.taskId },
+        include: { codebaseUnderstanding: true },
       });
 
-      return records.map((record: any) => {
-        const parsed = this.parseContent(record.content, record.id);
-        return {
-          id: record.id,
-          metadata: {
-            ...parsed.metadata,
-            text: parsed.summary // Include summary in text field for compatibility
-          }
-        };
-      });
-    } catch (error) {
-      console.error(`Failed to get summaries for task ${this.taskId}:`, error);
-      return [];
-    }
-  }
-
-  /**
-   * Helper method to parse stored content JSON
-   */
-  private parseContent(content: any, recordId: string): { metadata: SummaryMetadata, summary: string } {
-    try {
-      // Handle case where content is already a parsed JSON object
-      const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-      return {
-        metadata: parsed.metadata || {
-          type: 'file_summary',
-          lastUpdated: new Date().toISOString(),
-        },
-        summary: parsed.summary || ''
-      };
-    } catch (e) {
-      console.error(`Error parsing content for record ${recordId}:`, e);
-      // Return fallback if parsing fails
-      return {
-        metadata: {
-          type: 'file_summary',
-          lastUpdated: new Date().toISOString(),
-        },
-        summary: typeof content === 'string' ? content : JSON.stringify(content) // Use the raw content as the summary
-      };
-    }
-  }
-
-  /**
-   * Get file summary by file path
-   */
-  async getFileSummary(filePath: string): Promise<any | null> {
-    try {
-      const record = await db.codebaseUnderstanding.findFirst({
-        where: {
-          taskId: this.taskId,
-          fileName: filePath
-        }
-      });
-
-      if (!record) return null;
-      
-      const parsed = this.parseContent(record.content, record.id);
+      if (!task?.codebaseUnderstanding) {
+        return null;
+      }
 
       return {
-        id: record.id,
-        metadata: {
-          ...parsed.metadata,
-          summary: parsed.summary,
-          text: parsed.summary
-        }
+        id: task.codebaseUnderstanding.id,
+        repoFullName: task.codebaseUnderstanding.repoFullName,
+        repoUrl: task.codebaseUnderstanding.repoUrl,
+        content: task.codebaseUnderstanding.content,
+        createdAt: task.codebaseUnderstanding.createdAt,
+        updatedAt: task.codebaseUnderstanding.updatedAt,
       };
     } catch (error) {
-      console.error(`Error getting file summary for ${filePath}:`, error);
+      console.error(`Failed to get summary for task ${this.taskId}:`, error);
       return null;
     }
   }
 
   /**
-   * Get directory summary by directory path
+   * Check if summary exists for this task
    */
-  async getDirectorySummary(dirPath: string): Promise<any | null> {
-    return this.getFileSummary(dirPath);
-  }
+  async hasExistingSummary(): Promise<boolean> {
+    try {
+      const task = await db.task.findUnique({
+        where: { id: this.taskId },
+        select: { codebaseUnderstandingId: true },
+      });
 
-  /**
-   * Get root overview
-   */
-  async getRootOverview(): Promise<any | null> {
-    return this.getFileSummary('root_overview');
-  }
-  
-  /**
-   * Get a namespace identifier (needed for API compatibility with Pinecone version)
-   */
-  getNamespace(): string {
-    return `codebase_${this.taskId}`;
+      return !!task?.codebaseUnderstandingId;
+    } catch (error) {
+      console.error(
+        `Failed to check existing summary for task ${this.taskId}:`,
+        error
+      );
+      return false;
+    }
   }
 }
-
-export default DbWikiStorage;

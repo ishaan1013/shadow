@@ -5,13 +5,12 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "downlevelIteration": true,
-    "target": "es2020",
+    "target": "ES2022",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@repo/*": ["../../packages/*"]
+      "@/*": ["src/*"]
     },
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2022"],
     "outDir": "./dist",
     "module": "NodeNext",
     "noUnusedLocals": true,

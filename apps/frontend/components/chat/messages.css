@@ -1,0 +1,24 @@
+.user-message-border {
+  background: linear-gradient(var(--border), var(--border), var(--highlight));
+}
+
+.user-message-shadow {
+  /* box-shadow:
+    0 10px 15px -3px rgba(64, 64, 64, 0.1),
+    0 4px 6px -4px rgba(64, 64, 64, 0.1); */
+
+  --highlight-shadow:
+    0 10px 15px -3px oklch(0.3715 0 0 / 0.1),
+    0 4px 6px -4px oklch(0.3715 0 0 / 0.1), 0 15px 25px 15px oklch(0.1957 0 0);
+
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow),
+    var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow),
+    var(--highlight-shadow);
+}
+
+.user-message-shadow:hover {
+  --highlight-shadow:
+    0 10px 15px -3px oklch(0.3715 0 0 / 0.25),
+    0 4px 6px -4px oklch(0.3715 0 0 / 0.25), 0 15px 25px 15px oklch(0.1957 0 0);
+}

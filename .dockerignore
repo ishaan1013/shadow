@@ -1,0 +1,59 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production builds
+dist
+.next
+build
+
+# Development
+.env*
+!.env.example
+.vscode
+.idea
+
+# Testing
+coverage
+test-workspace
+
+# Documentation and research
+research
+internal-docs
+*.md
+!README.md
+
+# Git
+.git
+.gitignore
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Temporary files
+.tmp
+.temp
+tmp
+temp
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Package manager lock files - keep package-lock.json for turbo prune
+# package-lock.json
+yarn.lock
+pnpm-lock.yaml

@@ -1,5 +1,6 @@
 import logger from "@/indexing/logger";
 import path from "path";
+
 interface LanguageSpec {
   id: string;
   pkg: string;
@@ -14,15 +15,42 @@ interface ExtendedLanguageSpec extends LanguageSpec {
   language: any;
 }
 
+// Loads Tree-sitter grammar by package name, returning the language object if valid or null if missing.
 function safeRequire(name: string): any {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require(name);
+
+    // Extract language name from package name
+    const langName = name.replace("tree-sitter-", "");
+    
+    // Special handling for tree-sitter-typescript which exports both typescript and tsx
     if (name === "tree-sitter-typescript") {
-      return mod.typescript || mod;
+      // Return the typescript language by default, but preserve access to both
+      return mod.typescript;
     }
-    return mod.default || mod;
-  } catch (_err) {
-    logger.warn(`Language grammar not installed: ${name}`);
+    
+    const language = mod[langName] || mod.default || mod;
+
+    // Validate that this is a proper Tree-sitter language object
+    if (language && typeof language === "object") {
+      // Check for Tree-sitter Language properties
+      const hasValidProps =
+        typeof language.nodeTypeCount === "number" ||
+        typeof language.id === "number" ||
+        language.constructor?.name === "Language" ||
+        (language.name && Array.isArray(language.nodeTypeInfo)) ||
+        typeof language.query === "function";
+
+      if (hasValidProps) {
+        return language;
+      }
+    }
+
+    logger.warn(`Invalid language object for ${name}: ${typeof language}`);
+    return null;
+  } catch (err) {
+    logger.warn(`Language grammar not installed: ${name} - ${err}`);
     return null;
   }
 }
@@ -140,4 +168,4 @@ export async function getLanguageForPath(
   return result;
 }
 
-export { EXT_MAP };
+export { EXT_MAP, safeRequire };

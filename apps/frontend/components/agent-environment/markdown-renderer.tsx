@@ -3,50 +3,122 @@
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 
+interface ComponentClassNames {
+  wrapper?: string;
+  h1?: string;
+  h2?: string;
+  h3?: string;
+  h4?: string;
+  h5?: string;
+  h6?: string;
+  p?: string;
+  code?: string;
+  inlineCode?: string;
+  pre?: string;
+  blockquote?: string;
+  ul?: string;
+  ol?: string;
+  li?: string;
+  a?: string;
+  table?: string;
+  tableWrapper?: string;
+  th?: string;
+  td?: string;
+  hr?: string;
+}
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  componentProps?: ComponentClassNames;
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  content,
+  className,
+  componentProps,
+}: MarkdownRendererProps) {
   return (
-    <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
+    <div
+      className={cn(
+        "prose prose-sm dark:prose-invert max-w-none",
+        className,
+        componentProps?.wrapper
+      )}
+    >
       <ReactMarkdown
         components={{
           // Customize heading styles to match the theme
           h1: ({ children }) => (
-            <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-foreground">
+            <h1
+              className={cn(
+                "text-foreground mb-4 mt-6 text-[22px] font-medium first:mt-0",
+                componentProps?.h1
+              )}
+            >
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-xl font-semibold mb-3 mt-5 text-foreground">
+            <h2
+              className={cn(
+                "text-foreground mb-3 mt-5 text-xl font-medium",
+                componentProps?.h2
+              )}
+            >
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-lg font-medium mb-2 mt-4 text-foreground">
+            <h3
+              className={cn(
+                "text-foreground mb-2 mt-4 text-lg font-medium",
+                componentProps?.h3
+              )}
+            >
               {children}
             </h3>
           ),
           h4: ({ children }) => (
-            <h4 className="text-base font-medium mb-2 mt-3 text-foreground">
+            <h4
+              className={cn(
+                "text-foreground mb-2 mt-3 text-base font-medium",
+                componentProps?.h4
+              )}
+            >
               {children}
             </h4>
           ),
           h5: ({ children }) => (
-            <h5 className="text-sm font-medium mb-2 mt-3 text-foreground">
+            <h5
+              className={cn(
+                "text-foreground mb-2 mt-3 text-sm font-medium",
+                componentProps?.h5
+              )}
+            >
               {children}
             </h5>
           ),
           h6: ({ children }) => (
-            <h6 className="text-sm font-medium mb-2 mt-3 text-muted-foreground">
+            <h6
+              className={cn(
+                "text-muted-foreground mb-2 mt-3 text-sm font-medium",
+                componentProps?.h6
+              )}
+            >
               {children}
             </h6>
           ),
           // Style paragraphs
           p: ({ children }) => (
-            <p className="mb-4 text-foreground leading-relaxed">{children}</p>
+            <p
+              className={cn(
+                "text-foreground mb-4 leading-relaxed",
+                componentProps?.p
+              )}
+            >
+              {children}
+            </p>
           ),
           // Style code blocks
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,16 +127,22 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             if (isInline) {
               return (
                 <code
-                className="bg-muted text-muted-foreground px-1 py-0.5 rounded font-mono text-sm inline"
-                {...props}
-              >
-                {children}
-              </code>
+                  className={cn(
+                    "bg-muted text-muted-foreground inline rounded px-1 py-0.5 font-mono text-sm",
+                    componentProps?.inlineCode
+                  )}
+                  {...props}
+                >
+                  {children}
+                </code>
               );
             }
             return (
               <code
-                className="block bg-muted text-muted-foreground p-3 rounded-md text-sm font-mono overflow-x-auto"
+                className={cn(
+                  "bg-muted text-muted-foreground block overflow-x-auto rounded-md p-3 font-mono text-sm",
+                  componentProps?.code
+                )}
                 {...props}
               >
                 {children}
@@ -73,35 +151,65 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           // Style pre blocks
           pre: ({ children }) => (
-            <pre className="bg-muted text-muted-foreground p-3 rounded-md text-sm font-mono overflow-x-auto mb-4">
+            <pre
+              className={cn(
+                "bg-muted text-muted-foreground mb-4 overflow-x-auto rounded-md p-3 font-mono text-sm",
+                componentProps?.pre
+              )}
+            >
               {children}
             </pre>
           ),
           // Style blockquotes
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-border pl-4 italic text-muted-foreground mb-4">
+            <blockquote
+              className={cn(
+                "border-border text-muted-foreground mb-4 border-l-4 pl-4 italic",
+                componentProps?.blockquote
+              )}
+            >
               {children}
             </blockquote>
           ),
           // Style lists
           ul: ({ children }) => (
-            <ul className="list-disc list-inside mb-4 space-y-1 text-foreground">
+            <ul
+              className={cn(
+                "text-foreground mb-4 list-inside list-disc space-y-1",
+                componentProps?.ul
+              )}
+            >
               {children}
             </ul>
           ),
           ol: ({ children }) => (
-            <ol className="list-decimal list-inside mb-4 space-y-1 text-foreground">
+            <ol
+              className={cn(
+                "text-foreground mb-4 list-inside list-decimal space-y-1",
+                componentProps?.ol
+              )}
+            >
               {children}
             </ol>
           ),
           li: ({ children }) => (
-            <li className="text-foreground leading-relaxed">{children}</li>
+            <li
+              className={cn(
+                "text-foreground leading-relaxed",
+                componentProps?.li
+              )}
+            >
+              {children}
+            </li>
           ),
           // Style links
           a: ({ children, href }) => (
             <a
               href={href}
-              className="text-primary hover:text-primary/80 underline underline-offset-2"
+              className={cn(
+                "text-primary hover:text-primary/80 underline underline-offset-2",
+                componentProps?.a
+              )}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -110,24 +218,46 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           ),
           // Style tables
           table: ({ children }) => (
-            <div className="overflow-x-auto mb-4">
-              <table className="min-w-full border-collapse border border-border">
+            <div
+              className={cn(
+                "mb-4 overflow-x-auto",
+                componentProps?.tableWrapper
+              )}
+            >
+              <table
+                className={cn(
+                  "border-border min-w-full border-collapse border",
+                  componentProps?.table
+                )}
+              >
                 {children}
               </table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border border-border bg-muted px-3 py-2 text-left font-medium text-foreground">
+            <th
+              className={cn(
+                "border-border bg-muted text-foreground border px-3 py-2 text-left font-medium",
+                componentProps?.th
+              )}
+            >
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-border px-3 py-2 text-foreground">
+            <td
+              className={cn(
+                "border-border text-foreground border px-3 py-2",
+                componentProps?.td
+              )}
+            >
               {children}
             </td>
           ),
           // Style horizontal rules
-          hr: () => <hr className="border-border my-6" />,
+          hr: () => (
+            <hr className={cn("border-border my-6", componentProps?.hr)} />
+          ),
         }}
       >
         {content}

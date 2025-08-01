@@ -7,5 +7,5 @@
 
 **Strategy:**
 - Use early in discovery phase
-- Follow up with targeted tools like codebase_search
+- Follow up with targeted tools like semantic_search (for understanding concepts) or grep_search (for finding specific terms)
 - Don't use to confirm file existence after creation

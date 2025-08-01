@@ -13,84 +13,117 @@ import {
 } from "@/components/ui/tooltip";
 import { useTasks } from "@/hooks/use-tasks";
 import { Task } from "@repo/db";
-import React from "react";
+import { useEffect, useRef, useState } from "react";
 import { SidebarAgentView } from "./agent-view";
-import { SidebarCodebaseView } from "./codebase-view";
 import { SidebarNavigation } from "./navigation";
 import { SidebarTasksView } from "./tasks-view";
-import { SidebarProvider, useSidebarView } from "./sidebar-context";
+import { SidebarCodebaseView } from "./codebase-view";
+import { useCodebases } from "@/hooks/use-codebases";
+import { SidebarCodebase } from "@/lib/db-operations/get-codebases";
+import { SidebarCodebasesListView } from "./codebases-list-view";
 
-export type SidebarView = "tasks" | "agent" | "codebase";
+export type SidebarView =
+  | "tasks"
+  | "agent"
+  | "codebases"
+  | "codebase-understanding";
 
-function SidebarViewsContent({
+export function SidebarViews({
   initialTasks,
+  initialCodebases,
   currentTaskId = null,
+  currentCodebaseId = null,
 }: {
   initialTasks: Task[];
+  initialCodebases: SidebarCodebase[];
+  // Page-specific ID fields
   currentTaskId?: string | null;
+  currentCodebaseId?: string | null;
 }) {
-  const { data: tasks, isLoading: loading, error } = useTasks(initialTasks);
-  const { sidebarView, setSidebarView } = useSidebarView();
-  
-  // View switching is now handled in the SidebarProvider context
-  // based on pathname changes, so we don't need manual logic here
+  const {
+    data: tasks,
+    isLoading: isLoadingTasks,
+    error: tasksError,
+  } = useTasks(initialTasks);
+
+  const {
+    data: codebases,
+    isLoading: isLoadingCodebases,
+    error: codebasesError,
+  } = useCodebases(initialCodebases);
+
+  const [sidebarView, setSidebarView] = useState<SidebarView>(
+    currentTaskId ? "agent" : "tasks"
+  );
+
+  // Initial render trick to avoid hydration issues on navigation
+  const isInitialRender = useRef(true);
+  useEffect(() => {
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      return;
+    }
+    if (currentTaskId) {
+      setSidebarView("agent");
+    } else if (currentCodebaseId) {
+      setSidebarView("codebase-understanding");
+    } else {
+      if (sidebarView === "agent") {
+        setSidebarView("tasks");
+      }
+    }
+  }, [currentTaskId]);
 
   return (
     <div className="flex">
       <SidebarNavigation
         currentTaskId={currentTaskId}
+        currentCodebaseId={currentCodebaseId}
         sidebarView={sidebarView}
         setSidebarView={setSidebarView}
       />
       <Sidebar>
-        {currentTaskId && sidebarView === "codebase" ? (
-          // Codebase view takes up entire sidebar
-          <SidebarCodebaseView taskId={currentTaskId} />
-        ) : (
-          // Other views have the standard layout with header
-          <SidebarContent>
-            <SidebarGroup className="flex h-7 flex-row items-center justify-between">
-              <div className="font-medium">
-                {sidebarView === "tasks" ? "Tasks" : "Agent Environment"}
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SidebarTrigger className="hover:bg-sidebar-accent" />
-                </TooltipTrigger>
-                <TooltipContent side="right" shortcut="⌘B">
-                  Toggle Sidebar
-                </TooltipContent>
-              </Tooltip>
-            </SidebarGroup>
-            <div className="mt-6 flex flex-col gap-4">
-              {currentTaskId && sidebarView === "agent" ? (
-                <SidebarAgentView taskId={currentTaskId} />
-              ) : (
-                <SidebarTasksView tasks={tasks} loading={loading} error={error} />
-              )}
+        <SidebarContent>
+          <SidebarGroup className="flex h-7 flex-row items-center justify-between">
+            <div className="font-medium">
+              {sidebarView === "tasks"
+                ? "Tasks"
+                : sidebarView === "codebases"
+                  ? "Codebases"
+                  : sidebarView === "codebase-understanding"
+                    ? "Codebase Understanding"
+                    : "Agent Environment"}
             </div>
-          </SidebarContent>
-        )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarTrigger className="hover:bg-sidebar-accent" />
+              </TooltipTrigger>
+              <TooltipContent side="right" shortcut="⌘B">
+                Toggle Sidebar
+              </TooltipContent>
+            </Tooltip>
+          </SidebarGroup>
+          <div className="mt-6 flex flex-col gap-4">
+            {currentTaskId && sidebarView === "agent" ? (
+              <SidebarAgentView taskId={currentTaskId} />
+            ) : sidebarView === "codebase-understanding" ? (
+              <SidebarCodebaseView codebaseId={currentCodebaseId ?? ""} />
+            ) : sidebarView === "codebases" ? (
+              <SidebarCodebasesListView
+                codebases={codebases}
+                loading={isLoadingCodebases}
+                error={codebasesError}
+              />
+            ) : (
+              <SidebarTasksView
+                tasks={tasks}
+                loading={isLoadingTasks}
+                error={tasksError}
+              />
+            )}
+          </div>
+        </SidebarContent>
       </Sidebar>
     </div>
   );
 }
-
-export function SidebarViews({
-  initialTasks,
-  currentTaskId = null,
-}: {
-  initialTasks: Task[];
-  currentTaskId?: string | null;
-}) {
-  return (
-    <SidebarProvider>
-      <SidebarViewsContent 
-        initialTasks={initialTasks}
-        currentTaskId={currentTaskId}
-      />
-    </SidebarProvider>
-  );
-}
-
-

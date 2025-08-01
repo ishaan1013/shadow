@@ -10,8 +10,15 @@ import {
   ReadFileOptions,
   SearchOptions,
   WriteResult,
-  CodebaseSearchToolResult,
+  SearchReplaceResult,
+  SemanticSearchToolResult,
   WebSearchResult,
+  GitStatusResponse,
+  GitDiffResponse,
+  GitCommitResponse,
+  GitPushResponse,
+  GitCommitRequest,
+  GitPushRequest,
 } from "@repo/types";
 import { CommandResult } from "./types";
 
@@ -39,7 +46,7 @@ export interface ToolExecutor {
     filePath: string,
     oldString: string,
     newString: string
-  ): Promise<WriteResult>;
+  ): Promise<SearchReplaceResult>;
 
   // Directory operations
   listDirectory(relativeWorkspacePath: string): Promise<DirectoryListing>;
@@ -52,16 +59,11 @@ export interface ToolExecutor {
     options?: GrepOptions
   ): Promise<GrepResult>;
 
-  codebaseSearch(
-    query: string,
-    options?: SearchOptions
-  ): Promise<CodebaseSearchToolResult>;
-
   semanticSearch(
     query: string,
     repo: string,
     options?: SearchOptions
-  ): Promise<CodebaseSearchResult>;
+  ): Promise<SemanticSearchToolResult>;
   webSearch(
     query: string,
     domain?: string
@@ -79,4 +81,10 @@ export interface ToolExecutor {
 
   // Task context
   getTaskId(): string;
+
+  // Git operations
+  getGitStatus(): Promise<GitStatusResponse>;
+  getGitDiff(): Promise<GitDiffResponse>;
+  commitChanges(request: GitCommitRequest): Promise<GitCommitResponse>;
+  pushBranch(request: GitPushRequest): Promise<GitPushResponse>;
 }

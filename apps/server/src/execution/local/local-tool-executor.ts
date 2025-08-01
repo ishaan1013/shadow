@@ -2,7 +2,7 @@ import {
   validateCommand,
   parseCommand,
   CommandSecurityLevel,
-  SecurityLogger
+  SecurityLogger,
 } from "@repo/command-security";
 import { spawn } from "child_process";
 import * as fs from "fs/promises";
@@ -20,15 +20,22 @@ import {
   FileStatsResult,
   GrepOptions,
   GrepResult,
+  GrepMatch,
   ReadFileOptions,
   WriteResult,
-  CodebaseSearchToolResult,
+  SearchReplaceResult,
+  SemanticSearchToolResult,
   SearchOptions,
   WebSearchResult,
+  GitStatusResponse,
+  GitDiffResponse,
+  GitCommitResponse,
+  GitPushResponse,
+  GitCommitRequest,
+  GitPushRequest,
 } from "@repo/types";
-import { EmbeddingSearchResult } from "../../indexing/embedding/types";
 import { CommandResult } from "../interfaces/types";
-
+import { performSemanticSearch } from "@/utils/semantic-search";
 
 /**
  * LocalToolExecutor implements tool operations for local filesystem execution
@@ -148,7 +155,6 @@ export class LocalToolExecutor implements ToolExecutor {
       // Write the new content
       await fs.writeFile(filePath, content);
 
-
       if (isNewFile) {
         return {
           success: true,
@@ -181,9 +187,7 @@ export class LocalToolExecutor implements ToolExecutor {
     try {
       const filePath = path.resolve(this.workspacePath, targetFile);
 
-
       await fs.unlink(filePath);
-
 
       return {
         success: true,
@@ -210,17 +214,71 @@ export class LocalToolExecutor implements ToolExecutor {
     filePath: string,
     oldString: string,
     newString: string
-  ): Promise<WriteResult> {
+  ): Promise<SearchReplaceResult> {
     try {
-      const resolvedPath = path.resolve(this.workspacePath, filePath);
-      const existingContent = await fs.readFile(resolvedPath, "utf-8");
+      // Input validation
+      if (!oldString) {
+        return {
+          success: false,
+          message: "Old string cannot be empty",
+          error: "EMPTY_OLD_STRING",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
 
+      if (oldString === newString) {
+        return {
+          success: false,
+          message: "Old string and new string are identical",
+          error: "IDENTICAL_STRINGS",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
+
+      const resolvedPath = path.resolve(this.workspacePath, filePath);
+      
+      // Read existing content
+      let existingContent: string;
+      try {
+        existingContent = await fs.readFile(resolvedPath, "utf-8");
+      } catch (error) {
+        return {
+          success: false,
+          message: `File not found: ${filePath}`,
+          error: error instanceof Error ? error.message : "File read error",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: 0,
+          newLength: 0,
+        };
+      }
+
+      // Count occurrences
       const occurrences = existingContent.split(oldString).length - 1;
 
       if (occurrences === 0) {
         return {
           success: false,
           message: `Text not found in file: ${filePath}`,
+          error: "TEXT_NOT_FOUND",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences: 0,
+          oldLength: existingContent.length,
+          newLength: existingContent.length,
         };
       }
 
@@ -228,27 +286,59 @@ export class LocalToolExecutor implements ToolExecutor {
         return {
           success: false,
           message: `Multiple occurrences found (${occurrences}). The old_string must be unique.`,
+          error: "TEXT_NOT_UNIQUE",
+          isNewFile: false,
+          linesAdded: 0,
+          linesRemoved: 0,
+          occurrences,
+          oldLength: existingContent.length,
+          newLength: existingContent.length,
         };
       }
 
+      // Perform replacement and calculate metrics
       const newContent = existingContent.replace(oldString, newString);
-      await fs.writeFile(resolvedPath, newContent);
+      
+      // Calculate line changes
+      const oldLines = existingContent.split("\n");
+      const newLines = newContent.split("\n");
+      const oldLineCount = oldLines.length;
+      const newLineCount = newLines.length;
+      
+      const linesAdded = Math.max(0, newLineCount - oldLineCount);
+      const linesRemoved = Math.max(0, oldLineCount - newLineCount);
 
+      // Write the new content
+      await fs.writeFile(resolvedPath, newContent);
 
       return {
         success: true,
-        message: `Successfully replaced text in ${filePath}`,
+        message: `Successfully replaced text in ${filePath}: ${occurrences} occurrence(s), ${linesAdded} lines added, ${linesRemoved} lines removed`,
+        isNewFile: false,
+        linesAdded,
+        linesRemoved,
+        occurrences,
+        oldLength: existingContent.length,
+        newLength: newContent.length,
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
         message: `Failed to search and replace in file: ${filePath}`,
+        isNewFile: false,
+        linesAdded: 0,
+        linesRemoved: 0,
+        occurrences: 0,
+        oldLength: 0,
+        newLength: 0,
       };
     }
   }
 
-  async listDirectory(relativeWorkspacePath: string): Promise<DirectoryListing> {
+  async listDirectory(
+    relativeWorkspacePath: string
+  ): Promise<DirectoryListing> {
     try {
       // Handle path resolution correctly - normalize relative paths
       let normalizedPath = relativeWorkspacePath;
@@ -266,7 +356,7 @@ export class LocalToolExecutor implements ToolExecutor {
 
       const contents = entries.map((entry) => ({
         name: entry.name,
-        type: entry.isDirectory() ? "directory" as const : "file" as const,
+        type: entry.isDirectory() ? ("directory" as const) : ("file" as const),
         isDirectory: entry.isDirectory(),
       }));
 
@@ -321,8 +411,9 @@ export class LocalToolExecutor implements ToolExecutor {
 
   async grepSearch(query: string, options?: GrepOptions): Promise<GrepResult> {
     try {
-      let command = `rg "${query}" "${this.workspacePath}"`;
-
+      // Build ripgrep command with file names and line numbers
+      let command = `rg -n --with-filename "${query}" "${this.workspacePath}"`;
+      
       if (!options?.caseSensitive) {
         command += " -i";
       }
@@ -339,14 +430,41 @@ export class LocalToolExecutor implements ToolExecutor {
 
       const { stdout } = await execAsync(command);
 
-      const matches = stdout
+      const rawMatches = stdout
         .trim()
         .split("\n")
         .filter((line) => line.length > 0);
 
+      // Parse structured output: "file:line:content"
+      const detailedMatches: GrepMatch[] = [];
+      const matches: string[] = [];
+
+      for (const rawMatch of rawMatches) {
+        const colonIndex = rawMatch.indexOf(':');
+        const secondColonIndex = rawMatch.indexOf(':', colonIndex + 1);
+        
+        if (colonIndex > 0 && secondColonIndex > colonIndex) {
+          const file = rawMatch.substring(0, colonIndex); // Full absolute path
+          const lineNumber = parseInt(rawMatch.substring(colonIndex + 1, secondColonIndex), 10);
+          let content = rawMatch.substring(secondColonIndex + 1); // Complete line content
+          
+          // Truncate content to 250 characters max
+          if (content.length > 250) {
+            content = content.substring(0, 250) + "...";
+          }
+          
+          detailedMatches.push({ file, lineNumber, content });
+          matches.push(rawMatch); // Keep original format for backward compatibility
+        } else {
+          // Fallback for unexpected format
+          matches.push(rawMatch);
+        }
+      }
+
       return {
         success: true,
         matches,
+        detailedMatches,
         query,
         matchCount: matches.length,
         message: `Found ${matches.length} matches for pattern: ${query}`,
@@ -357,6 +475,7 @@ export class LocalToolExecutor implements ToolExecutor {
         return {
           success: true,
           matches: [],
+          detailedMatches: [],
           query,
           matchCount: 0,
           message: `No matches found for pattern: ${query}`,
@@ -368,126 +487,50 @@ export class LocalToolExecutor implements ToolExecutor {
         error: error instanceof Error ? error.message : "Unknown error",
         message: `Failed to search for pattern: ${query}`,
         matches: [],
+        detailedMatches: [],
         query,
         matchCount: 0,
       };
     }
   }
 
-  async codebaseSearch(
+
+  async semanticSearch(
     query: string,
-    options?: SearchOptions
-  ): Promise<CodebaseSearchToolResult> {
+    repo: string,
+    _options?: SearchOptions
+  ): Promise<SemanticSearchToolResult> {
     try {
-      // Use ripgrep for a basic semantic-like search with multiple patterns
-      const searchTerms = query.split(" ").filter((term) => term.length > 2);
-      const searchPattern = searchTerms.join("|");
-
-      let searchPath = this.workspacePath;
-      if (options?.targetDirectories && options.targetDirectories.length > 0) {
-        // For now, just use the first directory
-        searchPath = path.resolve(
-          this.workspacePath,
-          options.targetDirectories[0] || "."
-        );
-      }
-
-      // Use ripgrep with case-insensitive search and context
-      const command = `rg -i -C 3 --max-count 10 "${searchPattern}" "${searchPath}"`;
-
-      try {
-        const { stdout } = await execAsync(command);
-        const results = stdout
-          .trim()
-          .split("\n--\n")
-          .map((chunk, index) => ({
-            id: index + 1,
-            content: chunk.trim(),
-            relevance: 0.8, // Mock relevance score
-          }))
-          .filter((result) => result.content.length > 0);
-
-        return {
-          success: true,
-          message: `Found ${results.length} relevant code snippets for "${query}"`,
-          results: results.slice(0, 5), // Limit to top 5 results
-          query,
-          searchTerms,
-        };
-      } catch (_error) {
-        // If ripgrep fails (no matches), return empty results
-        return {
-          success: true,
-          message: `No relevant code found for "${query}"`,
-          results: [],
-          query,
-          searchTerms,
-        };
-      }
+      return await performSemanticSearch({ query, repo });
     } catch (error) {
+      console.error(
+        `[SEMANTIC_SEARCH_ERROR] Failed to query indexing service:`,
+        error
+      );
+
+      // Fallback to grep search if indexing service is unavailable
+      const fallbackResult = await this.grepSearch(query);
+      
+      // Convert GrepResult to SemanticSearchToolResult format
       return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        message: `Failed to search codebase for: ${query}`,
-        results: [],
-        query,
-        searchTerms: [],
+        success: fallbackResult.success,
+        results: fallbackResult.matches.map((match, i) => ({
+          id: i + 1,
+          content: match,
+          relevance: 0.8,
+          filePath: "",
+          lineStart: 0,
+          lineEnd: 0,
+          language: "",
+          kind: "",
+        })),
+        query: fallbackResult.query,
+        searchTerms: fallbackResult.query.split(/\s+/),
+        message: fallbackResult.message + " (fallback to grep)",
+        error: fallbackResult.error,
       };
     }
   }
-
-  async semanticSearch(query: string, repo: string, options?: SearchOptions): Promise<CodebaseSearchToolResult> {
-    if (!config.useSemanticSearch) {
-      console.log("semanticSearch disabled, falling back to codebaseSearch");
-      return this.codebaseSearch(query, options);
-    }
-    try {
-      console.log("semanticSearch enabled");
-      console.log("semanticSearchParams", query, repo);
-      const response = await fetch(`${config.apiUrl}/api/indexing/search`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query,
-          namespace: repo,
-          topK: 5,
-          fields: ["content", "filePath", "language"]
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Indexing service error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json() as { matches: EmbeddingSearchResult[] };
-      const matches = data.matches;
-
-      const parsedData = {
-        success: !!matches,
-        results: matches.map((match: EmbeddingSearchResult, i: number) => ({
-          id: i + 1,
-          content: match?.fields?.code || match?.fields?.text || "",
-          relevance: typeof match?._score === "number" ? match._score : 0.8,
-        })),
-        query,
-        searchTerms: query.split(/\s+/),
-        message: matches?.length
-          ? `Found ${matches.length} relevant code snippets for "${query}"`
-          : `No relevant code found for "${query}"`,
-      }
-      console.log("semanticSearch", parsedData);
-
-      return parsedData;
-    } catch (error) {
-      console.error(`[SEMANTIC_SEARCH_ERROR] Failed to query indexing service:`, error);
-
-      // Fallback to ripgrep if indexing service is unavailable
-      return this.codebaseSearch(query, options);
-    }
-  }
-
   async webSearch(query: string, domain?: string): Promise<WebSearchResult> {
     try {
       if (!config.exaApiKey) {
@@ -508,9 +551,9 @@ export class LocalToolExecutor implements ToolExecutor {
         query,
         type: "fast",
         contents: {
-          text: true
+          text: true,
         },
-        num_results: 5
+        num_results: 5,
       };
 
       if (domain) {
@@ -522,9 +565,9 @@ export class LocalToolExecutor implements ToolExecutor {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-api-key": config.exaApiKey
+          "x-api-key": config.exaApiKey,
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -538,20 +581,21 @@ export class LocalToolExecutor implements ToolExecutor {
         title?: string;
       }
 
-      const data = await response.json() as { results?: ExaSearchResult[] };
+      const data = (await response.json()) as { results?: ExaSearchResult[] };
 
-      const results = data.results?.map((result: ExaSearchResult) => ({
-        text: result.text || "",
-        url: result.url || "",
-        title: result.title || undefined
-      })) || [];
+      const results =
+        data.results?.map((result: ExaSearchResult) => ({
+          text: result.text || "",
+          url: result.url || "",
+          title: result.title || undefined,
+        })) || [];
 
       return {
         success: true,
         results,
         query,
         domain,
-        message: `Found ${results.length} web search results for query: ${query}`
+        message: `Found ${results.length} web search results for query: ${query}`,
       };
     } catch (error) {
       console.error("Web search error:", error);
@@ -561,7 +605,7 @@ export class LocalToolExecutor implements ToolExecutor {
         query,
         domain,
         message: `Failed to perform web search: ${query}`,
-        error: error instanceof Error ? error.message : "Unknown error"
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -574,7 +618,12 @@ export class LocalToolExecutor implements ToolExecutor {
 
     // Parse and validate command
     const { command: baseCommand, args } = parseCommand(command);
-    const validation = validateCommand(baseCommand, args, this.workspacePath, this.securityLogger);
+    const validation = validateCommand(
+      baseCommand,
+      args,
+      this.workspacePath,
+      this.securityLogger
+    );
 
     if (!validation.isValid) {
       return {
@@ -587,7 +636,10 @@ export class LocalToolExecutor implements ToolExecutor {
 
     // Log potentially dangerous commands
     if (validation.securityLevel === CommandSecurityLevel.APPROVAL_REQUIRED) {
-      console.log(`[LOCAL] Executing potentially dangerous command: ${baseCommand}`, { args });
+      console.log(
+        `[LOCAL] Executing potentially dangerous command: ${baseCommand}`,
+        { args }
+      );
     }
 
     const sanitizedCommand = validation.sanitizedCommand!;
@@ -629,7 +681,8 @@ export class LocalToolExecutor implements ToolExecutor {
         };
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
 
       return {
         success: false,
@@ -683,7 +736,9 @@ export class LocalToolExecutor implements ToolExecutor {
         if (code === 0) {
           resolve({ stdout, stderr });
         } else {
-          const error = new Error(`Command failed with exit code ${code}: ${stderr || stdout}`) as Error & {
+          const error = new Error(
+            `Command failed with exit code ${code}: ${stderr || stdout}`
+          ) as Error & {
             stdout: string;
             stderr: string;
           };
@@ -715,4 +770,53 @@ export class LocalToolExecutor implements ToolExecutor {
     return this.taskId;
   }
 
+  /**
+   * Get git status (stub - delegates to GitManager in chat.ts for local mode)
+   */
+  async getGitStatus(): Promise<GitStatusResponse> {
+    // For local mode, git operations are handled directly by GitManager in chat.ts
+    // This is a stub implementation for interface compatibility
+    return {
+      success: false,
+      message: "Git operations in local mode are handled by GitManager",
+      hasChanges: false,
+    };
+  }
+
+  /**
+   * Get git diff (stub - delegates to GitManager in chat.ts for local mode)
+   */
+  async getGitDiff(): Promise<GitDiffResponse> {
+    // For local mode, git operations are handled directly by GitManager in chat.ts
+    // This is a stub implementation for interface compatibility
+    return {
+      success: false,
+      message: "Git operations in local mode are handled by GitManager",
+      diff: "",
+    };
+  }
+
+  /**
+   * Commit changes (stub - delegates to GitManager in chat.ts for local mode)
+   */
+  async commitChanges(_request: GitCommitRequest): Promise<GitCommitResponse> {
+    // For local mode, git operations are handled directly by GitManager in chat.ts
+    // This is a stub implementation for interface compatibility
+    return {
+      success: false,
+      message: "Git operations in local mode are handled by GitManager",
+    };
+  }
+
+  /**
+   * Push branch (stub - delegates to GitManager in chat.ts for local mode)
+   */
+  async pushBranch(_request: GitPushRequest): Promise<GitPushResponse> {
+    // For local mode, git operations are handled directly by GitManager in chat.ts
+    // This is a stub implementation for interface compatibility
+    return {
+      success: false,
+      message: "Git operations in local mode are handled by GitManager",
+    };
+  }
 }

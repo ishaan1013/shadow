@@ -203,60 +203,6 @@ export class TerminalBuffer {
     logger.info("Terminal buffer cleared");
   }
 
-  /**
-   * Persist buffer to storage (for recovery across restarts)
-   */
-  async persist(filePath: string): Promise<void> {
-    try {
-      const fs = await import('fs/promises');
-      const data = {
-        buffer: this.buffer,
-        nextId: this.nextId,
-        droppedCount: this.droppedCount,
-        persistedAt: Date.now(),
-      };
-
-      await fs.writeFile(filePath, JSON.stringify(data));
-      logger.info("Terminal buffer persisted", { filePath, entries: this.buffer.length });
-    } catch (error) {
-      logger.error("Failed to persist terminal buffer", { error, filePath });
-      throw error;
-    }
-  }
-
-  /**
-   * Restore buffer from storage
-   */
-  async restore(filePath: string): Promise<void> {
-    try {
-      const fs = await import('fs/promises');
-      const data = await fs.readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(data);
-
-      this.buffer = parsed.buffer || [];
-      this.nextId = parsed.nextId || 1;
-      this.droppedCount = parsed.droppedCount || 0;
-      
-      // Recalculate memory usage and size
-      this.currentSize = this.buffer.length;
-      this.memoryUsage = this.buffer.reduce((total, entry) => 
-        total + this.estimateEntrySize(entry), 0
-      );
-
-      logger.info("Terminal buffer restored", { 
-        filePath, 
-        entries: this.buffer.length,
-        persistedAt: new Date(parsed.persistedAt).toISOString(),
-      });
-    } catch (error) {
-      if ((error as any).code === 'ENOENT') {
-        logger.info("No terminal buffer file found, starting fresh", { filePath });
-      } else {
-        logger.error("Failed to restore terminal buffer", { error, filePath });
-        throw error;
-      }
-    }
-  }
 
   /**
    * Destroy the buffer and cleanup resources

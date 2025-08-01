@@ -2,9 +2,8 @@
 
 This directory contains the dual-mode execution abstraction layer that enables the coding agent to run in multiple execution environments:
 
-- **Local Mode**: Direct filesystem operations (default)
-- **Remote Mode**: Distributed execution via Kubernetes pods + sidecar APIs
-- **Mock Mode**: Simulated remote behavior for testing and development
+- **Local Mode**: Direct filesystem operations for development
+- **Firecracker Mode**: Hardware-isolated VMs on Kubernetes for production
 
 ## Architecture Overview
 
@@ -17,14 +16,17 @@ execution/
 ├── local/               # Local filesystem implementation
 │   ├── local-tool-executor.ts     # Direct filesystem operations
 │   └── local-workspace-manager.ts # Local workspace management
-├── remote/              # Remote K8s pod implementation
-│   ├── remote-tool-executor.ts     # HTTP client for sidecar API
-│   └── remote-workspace-manager.ts # Kubernetes client for pod lifecycle
-├── mock/                # Mock implementations for testing
-│   ├── mock-remote-tool-executor.ts     # Simulated remote operations
-│   └── mock-remote-workspace-manager.ts # Simulated infrastructure ops
-├── index.ts            # Factory functions for mode selection
-└── test-remote-integration.ts # Integration tests
+├── firecracker/         # Firecracker VM implementation
+│   ├── firecracker-tool-executor.ts     # HTTP client for VM sidecar API
+│   └── firecracker-workspace-manager.ts # Kubernetes VM lifecycle management
+├── k8s/                 # Kubernetes manifests for Firecracker
+│   ├── firecracker-daemonset.yaml      # Firecracker runtime deployment
+│   ├── firecracker-runtime-class.yaml  # VM pod scheduling
+│   ├── rbac.yaml                       # VM permissions
+│   ├── namespace.yaml                  # Shadow namespace
+│   ├── storage.yaml                    # Storage classes
+│   └── monitoring.yaml                 # Monitoring configuration
+└── index.ts            # Factory functions for mode selection
 ```
 
 ## Usage
@@ -37,11 +39,8 @@ Set the agent mode using the `AGENT_MODE` environment variable:
 # Local mode (default)
 export AGENT_MODE=local
 
-# Remote mode (requires Kubernetes)
-export AGENT_MODE=remote
-
-# Mock mode (for testing)
-export AGENT_MODE=mock
+# Firecracker mode (requires Kubernetes with KVM support)
+export AGENT_MODE=firecracker
 ```
 
 ### Factory Usage
@@ -50,8 +49,11 @@ export AGENT_MODE=mock
 import { createToolExecutor, createWorkspaceManager } from './execution';
 
 // Create mode-specific instances
-const executor = createToolExecutor(taskId, workspacePath, process.env.AGENT_MODE);
-const manager = createWorkspaceManager(process.env.AGENT_MODE);
+const executor = createToolExecutor(taskId, workspacePath);
+const manager = createWorkspaceManager();
+
+// Check current mode
+import { isFirecrackerMode, isLocalMode } from './execution';
 ```
 
 ## Configuration
@@ -60,54 +62,64 @@ const manager = createWorkspaceManager(process.env.AGENT_MODE);
 - `WORKSPACE_DIR`: Base directory for task workspaces
 - No additional configuration required
 
-### Remote Mode
-- `KUBERNETES_NAMESPACE`: K8s namespace for agent pods (default: "shadow")
-- `SIDECAR_IMAGE`: Docker image for sidecar service (default: "shadow-sidecar:latest")
-- `SIDECAR_PORT`: Port for sidecar API (default: 8080)
-- `SIDECAR_HEALTH_PATH`: Health check endpoint (default: "/health")
-- `REMOTE_CPU_LIMIT`: CPU limit for agent pods (default: "1000m")
-- `REMOTE_MEMORY_LIMIT`: Memory limit for agent pods (default: "2Gi")
+### Firecracker Mode
+- `FIRECRACKER_ENABLED`: Enable VM mode (boolean)
+- `VM_IMAGE_REGISTRY`: Container registry for VM images
+- `VM_IMAGE_TAG`: VM image version tag (default: "latest")
+- `VM_CPU_COUNT`: vCPU count per VM (default: 1)
+- `VM_MEMORY_SIZE_MB`: Memory per VM in MB (default: 1024)
+- `KUBERNETES_NAMESPACE`: K8s namespace for VMs (default: "shadow")
+- `VM_CPU_LIMIT`: CPU limit for VM pods (default: "1000m")
+- `VM_MEMORY_LIMIT`: Memory limit for VM pods (default: "2Gi")
+- `VM_STORAGE_LIMIT`: Storage limit per VM (default: "10Gi")
 - `K8S_SERVICE_ACCOUNT_TOKEN`: Service account token for K8s API access
-
-### Mock Mode
-- No configuration required
-- Use `setSimulateFailures(true)` and `setLatency(ms)` for testing different scenarios
 
 ## Features
 
+### Hardware Isolation (Firecracker Mode)
+- **True VM Isolation**: Each task runs in its own Firecracker microVM
+- **<125ms Boot Time**: Optimized VM startup with pre-built images
+- **KVM Support**: Requires bare metal instances with `/dev/kvm` access
+- **Jailer Security**: Secure VM execution with resource limits
+
 ### Error Handling & Resilience
-- **Exponential backoff**: Automatic retry with increasing delays
 - **Circuit breaker**: Prevents excessive retries when service is down
+- **Exponential backoff**: Automatic retry with increasing delays
 - **Graceful fallbacks**: Returns structured error responses instead of throwing
-- **Non-retryable errors**: Intelligent detection of client errors vs transient failures
+- **VM Recovery**: Automatic VM restart and health monitoring
 
 ### Tool Operations
-All implementations support the same set of operations:
+Both implementations support the same set of operations:
 - File operations: `readFile`, `writeFile`, `deleteFile`, `searchReplace`
 - Directory operations: `listDirectory`
 - Search operations: `searchFiles`, `grepSearch`, `codebaseSearch`
-- Command execution: `executeCommand` (with background support)
+- Command execution: `executeCommand` (with streaming output)
 
 ### Workspace Management
-- **Lifecycle management**: Create, monitor, and cleanup workspaces
-- **Health checking**: Monitor workspace and service health
-- **Status tracking**: Get workspace status and metrics
-- **Resource management**: Monitor workspace size and resource usage
+- **VM Lifecycle**: Create, monitor, and cleanup Firecracker VMs
+- **Health checking**: Monitor VM and sidecar service health
+- **Status tracking**: Get workspace status and resource metrics
+- **Git Integration**: Automatic repository cloning and shadow branch creation
 
-## Testing
+## VM Image Components
 
-Run the integration tests to verify all modes work correctly:
+### Base Image (Ubuntu 22.04 LTS)
+- **Node.js 20**: JavaScript/TypeScript runtime
+- **Python 3.11**: Python runtime with pip
+- **LSP Servers**: typescript-language-server, pylsp
+- **Development Tools**: git, curl, ripgrep, build-essential, tmux
+- **Shadow Sidecar**: Pre-compiled sidecar service
 
+### Build Process
 ```bash
-cd apps/server
-npx tsx src/execution/test-remote-integration.ts
-```
+# Build VM image
+sudo ./scripts/build-vm-image.sh
 
-This will test:
-- Factory creation for all modes
-- Basic functionality verification
-- Error handling with fallbacks
-- Mode-specific behavior
+# Output: vm-image/output/
+# - shadow-rootfs.ext4.gz (compressed filesystem)
+# - vmlinux.gz (Firecracker kernel)
+# - manifest.json (build metadata)
+```
 
 ## Production Deployment
 
@@ -115,31 +127,65 @@ This will test:
 - Default mode, no additional setup required
 - Workspaces created in `WORKSPACE_DIR/tasks/{taskId}/`
 
-### Remote Mode
-- Requires Kubernetes cluster with appropriate RBAC permissions
-- Requires sidecar service Docker image deployed
-- Each task gets its own pod with isolated workspace
-- Automatic cleanup when tasks complete
+### Firecracker Mode
+- **Kubernetes Requirements**:
+  - Bare metal nodes with KVM support (m5.metal, c5.metal)
+  - Node labels: `firecracker=true`
+  - `/dev/kvm` device access
+  - Privileged pod support
+
+- **Deployment Steps**:
+  ```bash
+  # Deploy Kubernetes manifests
+  kubectl apply -f apps/server/src/execution/k8s/
+  
+  # Build and push VM images
+  sudo ./scripts/build-vm-image.sh
+  docker tag shadow-vm:latest ${VM_IMAGE_REGISTRY}/shadow-vm:latest
+  docker push ${VM_IMAGE_REGISTRY}/shadow-vm:latest
+  ```
+
+- **VM Lifecycle**:
+  - Each task gets its own VM pod with isolated workspace
+  - Repository automatically cloned to VM workspace
+  - Shadow branch created for task-specific changes
+  - Automatic cleanup when tasks complete
 
 ### Monitoring
-- All operations include structured logging with `[LOCAL_WORKSPACE]`, `[REMOTE_TOOL]`, etc. prefixes
-- Circuit breaker state changes are logged
-- Health check results are logged
-- Failed operations include detailed error context
+- All operations include structured logging with `[FIRECRACKER_WM]`, `[VM_CONSOLE]`, etc. prefixes
+- VM health checks and boot completion monitoring
+- Resource usage tracking (CPU, memory, storage)
+- Circuit breaker state changes logged
 
 ## Security Considerations
 
 ### Local Mode
-- File operations are scoped to workspace directory
+- File operations scoped to workspace directory
 - Command execution runs with server process permissions
 
-### Remote Mode
-- Pods run with non-root user (UID 1000)
-- Workspaces are isolated in separate pods
-- Network access limited to cluster internal services
-- Resource limits prevent resource exhaustion
+### Firecracker Mode
+- **Hardware Isolation**: VM-level isolation via hypervisor
+- **Jailer Integration**: Secure VM execution with resource limits
+- **Network Isolation**: VMs run in isolated network namespaces
+- **Path Traversal Protection**: Sidecar prevents directory escape
+- **Resource Limits**: CPU, memory, storage quotas per VM
+- **Non-root Execution**: Workspace operations run as `shadow` user
 
 ### General
-- No sensitive data should be logged
-- GitHub tokens are passed securely via environment variables
-- All file paths are validated and sanitized
+- No sensitive data logged
+- GitHub tokens passed securely via environment variables
+- All file paths validated and sanitized
+- VM console communication uses protocol multiplexing
+
+## Development
+
+### Adding New Tool Operations
+1. Add method to `ToolExecutor` interface in `interfaces/tool-executor.ts`
+2. Implement in both `LocalToolExecutor` and `FirecrackerToolExecutor`
+3. Add corresponding sidecar API endpoint for Firecracker mode
+
+### VM Image Updates
+1. Modify `vm-image/Dockerfile.vm` for new dependencies
+2. Update `scripts/build-vm-image.sh` for build process changes
+3. Test with `sudo ./scripts/build-vm-image.sh`
+4. Update VM image tag in configuration

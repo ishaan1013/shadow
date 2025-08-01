@@ -10,6 +10,7 @@ import {
 import { authClient } from "@/lib/auth/auth-client";
 import { LogOut, User } from "lucide-react";
 import { useAuthSession } from "./session-provider";
+import Image from "next/image";
 
 export function UserMenu() {
   const { session, isLoading } = useAuthSession();
@@ -29,11 +30,13 @@ export function UserMenu() {
   };
 
   if (isLoading) {
-    return <div className="bg-muted size-8 animate-pulse rounded-full" />;
+    return (
+      <div className="bg-sidebar-accent size-7 animate-pulse rounded-full" />
+    );
   }
 
   if (!session?.user) {
-    return <div className="size-8" />;
+    return <div className="size-7" />;
   }
 
   return (
@@ -41,10 +44,13 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button className="bg-sidebar-accent size-7 cursor-pointer rounded-full transition-opacity hover:opacity-80">
           {session.user.image ? (
-            <img
+            <Image
               src={session.user.image}
               alt={session.user.name || "User"}
               className="size-7 rounded-full"
+              width={28}
+              height={28}
+              priority
             />
           ) : (
             <User className="size-4" />

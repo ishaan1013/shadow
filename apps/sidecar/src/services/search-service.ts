@@ -6,8 +6,7 @@ import { WorkspaceService } from "./workspace-service";
 import {
   FileSearchResponse,
   GrepSearchResponse,
-  CodebaseSearchResponse,
-  CodebaseSearchResult,
+  GrepMatch,
 } from "@repo/types";
 
 const execAsync = promisify(exec);
@@ -66,8 +65,8 @@ export class SearchService {
     try {
       const workspaceDir = this.workspaceService.getWorkspaceDir();
 
-      // Build ripgrep command
-      let command = `rg "${query}" "${workspaceDir}"`;
+      // Build ripgrep command with file names and line numbers
+      let command = `rg -n --with-filename "${query}" "${workspaceDir}"`;
 
       if (!caseSensitive) {
         command += " -i";
@@ -89,23 +88,41 @@ export class SearchService {
       try {
         const { stdout } = await execAsync(command);
 
-        const matches = stdout
+        const rawMatches = stdout
           .trim()
           .split("\n")
-          .filter(line => line.length > 0)
-          .map(line => {
-            // Make paths relative to workspace
-            const match = line.match(/^(.+?):(.*)/);
-            if (match && match[1] && match[2]) {
-              const relativePath = path.relative(workspaceDir, match[1]);
-              return `${relativePath}:${match[2]}`;
+          .filter(line => line.length > 0);
+
+        // Parse structured output: "file:line:content"
+        const detailedMatches: GrepMatch[] = [];
+        const matches: string[] = [];
+
+        for (const rawMatch of rawMatches) {
+          const colonIndex = rawMatch.indexOf(':');
+          const secondColonIndex = rawMatch.indexOf(':', colonIndex + 1);
+          
+          if (colonIndex > 0 && secondColonIndex > colonIndex) {
+            const file = rawMatch.substring(0, colonIndex); // Full absolute path
+            const lineNumber = parseInt(rawMatch.substring(colonIndex + 1, secondColonIndex), 10);
+            let content = rawMatch.substring(secondColonIndex + 1); // Complete line content
+            
+            // Truncate content to 250 characters max
+            if (content.length > 250) {
+              content = content.substring(0, 250) + "...";
             }
-            return line;
-          });
+            
+            detailedMatches.push({ file, lineNumber, content });
+            matches.push(rawMatch); // Keep original format for backward compatibility
+          } else {
+            // Fallback for unexpected format
+            matches.push(rawMatch);
+          }
+        }
 
         return {
           success: true,
           matches,
+          detailedMatches,
           query,
           matchCount: matches.length,
           message: `Found ${matches.length} matches for pattern: ${query}`,
@@ -116,6 +133,7 @@ export class SearchService {
           return {
             success: true,
             matches: [],
+            detailedMatches: [],
             query,
             matchCount: 0,
             message: `No matches found for pattern: ${query}`,
@@ -130,85 +148,14 @@ export class SearchService {
         success: false,
         query,
         matchCount: 0,
+        matches: [],
+        detailedMatches: [],
         message: `Failed to search for pattern: ${query}`,
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
 
-  /**
-   * Semantic codebase search (simplified implementation using ripgrep)
-   */
-  async codebaseSearch(
-    query: string,
-    targetDirectories?: string[]
-  ): Promise<CodebaseSearchResponse> {
-    try {
-      const workspaceDir = this.workspaceService.getWorkspaceDir();
-
-      // Split query into search terms
-      const searchTerms = query
-        .split(" ")
-        .filter(term => term.length > 2);
-
-      const searchPattern = searchTerms.join("|");
-
-      let searchPath = workspaceDir;
-      if (targetDirectories && targetDirectories.length > 0) {
-        // Use the first target directory
-        searchPath = this.workspaceService.resolvePath(targetDirectories[0] || ".");
-      }
-
-      // Use ripgrep with context for semantic-like search
-      const command = `rg -i -C 3 --max-count 10 "${searchPattern}" "${searchPath}"`;
-
-      logger.debug("Executing codebase search", { command });
-
-      try {
-        const { stdout } = await execAsync(command);
-
-        const results: CodebaseSearchResult[] = stdout
-          .trim()
-          .split("\n--\n")
-          .map((chunk, index) => ({
-            id: index + 1,
-            content: chunk.trim(),
-            relevance: 0.8 - (index * 0.1), // Mock relevance score
-          }))
-          .filter(result => result.content.length > 0)
-          .slice(0, 5); // Limit to top 5 results
-
-        return {
-          success: true,
-          results,
-          query,
-          searchTerms,
-          message: `Found ${results.length} relevant code snippets for "${query}"`,
-        };
-      } catch (error) {
-        // No matches found
-        if (error instanceof Error && error.message.includes("exit code 1")) {
-          return {
-            success: true,
-            results: [],
-            query,
-            searchTerms,
-            message: `No relevant code found for "${query}"`,
-          };
-        }
-        throw error;
-      }
-    } catch (error) {
-      logger.error("Codebase search failed", { query, error });
-
-      return {
-        success: false,
-        query,
-        message: `Failed to search codebase for: ${query}`,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
 }
 
 export default SearchService;

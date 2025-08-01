@@ -1,13 +1,16 @@
-function getNamespaceFromRepo(repo: string) {
-  return repo.replace("/", "-");
-}
 
 function isValidRepo(repo: string) {
   // Luh calm regex (NOT GPT'ed)
   return /^.+\/.+$/.test(repo);
 }
+function getNamespaceFromRepo(repo: string) {
+  if (!isValidRepo(repo)) {
+    throw new Error(`Invalid repo format: ${repo}`);
+  }
+  return repo.replace("/", "-");
+}
 
-function getOwnerRepo(repo: string): { owner: string; repo: string } {
+function getOwnerFromRepo(repo: string): { owner: string; repo: string } {
   if (!isValidRepo(repo)) {
     throw new Error(`Invalid repo format: ${repo}`);
   }
@@ -26,4 +29,4 @@ function getOwnerRepo(repo: string): { owner: string; repo: string } {
   };
 }
 
-export { getNamespaceFromRepo, getOwnerRepo, isValidRepo };
+export { getNamespaceFromRepo, getOwnerFromRepo, isValidRepo };

@@ -1,4 +1,5 @@
 import { prisma, TaskStatus } from "@repo/db";
+import type { InitStepType } from "@repo/db";
 import { emitTaskStatusUpdate } from "../socket";
 
 /**
@@ -32,4 +33,56 @@ export async function updateTaskStatus(
     );
     throw error;
   }
+}
+
+/**
+ * Set task as in progress with current step
+ */
+export async function setTaskInProgress(taskId: string, step: InitStepType): Promise<void> {
+  await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      lastCompletedStep: step,
+      initializationError: null, // Clear any previous errors
+    },
+  });
+}
+
+/**
+ * Set task as completed with final step
+ */
+export async function setTaskCompleted(taskId: string, lastStep: InitStepType): Promise<void> {
+  await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      lastCompletedStep: lastStep,
+      initializationError: null,
+    },
+  });
+}
+
+/**
+ * Set task as failed with error message
+ */
+export async function setTaskFailed(taskId: string, step: InitStepType, error: string): Promise<void> {
+  await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      lastCompletedStep: step, // Keep the step where failure occurred
+      initializationError: error,
+    },
+  });
+}
+
+/**
+ * Clear task progress (reset to not started state)
+ */
+export async function clearTaskProgress(taskId: string): Promise<void> {
+  await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      lastCompletedStep: null,
+      initializationError: null,
+    },
+  });
 }

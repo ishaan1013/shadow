@@ -7,6 +7,12 @@ import {
   StopCircle,
   XCircleIcon,
 } from "lucide-react";
+import {
+  type TaskWithInitFields,
+  isInitializationFailed,
+  isInitializationInProgress,
+} from "@repo/types";
+import type { TaskStatus } from "@repo/db";
 
 export const statusOrder = {
   RUNNING: 0,
@@ -44,3 +50,12 @@ export const statusColorsConfig = {
   },
   CANCELLED: { icon: XCircleIcon, className: "text-red-400", bg: "bg-red-500" },
 };
+
+/**
+ * Get display status for task (for icon/color selection)
+ */
+export function getDisplayStatus(task: TaskWithInitFields): TaskStatus {
+  if (isInitializationFailed(task)) return "FAILED";
+  if (isInitializationInProgress(task)) return "INITIALIZING";
+  return task.status || "STOPPED";
+}

@@ -9,16 +9,17 @@ datasource db {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean
-  image         String?
-  createdAt     DateTime
-  updatedAt     DateTime
-  tasks         Task[]
-  accounts      Account[]
-  sessions      Session[]
+  id                    String                  @id
+  name                  String
+  email                 String                  @unique
+  emailVerified         Boolean
+  image                 String?
+  createdAt             DateTime
+  updatedAt             DateTime
+  tasks                 Task[]
+  accounts              Account[]
+  sessions              Session[]
+  CodebaseUnderstanding CodebaseUnderstanding[]
 
   @@map("user")
 }
@@ -70,33 +71,38 @@ model Verification {
 }
 
 model Task {
-  id                    String                  @id @default(cuid())
-  title                 String                  @default("Untitled Task")
-  description           String?
-  status                TaskStatus              @default(INITIALIZING)
-  repoUrl               String
-  workspacePath         String?
-  baseBranch            String
-  shadowBranch          String
-  baseCommitSha         String
-  initializationStatus  InitializationStatus    @default(PENDING)
-  currentInitStep       InitStepType?
-  mode                  TaskMode                @default(FULL_AUTO)
-  workspaceCleanedUp    Boolean                 @default(false)
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  userId                String
-  messages              ChatMessage[]
-  CodebaseUnderstanding CodebaseUnderstanding[]
-  FileChange            FileChange[]
-  user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions              TaskSession[]
-  commands              TerminalCommand[]
-  todos                 Todo[]
+  id     String     @id @default(nanoid())
+  title  String
+  status TaskStatus @default(INITIALIZING)
+
+  // Repo full name "owner/repo"
+  repoFullName String
+  // Repo URL "https://github.com/owner/repo"
+  repoUrl      String
+
+  workspacePath       String?
+  lastCompletedStep   InitStepType?
+  initializationError String?
+  workspaceCleanedUp  Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  userId              String
+  baseBranch          String
+  baseCommitSha       String
+  shadowBranch        String
+  pullRequestNumber   Int?
+  messages            ChatMessage[]
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions            TaskSession[]
+  commands            TerminalCommand[]
+  todos               Todo[]
+
+  codebaseUnderstandingId String?
+  codebaseUnderstanding   CodebaseUnderstanding? @relation(fields: [codebaseUnderstandingId], references: [id])
 }
 
 model Todo {
-  id        String     @id @default(cuid())
+  id        String     @default(cuid())
   content   String
   status    TodoStatus @default(PENDING)
   sequence  Int
@@ -105,24 +111,27 @@ model Todo {
   taskId    String
   task      Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
+  @@id([taskId, id])
   @@index([taskId, sequence])
   @@index([taskId, status])
 }
 
 model ChatMessage {
-  id               String      @id @default(cuid())
-  content          String
-  role             MessageRole
-  llmModel         String?
-  metadata         Json?
-  sequence         Int
-  promptTokens     Int?
-  completionTokens Int?
-  totalTokens      Int?
-  finishReason     String?
-  createdAt        DateTime    @default(now())
-  taskId           String
-  task             Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  id                  String               @id @default(cuid())
+  content             String
+  role                MessageRole
+  llmModel            String?
+  metadata            Json?
+  sequence            Int
+  promptTokens        Int?
+  completionTokens    Int?
+  totalTokens         Int?
+  finishReason        String?
+  createdAt           DateTime             @default(now())
+  editedAt            DateTime?
+  taskId              String
+  task                Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  pullRequestSnapshot PullRequestSnapshot?
 
   @@index([taskId, sequence])
   @@index([taskId, role, sequence])
@@ -158,36 +167,39 @@ model TaskSession {
   @@index([taskId, isActive])
 }
 
-model FileChange {
-  id         String   @id
-  filePath   String
-  operation  FileOp
-  oldContent String?
-  newContent String?
-  diffPatch  String?
-  additions  Int      @default(0)
-  deletions  Int      @default(0)
-  createdAt  DateTime @default(now())
-  taskId     String
-  Task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+model CodebaseUnderstanding {
+  id           String   @id @default(nanoid())
+  repoFullName String   @unique
+  repoUrl      String
+  content      Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  @@index([taskId, createdAt])
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks  Task[]
+
+  @@index([repoFullName])
 }
 
-model CodebaseUnderstanding {
-  id        String   @id @default(cuid())
-  taskId    String
-  fileName  String
-  type      String?  @default("file_summary")
-  filePath  String?
-  language  String?
-  content   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+model PullRequestSnapshot {
+  id String @id @default(cuid())
 
-  @@index([taskId])
-  @@index([type])
+  status      PullRequestStatus
+  title       String
+  description String
+
+  filesChanged Int
+  linesAdded   Int
+  linesRemoved Int
+  commitSha    String
+
+  createdAt DateTime @default(now())
+
+  messageId String      @unique
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("pull_request_snapshot")
 }
 
 enum TaskStatus {
@@ -200,10 +212,9 @@ enum TaskStatus {
   CANCELLED
 }
 
-enum TaskMode {
-  FULL_AUTO
-  INTELLIGENT_AUTO
-  MANUAL
+enum PullRequestStatus {
+  CREATED
+  UPDATED
 }
 
 enum MessageRole {
@@ -220,24 +231,20 @@ enum TodoStatus {
   CANCELLED
 }
 
-enum InitializationStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  FAILED
-}
-
 enum InitStepType {
-  CLONE_REPOSITORY
-  PROVISION_MICROVM
-  SETUP_ENVIRONMENT
-  INSTALL_DEPENDENCIES
-  CONFIGURE_TOOLS
-  VALIDATE_SETUP
-  CREATE_POD
-  WAIT_SIDECAR_READY
-  VERIFY_WORKSPACE
-  CLEANUP_POD
+  // Local mode step
+  PREPARE_WORKSPACE
+
+  // Firecracker-specific steps
+  CREATE_VM
+  WAIT_VM_READY
+  VERIFY_VM_WORKSPACE
+
+  // Repository indexing step (both modes)
+  INDEX_REPOSITORY
+
+  // Cleanup step (firecracker only)
+  CLEANUP_WORKSPACE
 }
 
 enum FileOp {

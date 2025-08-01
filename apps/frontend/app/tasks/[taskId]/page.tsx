@@ -1,8 +1,8 @@
-import { TaskPageLayout } from "@/components/task/task-layout";
+import { TaskPageWrapper } from "@/components/task/task-wrapper";
 import { getInitialLayoutCookie } from "@/lib/actions/get-initial-layout-cookie";
 
 export default async function TaskPage() {
   const initialLayout = await getInitialLayoutCookie();
 
-  return <TaskPageLayout initialLayout={initialLayout} />;
+  return <TaskPageWrapper initialLayout={initialLayout} />;
 }

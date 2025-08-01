@@ -13,7 +13,7 @@
 
 **When to Read Entire File:**
 - ONLY if file has been edited or manually attached by user
-- NOT for exploration of large files (use codebase_search instead)
+- NOT for exploration of large files (use semantic_search for understanding concepts or grep_search for finding specific terms)
 
 **Examples:**
 - Read imports/exports at top of file, then read specific functions

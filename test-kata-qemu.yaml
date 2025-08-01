@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kata-qemu-test
+  namespace: shadow-agents
+spec:
+  runtimeClassName: kata-qemu
+  nodeSelector:
+    firecracker: "true"
+  tolerations:
+  - key: firecracker.shadow.ai/dedicated
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  containers:
+  - name: test
+    image: alpine:latest
+    command: ["sleep", "60"]
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+  restartPolicy: Never

@@ -18,6 +18,18 @@ export interface WriteResult {
   linesRemoved?: number;
 }
 
+export interface SearchReplaceResult {
+  success: boolean;
+  message: string;
+  error?: string;
+  isNewFile: false;
+  linesAdded: number;
+  linesRemoved: number;
+  occurrences: number;
+  oldLength: number;
+  newLength: number;
+}
+
 export interface DeleteResult {
   success: boolean;
   message: string;
@@ -58,21 +70,33 @@ export interface FileSearchResult {
   error?: string;
 }
 
+export interface GrepMatch {
+  file: string;
+  lineNumber: number;
+  content: string;
+}
+
 export interface GrepResult {
   success: boolean;
   matches: string[];
+  detailedMatches?: GrepMatch[];
   query: string;
   matchCount: number;
   message: string;
   error?: string;
 }
 
-export interface CodebaseSearchToolResult {
+export interface SemanticSearchToolResult {
   success: boolean;
   results: Array<{
     id: number;
     content: string;
     relevance: number;
+    filePath: string;
+    lineStart: number;
+    lineEnd: number;
+    language: string;
+    kind: string;
   }>;
   query: string;
   searchTerms: string[];
@@ -114,14 +138,14 @@ export interface TodoWriteResult {
 
 // Discriminated union for all tool results
 export type ToolResultTypes =
-  | { toolName: 'edit_file'; result: WriteResult }
-  | { toolName: 'search_replace'; result: WriteResult }
-  | { toolName: 'run_terminal_cmd'; result: CommandResult }
-  | { toolName: 'read_file'; result: FileResult }
-  | { toolName: 'grep_search'; result: GrepResult }
-  | { toolName: 'list_dir'; result: DirectoryListing }
-  | { toolName: 'file_search'; result: FileSearchResult }
-  | { toolName: 'codebase_search'; result: CodebaseSearchToolResult }
-  | { toolName: 'web_search'; result: WebSearchResult }
-  | { toolName: 'delete_file'; result: DeleteResult }
-  | { toolName: 'todo_write'; result: TodoWriteResult };
+  | { toolName: "edit_file"; result: WriteResult }
+  | { toolName: "search_replace"; result: SearchReplaceResult }
+  | { toolName: "run_terminal_cmd"; result: CommandResult }
+  | { toolName: "read_file"; result: FileResult }
+  | { toolName: "grep_search"; result: GrepResult }
+  | { toolName: "list_dir"; result: DirectoryListing }
+  | { toolName: "file_search"; result: FileSearchResult }
+  | { toolName: "semantic_search"; result: SemanticSearchToolResult }
+  | { toolName: "web_search"; result: WebSearchResult }
+  | { toolName: "delete_file"; result: DeleteResult }
+  | { toolName: "todo_write"; result: TodoWriteResult };

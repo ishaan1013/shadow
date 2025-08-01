@@ -1,5 +1,5 @@
 // Execution mode type
-export type AgentMode = "local" | "remote" | "mock";
+export type AgentMode = "local" | "firecracker";
 
 // Tool operation options
 export interface ReadFileOptions {

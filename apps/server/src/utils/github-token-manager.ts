@@ -60,12 +60,9 @@ export class GitHubTokenManager {
       );
     }
 
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(
-        `GitHub token refresh error: ${data.error_description || data.error}`
-      );
+    const data = (await response.json()) as GitHubTokenResponse;
+    if (!data.access_token || !data.refresh_token) {
+      throw new Error("GitHub token refresh failed: missing access or refresh token");
     }
 
     return data;

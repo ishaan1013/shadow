@@ -4,14 +4,21 @@
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "lint": "eslint 'src/**/*.ts'",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
     "@repo/typescript-config": "*",
-    "@types/node": "^20.11.1",
-    "typescript": "~5.7.2"
+    "@types/node": "^24.0.13",
+    "typescript": "^5.8.3"
   }
 }

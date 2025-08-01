@@ -5,7 +5,7 @@ import { ModelInfo } from "@repo/types";
 export async function getModels(): Promise<ModelInfo[]> {
   try {
     const baseUrl =
-      process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     const response = await fetch(`${baseUrl}/api/models`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

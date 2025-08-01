@@ -4,7 +4,6 @@ import { SearchService } from "../services/search-service";
 import {
   FileSearchRequestSchema,
   GrepSearchRequestSchema,
-  CodebaseSearchRequestSchema,
 } from "@repo/types";
 
 export function createSearchRouter(searchService: SearchService): Router {
@@ -53,27 +52,6 @@ export function createSearchRouter(searchService: SearchService): Router {
     })
   );
 
-  /**
-   * POST /search/codebase
-   * Semantic codebase search
-   */
-  router.post(
-    "/search/codebase",
-    asyncHandler(async (req, res) => {
-      const body = CodebaseSearchRequestSchema.parse(req.body);
-
-      const result = await searchService.codebaseSearch(
-        body.query,
-        body.targetDirectories
-      );
-
-      if (!result.success) {
-        res.status(500).json(result);
-      } else {
-        res.json(result);
-      }
-    })
-  );
 
   return router;
 }

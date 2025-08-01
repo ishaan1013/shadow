@@ -47,7 +47,7 @@ export function createAppOctokit(): Octokit {
     throw new Error("GitHub App not configured");
   }
 
-  const auth = createAppAuth({
+  createAppAuth({
     appId: GITHUB_APP_ID,
     privateKey: GITHUB_PRIVATE_KEY.replace(/\\n/g, "\n"),
   });

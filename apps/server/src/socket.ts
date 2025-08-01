@@ -1,34 +1,37 @@
 import { prisma } from "@repo/db";
-import { StreamChunk, ServerToClientEvents, ClientToServerEvents, TerminalEntry, AgentMode } from "@repo/types";
+import {
+  StreamChunk,
+  ServerToClientEvents,
+  ClientToServerEvents,
+  TerminalEntry,
+  TerminalHistoryResponse,
+} from "@repo/types";
 import http from "http";
 import { Server, Socket } from "socket.io";
-import { ChatService, DEFAULT_MODEL } from "./chat";
+import { DEFAULT_MODEL } from "./chat";
+import { chatService } from "./app";
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
 import { createToolExecutor } from "./execution";
 import { setupSidecarNamespace } from "./services/sidecar-socket-handler";
 
-// Enhanced connection management
 interface ConnectionState {
   lastSeen: number;
   taskId?: string;
   reconnectCount: number;
-  bufferPosition: number; // Track buffer position for incremental updates
+  // Track buffer position for incremental updates
+  bufferPosition: number;
 }
 
-// Typed socket interface
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 const connectionStates = new Map<string, ConnectionState>();
 let currentStreamContent = "";
 let isStreaming = false;
 let io: Server<ClientToServerEvents, ServerToClientEvents>;
-let chatService: ChatService;
 
-// Terminal helper functions
 async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
   try {
-    // Get task to determine execution mode and workspace
     const task = await prisma.task.findUnique({
       where: { id: taskId },
       select: { workspacePath: true },
@@ -39,18 +42,21 @@ async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
     }
 
     // Create executor based on current mode
-    const agentMode = (process.env.AGENT_MODE || "local") as AgentMode;
-    const executor = createToolExecutor(taskId, task.workspacePath || undefined, agentMode);
+    const agentMode = config.agentMode;
+    const executor = createToolExecutor(
+      taskId,
+      task.workspacePath || undefined,
+      agentMode
+    );
 
-    // For remote mode, we'd call the sidecar terminal API
-    // For local mode, we'd need to implement local terminal buffer
     if (executor.isRemote()) {
-      // Call sidecar terminal history API
-      const response = await fetch(`http://localhost:8080/terminal/history?count=100`);
+      const response = await fetch(
+        `http://localhost:8080/terminal/history?count=100`
+      );
       if (!response.ok) {
         throw new Error(`Sidecar terminal API error: ${response.status}`);
       }
-      const data = await response.json();
+      const data = (await response.json()) as TerminalHistoryResponse;
       return data.entries || [];
     } else {
       // For local mode, return empty for now (no local buffer yet)
@@ -65,7 +71,6 @@ async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
 
 async function clearTerminal(taskId: string): Promise<void> {
   try {
-    // Get task to determine execution mode
     const task = await prisma.task.findUnique({
       where: { id: taskId },
       select: { workspacePath: true },
@@ -75,8 +80,12 @@ async function clearTerminal(taskId: string): Promise<void> {
       throw new Error(`Task ${taskId} not found`);
     }
 
-    const agentMode = (process.env.AGENT_MODE || "local") as AgentMode;
-    const executor = createToolExecutor(taskId, task.workspacePath || undefined, agentMode);
+    const agentMode = config.agentMode;
+    const executor = createToolExecutor(
+      taskId,
+      task.workspacePath || undefined,
+      agentMode
+    );
 
     if (executor.isRemote()) {
       // Call sidecar terminal clear API
@@ -120,14 +129,20 @@ function startTerminalPolling(taskId: string) {
         return;
       }
 
-      const agentMode = (process.env.AGENT_MODE || "local") as AgentMode;
-      const executor = createToolExecutor(taskId, task.workspacePath || undefined, agentMode);
+      const agentMode = config.agentMode;
+      const executor = createToolExecutor(
+        taskId,
+        task.workspacePath || undefined,
+        agentMode
+      );
 
       if (executor.isRemote()) {
         // Poll sidecar for new entries
-        const response = await fetch(`http://localhost:8080/terminal/history?sinceId=${lastSeenId}`);
+        const response = await fetch(
+          `http://localhost:8080/terminal/history?sinceId=${lastSeenId}`
+        );
         if (response.ok) {
-          const data = await response.json();
+          const data = (await response.json()) as TerminalHistoryResponse;
           const newEntries = data.entries || [];
 
           // Emit new entries to connected clients in the task room
@@ -157,14 +172,18 @@ function stopTerminalPolling(taskId: string) {
   }
 }
 
-// Helper function to verify task access (basic implementation)
-async function verifyTaskAccess(_socketId: string, taskId: string): Promise<boolean> {
+async function verifyTaskAccess(
+  _socketId: string,
+  taskId: string
+): Promise<boolean> {
   try {
+    console.log(`[SOCKET] Verifying access for task: ${taskId}`);
     // For now, just check if task exists
     // TODO: Add proper user authentication and authorization
     const task = await prisma.task.findUnique({
-      where: { id: taskId }
+      where: { id: taskId },
     });
+    console.log(`[SOCKET] Task found:`, !!task, task ? `(${task.status})` : '(not found)');
     return !!task;
   } catch (error) {
     console.error(`[SOCKET] Error verifying task access:`, error);
@@ -172,13 +191,17 @@ async function verifyTaskAccess(_socketId: string, taskId: string): Promise<bool
   }
 }
 
-// Emit to specific task room
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function emitToTask(taskId: string, event: keyof ServerToClientEvents, data: any) {
+function emitToTask(
+  taskId: string,
+  event: keyof ServerToClientEvents,
+  data: unknown
+) {
   io.to(`task-${taskId}`).emit(event, data);
 }
 
-export function createSocketServer(server: http.Server): Server<ClientToServerEvents, ServerToClientEvents> {
+export function createSocketServer(
+  server: http.Server
+): Server<ClientToServerEvents, ServerToClientEvents> {
   io = new Server(server, {
     cors: {
       origin: config.clientUrl,
@@ -186,11 +209,11 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
     },
   });
 
-  // Initialize chat service
-  chatService = new ChatService();
-
-  // Set up sidecar namespace for filesystem watching
-  setupSidecarNamespace(io);
+  // Set up sidecar namespace for filesystem watching (only in firecracker mode)
+  const agentMode = config.agentMode;
+  if (agentMode === "firecracker") {
+    setupSidecarNamespace(io);
+  }
 
   io.on("connection", (socket: TypedSocket) => {
     const connectionId = socket.id;
@@ -206,7 +229,6 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
     };
     connectionStates.set(connectionId, connectionState);
 
-    // Send connection info
     socket.emit("connection-info", {
       connectionId,
       reconnectCount: connectionState.reconnectCount,
@@ -215,7 +237,10 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
 
     // Send current stream state to new connections
     if (isStreaming && currentStreamContent) {
-      console.log(`[SOCKET] Sending stream state to ${connectionId}:`, currentStreamContent.length);
+      console.log(
+        `[SOCKET] Sending stream state to ${connectionId}:`,
+        currentStreamContent.length
+      );
       socket.emit("stream-state", {
         content: currentStreamContent,
         isStreaming: true,
@@ -229,7 +254,6 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
       });
     }
 
-    // Handle task room management
     socket.on("join-task", async (data) => {
       try {
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
@@ -240,7 +264,9 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
 
         // Join the task room
         await socket.join(`task-${data.taskId}`);
-        console.log(`[SOCKET] User ${connectionId} joined task room: ${data.taskId}`);
+        console.log(
+          `[SOCKET] User ${connectionId} joined task room: ${data.taskId}`
+        );
 
         // Update connection state
         const state = connectionStates.get(connectionId);
@@ -257,7 +283,9 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
     socket.on("leave-task", async (data) => {
       try {
         await socket.leave(`task-${data.taskId}`);
-        console.log(`[SOCKET] User ${connectionId} left task room: ${data.taskId}`);
+        console.log(
+          `[SOCKET] User ${connectionId} left task room: ${data.taskId}`
+        );
 
         // Update connection state
         const state = connectionStates.get(connectionId);
@@ -275,7 +303,6 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
       try {
         console.log("Received user message:", data);
 
-        // Verify user has access to this task
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
           socket.emit("message-error", { error: "Access denied to task" });
@@ -299,6 +326,7 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
           userMessage: data.message,
           llmModel: data.llmModel || DEFAULT_MODEL,
           workspacePath: task?.workspacePath || undefined,
+          queue: data.queue || false,
         });
       } catch (error) {
         console.error("Error processing user message:", error);
@@ -306,10 +334,52 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
       }
     });
 
+    socket.on("clear-queued-message", async (data) => {
+      try {
+        chatService.clearQueuedMessage(data.taskId);
+      } catch (error) {
+        console.error("Error clearing queued message:", error);
+      }
+    });
+
+    socket.on("edit-user-message", async (data) => {
+      try {
+        console.log("Received edit user message:", data);
+
+        const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
+        if (!hasAccess) {
+          socket.emit("message-error", { error: "Access denied to task" });
+          return;
+        }
+
+        // Update task status to running when user edits a message
+        await updateTaskStatus(data.taskId, "RUNNING", "SOCKET");
+
+        // Start terminal polling for this task when user edits a message
+        startTerminalPolling(data.taskId);
+
+        // Get task workspace path from database
+        const task = await prisma.task.findUnique({
+          where: { id: data.taskId },
+          select: { workspacePath: true },
+        });
+
+        await chatService.editUserMessage({
+          taskId: data.taskId,
+          messageId: data.messageId,
+          newContent: data.message,
+          newModel: data.llmModel,
+          workspacePath: task?.workspacePath || undefined,
+        });
+      } catch (error) {
+        console.error("Error editing user message:", error);
+        socket.emit("message-error", { error: "Failed to edit message" });
+      }
+    });
+
     // Handle request for chat history
     socket.on("get-chat-history", async (data) => {
       try {
-        // Verify access
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
           socket.emit("chat-history-error", { error: "Access denied to task" });
@@ -317,7 +387,14 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
         }
 
         const history = await chatService.getChatHistory(data.taskId);
-        socket.emit("chat-history", { taskId: data.taskId, messages: history });
+        socket.emit("chat-history", {
+          taskId: data.taskId,
+          messages: history,
+          // If complete is true, the queued message will automatically get sent, so set it to empty string so the frontend removes it from the queue UI
+          queuedMessage: data.complete
+            ? null
+            : chatService.getQueuedMessage(data.taskId) || null,
+        });
       } catch (error) {
         console.error("Error getting chat history:", error);
         socket.emit("chat-history-error", {
@@ -326,25 +403,20 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
       }
     });
 
-    // Handle stop stream request
     socket.on("stop-stream", async (data) => {
       try {
         console.log("Received stop stream request for task:", data.taskId);
 
-        // Verify access
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
           socket.emit("message-error", { error: "Access denied to task" });
           return;
         }
 
-        // Stop the current streaming operation
         await chatService.stopStream(data.taskId);
 
-        // Update stream state
         endStream(data.taskId);
 
-        // Notify all clients in the task room that the stream has been stopped
         emitToTask(data.taskId, "stream-complete", undefined);
       } catch (error) {
         console.error("Error stopping stream:", error);
@@ -352,15 +424,17 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
       }
     });
 
-    // Handle terminal history request
     socket.on("get-terminal-history", async (data) => {
       try {
-        console.log(`[SOCKET] Getting terminal history for task: ${data.taskId}`);
+        console.log(
+          `[SOCKET] Getting terminal history for task: ${data.taskId}`
+        );
 
-        // Verify access
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
-          socket.emit("terminal-history-error", { error: "Access denied to task" });
+          socket.emit("terminal-history-error", {
+            error: "Access denied to task",
+          });
           return;
         }
 
@@ -369,7 +443,7 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
 
         socket.emit("terminal-history", {
           taskId: data.taskId,
-          entries: history
+          entries: history,
         });
       } catch (error) {
         console.error("Error getting terminal history:", error);
@@ -379,12 +453,10 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
       }
     });
 
-    // Handle terminal clear request
     socket.on("clear-terminal", async (data) => {
       try {
         console.log(`[SOCKET] Clearing terminal for task: ${data.taskId}`);
 
-        // Verify access
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
           socket.emit("terminal-error", { error: "Access denied to task" });
@@ -413,10 +485,8 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
       }
     });
 
-    // Handle reconnection requests
     socket.on("request-history", async (data) => {
       try {
-        // Verify access
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
           socket.emit("history-error", { error: "Access denied to task" });
@@ -446,7 +516,10 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
           totalLength: currentStreamContent.length,
         });
       } catch (error) {
-        console.error(`[SOCKET] Error sending history to ${connectionId}:`, error);
+        console.error(
+          `[SOCKET] Error sending history to ${connectionId}:`,
+          error
+        );
         socket.emit("history-error", { error: "Failed to retrieve history" });
       }
     });
@@ -457,16 +530,23 @@ export function createSocketServer(server: http.Server): Server<ClientToServerEv
     });
 
     socket.on("disconnect", (reason) => {
-      console.log(`[SOCKET] User disconnected: ${connectionId}, reason: ${reason}`);
+      console.log(
+        `[SOCKET] User disconnected: ${connectionId}, reason: ${reason}`
+      );
 
       // Keep connection state for potential reconnection
       const state = connectionStates.get(connectionId);
       if (state) {
         // Mark as disconnected but keep state for 5 minutes
-        setTimeout(() => {
-          connectionStates.delete(connectionId);
-          console.log(`[SOCKET] Cleaned up connection state for ${connectionId}`);
-        }, 5 * 60 * 1000); // 5 minutes
+        setTimeout(
+          () => {
+            connectionStates.delete(connectionId);
+            console.log(
+              `[SOCKET] Cleaned up connection state for ${connectionId}`
+            );
+          },
+          5 * 60 * 1000
+        ); // 5 minutes
       }
     });
   });
@@ -479,36 +559,21 @@ export function startStream() {
   isStreaming = true;
 }
 
-export function endStream(taskId?: string) {
+export function endStream(taskId: string) {
   isStreaming = false;
-  // Only emit if socket server is initialized (not in terminal mode)
   if (io) {
-    if (taskId) {
-      // Emit to specific task room
-      emitToTask(taskId, "stream-complete", undefined);
-    } else {
-      // Fallback to broadcast for backward compatibility
-      io.emit("stream-complete");
-    }
+    emitToTask(taskId, "stream-complete", undefined);
   }
 }
 
-export function handleStreamError(error: unknown, taskId?: string) {
+export function handleStreamError(error: unknown, taskId: string) {
   isStreaming = false;
-  // Only emit if socket server is initialized (not in terminal mode)
   if (io) {
-    if (taskId) {
-      // Emit to specific task room
-      emitToTask(taskId, "stream-error", error);
-    } else {
-      // Fallback to broadcast for backward compatibility
-      io.emit("stream-error", error);
-    }
+    emitToTask(taskId, "stream-error", error);
   }
 }
 
 export function emitTaskStatusUpdate(taskId: string, status: string) {
-  // Only emit if socket server is initialized (not in terminal mode)
   if (io) {
     const statusUpdateEvent = {
       taskId,
@@ -517,107 +582,25 @@ export function emitTaskStatusUpdate(taskId: string, status: string) {
     };
 
     console.log(`[SOCKET] Emitting task status update:`, statusUpdateEvent);
-    // Emit to specific task room instead of all clients
     emitToTask(taskId, "task-status-updated", statusUpdateEvent);
   }
 }
 
-export function emitStreamChunk(chunk: StreamChunk, taskId?: string) {
+export function emitStreamChunk(chunk: StreamChunk, taskId: string) {
   // Accumulate content for state tracking
   if (chunk.type === "content" && chunk.content) {
     currentStreamContent += chunk.content;
   }
 
-  // Broadcast the chunk to the appropriate audience
-  // Only emit if socket server is initialized (not in terminal mode)
   if (io) {
-    if (taskId) {
-      // Emit to specific task room
-      emitToTask(taskId, "stream-chunk", chunk);
-    } else {
-      // Fallback to broadcast for backward compatibility
-      io.emit("stream-chunk", chunk);
-    }
-  } else {
-    // In terminal mode, just log the content
-    if (chunk.type === "content" && chunk.content) {
-      process.stdout.write(chunk.content);
-    } else if (chunk.type === "tool-call" && chunk.toolCall) {
-      console.log(`\n🔧 [TOOL_CALL] ${chunk.toolCall.name}`);
-      if (Object.keys(chunk.toolCall.args).length > 0) {
-        console.log(`   Args:`, JSON.stringify(chunk.toolCall.args, null, 2));
-      }
-    } else if (chunk.type === "tool-result" && chunk.toolResult) {
-      console.log(`\n✅ [TOOL_RESULT] ${chunk.toolResult.id}:`);
-      console.log(`   ${chunk.toolResult.result}`);
-    } else if (chunk.type === "fs-change" && chunk.fsChange) {
-      console.log(
-        `\n📁 [FS_CHANGE] ${chunk.fsChange.operation} ${chunk.fsChange.filePath}`
-      );
-      console.log(
-        `   Source: ${chunk.fsChange.source}, Directory: ${chunk.fsChange.isDirectory}`
-      );
-    } else if (chunk.type === "usage" && chunk.usage) {
-      console.log(
-        `\n📊 [USAGE] Tokens: ${chunk.usage.totalTokens} (${chunk.usage.promptTokens} prompt + ${chunk.usage.completionTokens} completion)`
-      );
-    } else if (chunk.type === "init-progress" && chunk.initProgress) {
-      console.log(`\n🔄 [INIT] ${chunk.initProgress.message}`);
-      if (chunk.initProgress.currentStep) {
-        console.log(
-          `   Step: ${chunk.initProgress.stepName || chunk.initProgress.currentStep}`
-        );
-        if (chunk.initProgress.stepNumber && chunk.initProgress.totalSteps) {
-          console.log(
-            `   Progress: ${chunk.initProgress.stepNumber}/${chunk.initProgress.totalSteps}`
-          );
-        }
-      }
-      if (chunk.initProgress.error) {
-        console.log(`   Error: ${chunk.initProgress.error}`);
-      }
-    } else if (chunk.type === "complete") {
-      console.log(
-        `\n\n✅ [COMPLETE] Finished with reason: ${chunk.finishReason}`
-      );
-    } else if (chunk.type === "error") {
-      console.log(`\n❌ [ERROR] ${chunk.error}`);
-    }
+    emitToTask(taskId, "stream-chunk", chunk);
   }
 
-  // Handle completion
   if (chunk.type === "complete") {
     endStream(taskId);
   }
-
-  // Handle errors
-  if (chunk.type === "error") {
-    handleStreamError(chunk.error, taskId);
-  }
 }
 
-// Helper function to emit context statistics to task room
-export function emitContextStatistics(
-  contextStatistics: {
-    currentTokens: number;
-    maxTokens: number;
-    percentage: number;
-    messageCount: number;
-    needsCompaction: boolean;
-    modelName: string;
-  },
-  taskId: string
-) {
-  if (io) {
-    const chunk: StreamChunk = {
-      type: "context-statistics",
-      contextStatistics,
-    };
-    emitToTask(taskId, "stream-chunk", chunk);
-  }
-}
-
-// Helper function to emit terminal output to task room
 export function emitTerminalOutput(taskId: string, entry: TerminalEntry) {
   if (io) {
     emitToTask(taskId, "terminal-output", { taskId, entry });

@@ -101,11 +101,16 @@ function groupReposByOrg(
 }
 
 async function handleStaleInstallation(
-  error: any,
+  error: unknown,
   userId: string
 ): Promise<boolean> {
   // Check if this is a 404 error indicating the installation no longer exists
-  if (error?.status === 404 || error?.message?.includes("Not Found")) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    error.status === 404
+  ) {
     console.log("Detected stale GitHub installation, clearing from database");
     try {
       await clearGitHubInstallation(userId);

@@ -2,18 +2,26 @@
   "name": "@repo/types",
   "version": "0.0.0",
   "private": true,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./*": "./src/*.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
     "lint": "eslint 'src/**/*.ts'",
     "check-types": "tsc --noEmit"
   },
-  "devDependencies": {
+  "dependencies": {
+    "@repo/command-security": "*",
     "@repo/db": "*",
+    "ai": "^3.4.33"
+  },
+  "devDependencies": {
     "@repo/eslint-config": "^0.0.0",
     "@repo/typescript-config": "*",
     "eslint": "^9.31.0",

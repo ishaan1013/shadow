@@ -99,5 +99,9 @@ export interface InitializationProgress {
   stepNumber?: number;
   totalSteps?: number;
 
+  // Error details
   error?: string;
+  
+  // NEW: Progress tracking fields
+  lastCompletedStep?: InitStepType; // For progress tracking
 }

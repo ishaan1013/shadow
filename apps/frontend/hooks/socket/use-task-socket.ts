@@ -9,7 +9,7 @@ import type {
   StreamChunk,
   TaskStatusUpdateEvent,
   ModelType,
-  FileNode
+  FileNode,
 } from "@repo/types";
 import { TextPart, ToolCallPart, ToolResultPart } from "ai";
 import type { TaskWithDetails } from "@/lib/db-operations/get-task-with-details";
@@ -18,17 +18,22 @@ import { Task, TodoStatus } from "@repo/db";
 
 interface FileChange {
   filePath: string;
-  operation: 'CREATE' | 'UPDATE' | 'DELETE' | 'RENAME';
+  operation: "CREATE" | "UPDATE" | "DELETE" | "RENAME";
   additions: number;
   deletions: number;
   createdAt: string;
 }
 
 interface FsChangeEvent {
-  operation: 'file-created' | 'file-modified' | 'file-deleted' | 'directory-created' | 'directory-deleted';
+  operation:
+    | "file-created"
+    | "file-modified"
+    | "file-deleted"
+    | "directory-created"
+    | "directory-deleted";
   filePath: string;
   timestamp: number;
-  source: 'local' | 'remote';
+  source: "local" | "remote";
   isDirectory: boolean;
 }
 
@@ -41,27 +46,34 @@ function updateCodebaseTreeOptimistically(
 ): FileNode[] {
   const { operation, filePath, isDirectory } = fsChange;
 
-  console.log(`[OPTIMISTIC_TREE_UPDATE] ${operation} ${filePath} (isDirectory: ${isDirectory})`);
+  console.log(
+    `[OPTIMISTIC_TREE_UPDATE] ${operation} ${filePath} (isDirectory: ${isDirectory})`
+  );
 
-  // Handle file/directory creation
-  if (operation === 'file-created' || operation === 'directory-created') {
-    return addNodeToTree(existingTree, filePath, isDirectory ? 'folder' : 'file');
+  if (operation === "file-created" || operation === "directory-created") {
+    return addNodeToTree(
+      existingTree,
+      filePath,
+      isDirectory ? "folder" : "file"
+    );
   }
 
-  // Handle file/directory deletion
-  if (operation === 'file-deleted' || operation === 'directory-deleted') {
+  if (operation === "file-deleted" || operation === "directory-deleted") {
     return removeNodeFromTree(existingTree, filePath);
   }
 
-  // For modifications, no tree structure change needed
   return existingTree;
 }
 
 /**
  * Add a new node to the file tree
  */
-function addNodeToTree(tree: FileNode[], filePath: string, type: 'file' | 'folder'): FileNode[] {
-  const parts = filePath.split('/').filter(Boolean);
+function addNodeToTree(
+  tree: FileNode[],
+  filePath: string,
+  type: "file" | "folder"
+): FileNode[] {
+  const parts = filePath.split("/").filter(Boolean);
   if (parts.length === 0) return tree;
 
   const [firstPart, ...restParts] = parts;
@@ -69,23 +81,21 @@ function addNodeToTree(tree: FileNode[], filePath: string, type: 'file' | 'folde
 
   const treeCopy = [...tree];
 
-  // Find existing node at this level
-  const existingIndex = treeCopy.findIndex(node => node.name === firstPart);
+  const existingIndex = treeCopy.findIndex((node) => node.name === firstPart);
 
   if (restParts.length === 0) {
-    // This is the target node
     if (existingIndex === -1) {
-      // Add new node
       const newNode = {
         name: firstPart,
         type,
         path: `/${filePath}`,
-        ...(type === 'folder' && { children: [] })
+        ...(type === "folder" && { children: [] }),
       };
       treeCopy.push(newNode);
+
       // Sort: folders first, then files, both alphabetically
       treeCopy.sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+        if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
     }
@@ -96,21 +106,25 @@ function addNodeToTree(tree: FileNode[], filePath: string, type: 'file' | 'folde
     // Create intermediate folder
     const newFolder = {
       name: firstPart,
-      type: 'folder' as const,
-      path: `/${parts.slice(0, 1).join('/')}`,
-      children: []
+      type: "folder" as const,
+      path: `/${parts.slice(0, 1).join("/")}`,
+      children: [],
     };
     treeCopy.push(newFolder);
   }
 
   // Ensure the node at this level is a folder with children
-  const nodeIndex = treeCopy.findIndex(node => node.name === firstPart);
-  if (nodeIndex !== -1 && treeCopy[nodeIndex]?.type === 'folder') {
+  const nodeIndex = treeCopy.findIndex((node) => node.name === firstPart);
+  if (nodeIndex !== -1 && treeCopy[nodeIndex]?.type === "folder") {
     if (!treeCopy[nodeIndex].children) {
       treeCopy[nodeIndex].children = [];
     }
     // Recursively add to children
-    treeCopy[nodeIndex].children = addNodeToTree(treeCopy[nodeIndex].children || [], restParts.join('/'), type);
+    treeCopy[nodeIndex].children = addNodeToTree(
+      treeCopy[nodeIndex].children || [],
+      restParts.join("/"),
+      type
+    );
   }
 
   return treeCopy;
@@ -120,7 +134,7 @@ function addNodeToTree(tree: FileNode[], filePath: string, type: 'file' | 'folde
  * Remove a node from the file tree
  */
 function removeNodeFromTree(tree: FileNode[], filePath: string): FileNode[] {
-  const parts = filePath.split('/').filter(Boolean);
+  const parts = filePath.split("/").filter(Boolean);
   if (parts.length === 0) return tree;
 
   const [firstPart, ...restParts] = parts;
@@ -130,13 +144,20 @@ function removeNodeFromTree(tree: FileNode[], filePath: string): FileNode[] {
 
   if (restParts.length === 0) {
     // Remove the target node
-    return treeCopy.filter(node => node.name !== firstPart);
+    return treeCopy.filter((node) => node.name !== firstPart);
   }
 
   // Recursively remove from children
-  const nodeIndex = treeCopy.findIndex(node => node.name === firstPart);
-  if (nodeIndex !== -1 && treeCopy[nodeIndex]?.type === 'folder' && treeCopy[nodeIndex]?.children) {
-    treeCopy[nodeIndex].children = removeNodeFromTree(treeCopy[nodeIndex].children || [], restParts.join('/'));
+  const nodeIndex = treeCopy.findIndex((node) => node.name === firstPart);
+  if (
+    nodeIndex !== -1 &&
+    treeCopy[nodeIndex]?.type === "folder" &&
+    treeCopy[nodeIndex]?.children
+  ) {
+    treeCopy[nodeIndex].children = removeNodeFromTree(
+      treeCopy[nodeIndex].children || [],
+      restParts.join("/")
+    );
     // Remove empty folders
     if (treeCopy[nodeIndex].children?.length === 0) {
       return treeCopy.filter((_, index) => index !== nodeIndex);
@@ -155,7 +176,9 @@ function updateFileChangesOptimistically(
 ): FileChange[] {
   const { operation, filePath, isDirectory } = fsChange;
 
-  console.log(`[OPTIMISTIC_UPDATE] ${operation} ${filePath} (isDirectory: ${isDirectory})`);
+  console.log(
+    `[OPTIMISTIC_UPDATE] ${operation} ${filePath} (isDirectory: ${isDirectory})`
+  );
 
   // Skip directory changes for now (we focus on files)
   if (isDirectory) {
@@ -164,44 +187,56 @@ function updateFileChangesOptimistically(
   }
 
   // Remove existing entry for this file (if any)
-  const filtered = existingChanges.filter(change => change.filePath !== filePath);
+  const filtered = existingChanges.filter(
+    (change) => change.filePath !== filePath
+  );
   const wasExisting = filtered.length !== existingChanges.length;
 
   // Handle each operation type
   switch (operation) {
-    case 'file-created':
+    case "file-created":
       console.log(`[OPTIMISTIC_UPDATE] Adding new file: ${filePath}`);
-      return [...filtered, {
-        filePath,
-        operation: 'CREATE',
-        additions: 0, // Will be updated by background git refresh
-        deletions: 0,
-        createdAt: new Date().toISOString()
-      }];
+      return [
+        ...filtered,
+        {
+          filePath,
+          operation: "CREATE",
+          additions: 0, // Will be updated by background git refresh
+          deletions: 0,
+          createdAt: new Date().toISOString(),
+        },
+      ];
 
-    case 'file-modified':
-      console.log(`[OPTIMISTIC_UPDATE] Updating existing file: ${filePath} (was existing: ${wasExisting})`);
-      return [...filtered, {
-        filePath,
-        operation: wasExisting ? 'UPDATE' : 'CREATE', // Could be new file being written
-        additions: 0, // Will be updated by background git refresh
-        deletions: 0,
-        createdAt: new Date().toISOString()
-      }];
+    case "file-modified":
+      console.log(
+        `[OPTIMISTIC_UPDATE] Updating existing file: ${filePath} (was existing: ${wasExisting})`
+      );
+      return [
+        ...filtered,
+        {
+          filePath,
+          operation: wasExisting ? "UPDATE" : "CREATE",
+          additions: 0, // Will be updated by background git refresh
+          deletions: 0,
+          createdAt: new Date().toISOString(),
+        },
+      ];
 
-    case 'file-deleted':
+    case "file-deleted":
       console.log(`[OPTIMISTIC_UPDATE] Removing deleted file: ${filePath}`);
-      // For deletions, just return filtered array (file removed from list)
       return filtered;
 
-    case 'directory-created':
-    case 'directory-deleted':
-      // Should not reach here due to isDirectory check above, but handle gracefully
-      console.log(`[OPTIMISTIC_UPDATE] Ignoring directory operation: ${operation} ${filePath}`);
+    case "directory-created":
+    case "directory-deleted":
+      console.log(
+        `[OPTIMISTIC_UPDATE] Ignoring directory operation: ${operation} ${filePath}`
+      );
       return existingChanges;
 
     default:
-      console.warn(`[OPTIMISTIC_UPDATE] Unknown operation: ${operation} ${filePath}`);
+      console.warn(
+        `[OPTIMISTIC_UPDATE] Unknown operation: ${operation} ${filePath}`
+      );
       return existingChanges;
   }
 }
@@ -211,17 +246,19 @@ export function useTaskSocket(taskId: string | undefined) {
   const queryClient = useQueryClient();
 
   // All the state that was previously in task-content.tsx
-  const [streamingAssistantParts, setStreamingAssistantParts] = useState<AssistantMessagePart[]>([]);
+  const [streamingAssistantParts, setStreamingAssistantParts] = useState<
+    AssistantMessagePart[]
+  >([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
   // Join/leave task room
   useEffect(() => {
     if (socket && taskId && isConnected) {
-      socket.emit('join-task', { taskId });
+      socket.emit("join-task", { taskId });
       console.log(`[SOCKET] Joined task room: ${taskId}`);
 
       return () => {
-        socket.emit('leave-task', { taskId });
+        socket.emit("leave-task", { taskId });
         console.log(`[SOCKET] Left task room: ${taskId}`);
       };
     }
@@ -232,21 +269,25 @@ export function useTaskSocket(taskId: string | undefined) {
     if (!socket || !taskId) return;
 
     function onConnect() {
-      // Request chat history when connected - taskId is guaranteed to be defined here
-      socket.emit("get-chat-history", { taskId: taskId as string });
+      socket.emit("get-chat-history", { taskId: taskId!, complete: false });
     }
 
     function onDisconnect() {
-      // Connection lost
       console.log("[TASK-SOCKET] Disconnected");
     }
 
-    function onChatHistory(data: { taskId: string; messages: Message[] }) {
+    function onChatHistory(data: {
+      taskId: string;
+      messages: Message[];
+      queuedMessage: string | null;
+    }) {
       if (data.taskId === taskId) {
-        // Update the query cache directly with fresh data from server
         queryClient.setQueryData(["task-messages", taskId], data.messages);
+        queryClient.setQueryData(
+          ["queued-message", taskId],
+          data.queuedMessage
+        );
 
-        // Clear streaming state when we have the updated chat history
         setStreamingAssistantParts([]);
         setIsStreaming(false);
       }
@@ -264,7 +305,6 @@ export function useTaskSocket(taskId: string | undefined) {
       switch (chunk.type) {
         case "content":
           if (chunk.content) {
-            // Add text part to structured assistant parts
             const textPart: TextPart = {
               type: "text",
               text: chunk.content,
@@ -277,7 +317,6 @@ export function useTaskSocket(taskId: string | undefined) {
           if (chunk.toolCall) {
             console.log("Tool call:", chunk.toolCall);
 
-            // Add tool call part to structured assistant parts
             const toolCallPart: ToolCallPart = {
               type: "tool-call",
               toolCallId: chunk.toolCall.id,
@@ -292,7 +331,6 @@ export function useTaskSocket(taskId: string | undefined) {
           if (chunk.toolResult) {
             console.log("Tool result:", chunk.toolResult);
 
-            // Add tool result part to structured assistant parts
             const toolResultPart: ToolResultPart = {
               type: "tool-result",
               toolCallId: chunk.toolResult.id,
@@ -319,13 +357,11 @@ export function useTaskSocket(taskId: string | undefined) {
           if (chunk.fsChange) {
             console.log("File system change:", chunk.fsChange);
 
-            // Optimistically update file changes in React Query cache
             queryClient.setQueryData(
               ["task", taskId],
               (oldData: TaskWithDetails) => {
                 if (!oldData) return oldData;
 
-                // Add/update/remove from fileChanges array based on operation
                 const updatedFileChanges = updateFileChangesOptimistically(
                   oldData.fileChanges || [],
                   chunk.fsChange!
@@ -333,16 +369,16 @@ export function useTaskSocket(taskId: string | undefined) {
 
                 return {
                   ...oldData,
-                  fileChanges: updatedFileChanges
+                  fileChanges: updatedFileChanges,
                 };
               }
             );
 
-            // Optimistically update codebase tree in React Query cache
             queryClient.setQueryData(
               ["codebase-tree", taskId],
               (oldData: CodebaseTreeResponse) => {
-                if (!oldData || !oldData.success || !oldData.tree) return oldData;
+                if (!oldData || !oldData.success || !oldData.tree)
+                  return oldData;
 
                 const updatedTree = updateCodebaseTreeOptimistically(
                   oldData.tree,
@@ -351,12 +387,12 @@ export function useTaskSocket(taskId: string | undefined) {
 
                 return {
                   ...oldData,
-                  tree: updatedTree
+                  tree: updatedTree,
                 };
               }
             );
 
-            // Note: Diff stats are NOT invalidated here to avoid expensive git operations
+            // Note: Diff stats aren't invalidated here to avoid recomputation on every change
             // They will refresh on: 1) stream completion, 2) 30s stale time, 3) manual refresh
           }
           break;
@@ -365,20 +401,13 @@ export function useTaskSocket(taskId: string | undefined) {
           setIsStreaming(false);
           console.log("Stream completed");
           if (taskId) {
-            socket.emit("get-chat-history", { taskId: taskId as string });
+            socket.emit("get-chat-history", { taskId, complete: true });
           }
           break;
 
         case "error": {
           setIsStreaming(false);
           console.error("Stream error:", chunk.error);
-
-          // Add error text part to structured assistant parts
-          const errorTextPart: TextPart = {
-            type: "text",
-            text: `\n\nError: ${chunk.error}`,
-          };
-          setStreamingAssistantParts((prev) => [...prev, errorTextPart]);
           break;
         }
 
@@ -390,12 +419,51 @@ export function useTaskSocket(taskId: string | undefined) {
           console.log("Thinking:", chunk.thinking);
           break;
 
+        case "init-progress":
+          if (chunk.initProgress) {
+            console.log("Initialization progress:", chunk.initProgress);
+
+            // Optimistically update task initialization state
+            queryClient.setQueryData(
+              ["task", taskId],
+              (oldData: TaskWithDetails) => {
+                if (!oldData) return oldData;
+                return {
+                  ...oldData,
+                  lastCompletedStep:
+                    chunk.initProgress?.currentStep ||
+                    oldData.task?.lastCompletedStep,
+                  initializationError: chunk.initProgress?.error || null,
+                  updatedAt: new Date().toISOString(),
+                };
+              }
+            );
+
+            queryClient.setQueryData(["tasks"], (oldTasks: Task[]) => {
+              if (oldTasks) {
+                return oldTasks.map((task: Task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        lastCompletedStep:
+                          chunk.initProgress?.currentStep ||
+                          task.lastCompletedStep,
+                        initializationError: chunk.initProgress?.error || null,
+                        updatedAt: new Date().toISOString(),
+                      }
+                    : task
+                );
+              }
+              return oldTasks;
+            });
+          }
+          break;
+
         case "todo-update":
           if (chunk.todoUpdate) {
             console.log("Todo update:", chunk.todoUpdate);
             const todos = chunk.todoUpdate.todos;
 
-            // Optimistically update todos in React Query cache
             queryClient.setQueryData(
               ["task", taskId],
               (oldData: TaskWithDetails) => {
@@ -403,11 +471,10 @@ export function useTaskSocket(taskId: string | undefined) {
 
                 // Create a map of existing todos by ID for efficient lookup
                 const existingTodosMap = new Map(
-                  (oldData.todos || []).map(todo => [todo.id, todo])
+                  (oldData.todos || []).map((todo) => [todo.id, todo])
                 );
 
-                // Process each incoming todo update
-                todos.forEach(incomingTodo => {
+                todos.forEach((incomingTodo) => {
                   const existingTodo = existingTodosMap.get(incomingTodo.id);
 
                   if (existingTodo) {
@@ -419,7 +486,6 @@ export function useTaskSocket(taskId: string | undefined) {
                       updatedAt: new Date(),
                     });
                   } else {
-                    // Add new todo
                     existingTodosMap.set(incomingTodo.id, {
                       ...incomingTodo,
                       status: incomingTodo.status.toUpperCase() as TodoStatus,
@@ -433,7 +499,9 @@ export function useTaskSocket(taskId: string | undefined) {
 
                 return {
                   ...oldData,
-                  todos: Array.from(existingTodosMap.values()).sort((a, b) => a.sequence - b.sequence)
+                  todos: Array.from(existingTodosMap.values()).sort(
+                    (a, b) => a.sequence - b.sequence
+                  ),
                 };
               }
             );
@@ -457,24 +525,20 @@ export function useTaskSocket(taskId: string | undefined) {
       setIsStreaming(false);
       console.log("Stream completed");
       if (taskId) {
-        socket.emit("get-chat-history", { taskId: taskId as string });
+        socket.emit("get-chat-history", { taskId, complete: true });
       }
 
       queryClient.invalidateQueries({ queryKey: ["task", taskId] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["task-messages", taskId] });
       queryClient.invalidateQueries({ queryKey: ["codebase-tree", taskId] });
     }
 
     function onStreamError(error: unknown) {
       setIsStreaming(false);
       console.error("Stream error:", error);
-
-      // Add error to structured parts
-      const errorTextPart: TextPart = {
-        type: "text",
-        text: "\n\nStream error occurred",
-      };
-      setStreamingAssistantParts((prev) => [...prev, errorTextPart]);
+      // Legacy stream errors are for unexpected system failures only
+      // Don't add error text parts - these errors won't have permanent message parts
     }
 
     function onMessageError(data: { error: string }) {
@@ -486,7 +550,6 @@ export function useTaskSocket(taskId: string | undefined) {
       if (data.taskId === taskId) {
         console.log(`[TASK_SOCKET] Received task status update:`, data);
 
-        // Optimistically update the task status in React Query cache
         queryClient.setQueryData(
           ["task", taskId],
           (oldData: TaskWithDetails) => {
@@ -497,7 +560,7 @@ export function useTaskSocket(taskId: string | undefined) {
                   ...oldData.task,
                   status: data.status,
                   updatedAt: data.timestamp,
-                }
+                },
               };
             }
             return oldData;
@@ -517,62 +580,65 @@ export function useTaskSocket(taskId: string | undefined) {
       }
     }
 
-    // Register all event listeners
-    socket.on('connect', onConnect);
-    socket.on('disconnect', onDisconnect);
-    socket.on('chat-history', onChatHistory);
-    socket.on('stream-state', onStreamState);
-    socket.on('stream-chunk', onStreamChunk);
-    socket.on('stream-complete', onStreamComplete);
-    socket.on('stream-error', onStreamError);
-    socket.on('message-error', onMessageError);
-    socket.on('task-status-updated', onTaskStatusUpdate);
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("chat-history", onChatHistory);
+    socket.on("stream-state", onStreamState);
+    socket.on("stream-chunk", onStreamChunk);
+    socket.on("stream-complete", onStreamComplete);
+    socket.on("stream-error", onStreamError);
+    socket.on("message-error", onMessageError);
+    socket.on("task-status-updated", onTaskStatusUpdate);
 
     return () => {
-      // Cleanup all listeners
-      socket.off('connect', onConnect);
-      socket.off('disconnect', onDisconnect);
-      socket.off('chat-history', onChatHistory);
-      socket.off('stream-state', onStreamState);
-      socket.off('stream-chunk', onStreamChunk);
-      socket.off('stream-complete', onStreamComplete);
-      socket.off('stream-error', onStreamError);
-      socket.off('message-error', onMessageError);
-      socket.off('task-status-updated', onTaskStatusUpdate);
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("chat-history", onChatHistory);
+      socket.off("stream-state", onStreamState);
+      socket.off("stream-chunk", onStreamChunk);
+      socket.off("stream-complete", onStreamComplete);
+      socket.off("stream-error", onStreamError);
+      socket.off("message-error", onMessageError);
+      socket.off("task-status-updated", onTaskStatusUpdate);
     };
   }, [socket, taskId, queryClient]);
 
   // Socket actions (methods to call from components)
-  const sendMessage = useCallback((message: string, model: string) => {
-    if (!socket || !taskId || !message.trim()) return;
+  const sendMessage = useCallback(
+    (message: string, model: string, queue: boolean = false) => {
+      if (!socket || !taskId || !message.trim()) return;
 
-    console.log("Sending message:", { taskId, message, model });
-    socket.emit('user-message', {
-      taskId,
-      message: message.trim(),
-      llmModel: model as ModelType,
-    });
-  }, [socket, taskId]);
+      console.log("Sending message:", { taskId, message, model, queue });
+      socket.emit("user-message", {
+        taskId,
+        message: message.trim(),
+        llmModel: model as ModelType,
+        queue,
+      });
+    },
+    [socket, taskId]
+  );
 
   const stopStream = useCallback(() => {
     if (!socket || !taskId || !isStreaming) return;
 
     console.log("Stopping stream for task:", taskId);
-    socket.emit('stop-stream', { taskId });
+    socket.emit("stop-stream", { taskId });
     setIsStreaming(false);
     setStreamingAssistantParts([]);
   }, [socket, taskId, isStreaming]);
 
-  return {
-    // Connection state
-    isConnected,
+  const clearQueuedMessage = useCallback(() => {
+    if (!socket || !taskId) return;
+    socket.emit("clear-queued-message", { taskId });
+  }, [socket, taskId]);
 
-    // Chat state
+  return {
+    isConnected,
     streamingAssistantParts,
     isStreaming,
-
-    // Actions
     sendMessage,
     stopStream,
+    clearQueuedMessage,
   };
 }

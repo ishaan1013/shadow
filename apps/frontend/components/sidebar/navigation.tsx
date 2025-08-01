@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
-import { Brain, LayoutGrid, Play, Plus } from "lucide-react";
+import { BookOpenText, FileCode, LayoutGrid, Play, Plus } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
 import { SidebarView } from ".";
 import { SettingsDialog } from "../auth/settings-dialog";
 import { UserMenu } from "../auth/user-menu";
@@ -17,13 +16,14 @@ export function SidebarNavigation({
   sidebarView,
   setSidebarView,
   currentTaskId,
+  currentCodebaseId,
 }: {
   sidebarView: SidebarView;
   setSidebarView: (view: SidebarView) => void;
+  // Page-specific ID fields
   currentTaskId: string | null;
+  currentCodebaseId: string | null;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { open, toggleSidebar } = useSidebar();
   const { task } = useTask(currentTaskId ?? "");
 
@@ -76,6 +76,41 @@ export function SidebarNavigation({
     </div>
   );
 
+  const codebaseViewTrigger = (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="iconSm"
+          variant="ghost"
+          className={cn(
+            "border",
+            sidebarView === "codebase-understanding" && open
+              ? "text-foreground bg-sidebar-accent border-sidebar-border hover:bg-sidebar-border"
+              : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent border-transparent"
+          )}
+          onClick={() => {
+            setSidebarView("codebase-understanding");
+            if (!open) {
+              toggleSidebar();
+            }
+          }}
+        >
+          <FileCode />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right">Codebase Understanding</TooltipContent>
+    </Tooltip>
+  );
+
+  const hasPageSpecificView = currentTaskId || currentCodebaseId;
+
+  const pageSpecificViewTrigger = hasPageSpecificView ? (
+    <>
+      <div className="bg-border h-px w-full" />
+      {currentTaskId ? agentViewTrigger : codebaseViewTrigger}
+    </>
+  ) : null;
+
   return (
     <div className="bg-card flex h-svh flex-col justify-between border-r p-3">
       <div className="flex flex-col gap-7">
@@ -84,12 +119,18 @@ export function SidebarNavigation({
           className="flex size-7 items-center justify-center"
           aria-label="Home"
         >
-          <LogoHover />
+          <LogoHover
+            className={cn(
+              process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
+                ? "text-red-400"
+                : ""
+            )}
+          />
         </Link>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="iconSm" asChild>
+              <Button size="iconSm" asChild className="mb-1">
                 <Link href="/">
                   <Plus />
                 </Link>
@@ -118,38 +159,33 @@ export function SidebarNavigation({
                 <LayoutGrid />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Tasks View</TooltipContent>
+            <TooltipContent side="right">Active Tasks</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="iconSm"
+                variant="ghost"
+                className={cn(
+                  "border",
+                  sidebarView === "codebases" && open
+                    ? "text-foreground bg-sidebar-accent border-sidebar-border hover:bg-sidebar-border"
+                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent border-transparent"
+                )}
+                onClick={() => {
+                  setSidebarView("codebases");
+                  if (!open) {
+                    toggleSidebar();
+                  }
+                }}
+              >
+                <BookOpenText />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Codebases</TooltipContent>
           </Tooltip>
 
-          {currentTaskId ? (
-            <>
-              <div className="bg-border h-px w-full" />
-              {agentViewTrigger}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="iconSm"
-                    variant="ghost"
-                    className={cn(
-                      "border",
-                      sidebarView === "codebase" && open
-                        ? "text-foreground bg-sidebar-accent border-sidebar-border hover:bg-sidebar-border"
-                        : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent border-transparent"
-                    )}
-                    onClick={() => {
-                      setSidebarView("codebase");
-                      if (!open) {
-                        toggleSidebar();
-                      }
-                    }}
-                  >
-                    <Brain />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Codebase Understanding</TooltipContent>
-              </Tooltip>
-            </>
-          ) : null}
+          {pageSpecificViewTrigger}
         </div>
       </div>
       <div className="flex flex-col gap-4">

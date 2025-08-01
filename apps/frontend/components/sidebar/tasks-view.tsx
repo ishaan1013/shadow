@@ -13,7 +13,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
-import { statusColorsConfig, statusOrder } from "./status";
+import { statusColorsConfig, statusOrder, getDisplayStatus } from "./status";
+import { getStatusText } from "@repo/types";
 
 type GroupedTasks = {
   [repoUrl: string]: {
@@ -34,11 +35,9 @@ export function SidebarTasksView({
   // Group tasks by repository and sort within each group
   const groupedTasks: GroupedTasks = tasks.reduce(
     (groups: GroupedTasks, task: Task) => {
-      const repoName = task.repoUrl.split("/").slice(-2).join("/"); // Extract owner/repo from URL
-
       if (!groups[task.repoUrl]) {
         groups[task.repoUrl] = {
-          repoName,
+          repoName: task.repoFullName,
           tasks: [],
         };
       }
@@ -93,7 +92,8 @@ export function SidebarTasksView({
               <CollapsibleContent>
                 <SidebarGroupContent>
                   {group.tasks.map((task) => {
-                    const StatusIcon = statusColorsConfig[task.status].icon;
+                    const displayStatus = getDisplayStatus(task);
+                    const StatusIcon = statusColorsConfig[displayStatus].icon;
                     return (
                       <SidebarMenuItem key={task.id}>
                         <SidebarMenuButton
@@ -103,17 +103,18 @@ export function SidebarTasksView({
                           <a href={`/tasks/${task.id}`}>
                             <div className="flex w-full items-center gap-1.5">
                               <div className="line-clamp-1 flex-1">
-                                {task.title ||
-                                  task.description ||
-                                  "Untitled Task"}
+                                {task.title}
                               </div>
                             </div>
                             <div className="text-muted-foreground flex items-center gap-1 text-xs">
                               <StatusIcon
-                                className={`!size-3 ${statusColorsConfig[task.status].className}`}
+                                className={`!size-3 shrink-0 ${statusColorsConfig[displayStatus].className}`}
                               />
                               <span className="text-xs capitalize">
-                                {task.status.toLowerCase().replace("_", " ")}
+                                {/* Simplify failed status text in this view */}
+                                {getStatusText(task).startsWith("Failed")
+                                  ? "Failed"
+                                  : getStatusText(task)}
                               </span>
                               <GitBranch className="size-3" />{" "}
                               {truncateBranchName(task.shadowBranch, 20)}

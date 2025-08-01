@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { isValidRepo, getOwnerRepo } from "../utils/repository";
+import { isValidRepo, getOwnerFromRepo } from "../utils/repository";
 import logger from "../logger";
 import { LocalWorkspaceManager } from "@/execution/local/local-workspace-manager";
 
@@ -10,12 +10,15 @@ import { LocalWorkspaceManager } from "@/execution/local/local-workspace-manager
  * - If the input already exists on disk, it is returned unchanged.
  * - Otherwise we assume it's a taskId and use the workspace manager to fetch files
  *   into a cache directory under the user's OS temp folder.
- * 
+ *
  * @param repoOrPath - The repository identifier ("owner/repo") or local path or taskId
  * @param forceRefresh - If true, bypass cache and refetch repository files
  * @returns The absolute checkout/cache path containing the repository files.
  */
-export async function resolveRepoPath(repoOrPath: string, forceRefresh: boolean = false): Promise<string> {
+export async function resolveRepoPath(
+  repoOrPath: string,
+  forceRefresh: boolean = false
+): Promise<string> {
   // Direct path on disk
   if (fs.existsSync(repoOrPath)) {
     return path.resolve(repoOrPath);
@@ -27,8 +30,12 @@ export async function resolveRepoPath(repoOrPath: string, forceRefresh: boolean 
     return await resolveFromWorkspace(repoOrPath, forceRefresh);
   }
 
-  const { owner, repo } = getOwnerRepo(repoOrPath);
-  const cacheDir = path.join(os.tmpdir(), "shallowwiki-repos", `${owner}-${repo}`);
+  const { owner, repo } = getOwnerFromRepo(repoOrPath);
+  const cacheDir = path.join(
+    os.tmpdir(),
+    "shallowwiki-repos",
+    `${owner}-${repo}`
+  );
   const marker = path.join(cacheDir, ".complete");
 
   // If we've already cached it, either return immediately or clear the cache
@@ -37,7 +44,9 @@ export async function resolveRepoPath(repoOrPath: string, forceRefresh: boolean 
       return cacheDir;
     } else {
       // Force refresh requested - delete the cached repo
-      console.log(`Force refresh requested for ${owner}/${repo}, clearing cache...`);
+      console.log(
+        `Force refresh requested for ${owner}/${repo}, clearing cache...`
+      );
       try {
         // Recursive deletion of the directory
         fs.rmSync(cacheDir, { recursive: true, force: true });
@@ -65,8 +74,15 @@ export async function resolveRepoPath(repoOrPath: string, forceRefresh: boolean 
 /**
  * Resolve repository files from workspace manager for a taskId.
  */
-async function resolveFromWorkspace(taskId: string, forceRefresh: boolean = false): Promise<string> {
-  const cacheDir = path.join(os.tmpdir(), "shallowwiki-repos", `task-${taskId}`);
+async function resolveFromWorkspace(
+  taskId: string,
+  forceRefresh: boolean = false
+): Promise<string> {
+  const cacheDir = path.join(
+    os.tmpdir(),
+    "shallowwiki-repos",
+    `task-${taskId}`
+  );
   const marker = path.join(cacheDir, ".complete");
 
   // If we've already cached it, either return immediately or clear the cache
@@ -75,7 +91,9 @@ async function resolveFromWorkspace(taskId: string, forceRefresh: boolean = fals
       return cacheDir;
     } else {
       // Force refresh requested - delete the cached repo
-      console.log(`Force refresh requested for task ${taskId}, clearing cache...`);
+      console.log(
+        `Force refresh requested for task ${taskId}, clearing cache...`
+      );
       try {
         // Recursive deletion of the directory
         fs.rmSync(cacheDir, { recursive: true, force: true });
@@ -112,7 +130,21 @@ async function fetchRepositoryFilesFromWorkspace(
     const files = await workspaceManager.getAllFilesFromWorkspace(taskId);
 
     // Skip binary files and very large files
-    const skipExtensions = [".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".ttf", ".woff", ".mp3", ".mp4", ".zip", ".gz", ".tar"];
+    const skipExtensions = [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".ico",
+      ".svg",
+      ".ttf",
+      ".woff",
+      ".mp3",
+      ".mp4",
+      ".zip",
+      ".gz",
+      ".tar",
+    ];
 
     for (const file of files) {
       if (file.type !== "file") continue;
@@ -130,7 +162,11 @@ async function fetchRepositoryFilesFromWorkspace(
 
       // Skip common directories we don't need to analyze
       const pathParts = file.path.split(path.sep);
-      if (pathParts.some(part => ["node_modules", ".git", "dist", "build"].includes(part))) {
+      if (
+        pathParts.some((part) =>
+          ["node_modules", ".git", "dist", "build"].includes(part)
+        )
+      ) {
         continue;
       }
 
@@ -144,7 +180,9 @@ async function fetchRepositoryFilesFromWorkspace(
       console.log(`Fetched from workspace: ${file.path}`);
     }
   } catch (error) {
-    logger.error(`Failed to fetch files from workspace for ${taskId}: ${error}`);
+    logger.error(
+      `Failed to fetch files from workspace for ${taskId}: ${error}`
+    );
     throw error;
   }
 }

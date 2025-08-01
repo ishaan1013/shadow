@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tas
     }
 
     // Proxy request to backend server
-    const backendUrl = process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     const response = await fetch(`${backendUrl}/api/tasks/${taskId}/files/tree`);
 
     if (!response.ok) {

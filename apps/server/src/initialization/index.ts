@@ -1,10 +1,18 @@
-import { InitializationStatus, InitStepType, prisma } from "@repo/db";
-import {
-  InitializationProgress,
-} from "@repo/types";
+import { InitStepType, prisma } from "@repo/db";
+import { getStepsForMode, InitializationProgress } from "@repo/types";
 import { emitStreamChunk } from "../socket";
-import { createWorkspaceManager, createToolExecutor, getAgentMode } from "../execution";
+import {
+  createWorkspaceManager,
+  getAgentMode,
+} from "../execution";
 import type { WorkspaceManager as AbstractWorkspaceManager } from "../execution";
+import {
+  setTaskInProgress,
+  setTaskCompleted,
+  setTaskFailed,
+  clearTaskProgress,
+} from "../utils/task-status";
+import indexRepo from "../indexing/indexer.js";
 
 // Helper for async delays
 const delay = (ms: number) =>
@@ -15,46 +23,36 @@ const STEP_DEFINITIONS: Record<
   InitStepType,
   { name: string; description: string }
 > = {
-  CLONE_REPOSITORY: {
-    name: "Cloning Repository",
-    description: "Clone the specified GitHub repository",
+  // Local mode step
+  PREPARE_WORKSPACE: {
+    name: "Preparing Workspace",
+    description: "Create local workspace directory and clone repository",
   },
-  PROVISION_MICROVM: {
-    name: "Provisioning Environment",
-    description: "Set up isolated microVM environment",
+
+  // Firecracker-specific steps
+  CREATE_VM: {
+    name: "Creating VM",
+    description: "Create Firecracker VM for task execution",
   },
-  SETUP_ENVIRONMENT: {
-    name: "Setting up Environment",
-    description: "Configure development environment",
+  WAIT_VM_READY: {
+    name: "Starting VM",
+    description: "Wait for VM boot and sidecar service to become ready",
   },
-  INSTALL_DEPENDENCIES: {
-    name: "Installing Dependencies",
-    description: "Install project dependencies",
-  },
-  CONFIGURE_TOOLS: {
-    name: "Configuring Tools",
-    description: "Set up development tools and configurations",
-  },
-  VALIDATE_SETUP: {
-    name: "Validating Setup",
-    description: "Verify environment is ready for development",
-  },
-  // Remote mode specific steps
-  CREATE_POD: {
-    name: "Creating Pod",
-    description: "Create Kubernetes pod for task execution",
-  },
-  WAIT_SIDECAR_READY: {
-    name: "Waiting for Sidecar",
-    description: "Wait for sidecar service to become ready",
-  },
-  VERIFY_WORKSPACE: {
+  VERIFY_VM_WORKSPACE: {
     name: "Verifying Workspace",
     description: "Verify workspace is ready and contains repository",
   },
-  CLEANUP_POD: {
-    name: "Cleaning up Pod",
-    description: "Destroy Kubernetes pod and cleanup resources",
+
+  // Repository indexing step (both modes)
+  INDEX_REPOSITORY: {
+    name: "Indexing Repository",
+    description: "Index repository files for semantic search",
+  },
+
+  // Cleanup step (firecracker only)
+  CLEANUP_WORKSPACE: {
+    name: "Cleaning Up",
+    description: "Clean up workspace and resources",
   },
 };
 
@@ -70,7 +68,7 @@ export class TaskInitializationEngine {
    */
   async initializeTask(
     taskId: string,
-    steps: InitStepType[] = ["CLONE_REPOSITORY"],
+    steps: InitStepType[] = ["PREPARE_WORKSPACE"],
     userId: string
   ): Promise<void> {
     console.log(
@@ -78,8 +76,8 @@ export class TaskInitializationEngine {
     );
 
     try {
-      // Set overall status to in progress
-      await this.updateTaskInit(taskId, "IN_PROGRESS", null);
+      // Clear any previous progress and start fresh
+      await clearTaskProgress(taskId);
 
       // Emit start event
       this.emitProgress(taskId, {
@@ -96,8 +94,8 @@ export class TaskInitializationEngine {
         const stepNumber = i + 1;
 
         try {
-          // Update current step
-          await this.updateTaskInit(taskId, "IN_PROGRESS", step);
+          // Set step as in progress
+          await setTaskInProgress(taskId, step);
 
           // Emit step start
           this.emitProgress(taskId, {
@@ -117,6 +115,9 @@ export class TaskInitializationEngine {
           // Execute the step
           await this.executeStep(taskId, step, userId);
 
+          // Mark step as completed
+          await setTaskCompleted(taskId, step);
+
           console.log(
             `[TASK_INIT] ${taskId}: Completed step ${stepNumber}/${steps.length}: ${step}`
           );
@@ -126,8 +127,12 @@ export class TaskInitializationEngine {
             error
           );
 
-          // Mark as failed
-          await this.updateTaskInit(taskId, "FAILED", step);
+          // Mark as failed with error details
+          await setTaskFailed(
+            taskId,
+            step,
+            error instanceof Error ? error.message : "Unknown error"
+          );
 
           // Emit error
           this.emitProgress(taskId, {
@@ -145,8 +150,11 @@ export class TaskInitializationEngine {
         }
       }
 
-      // All steps completed successfully
-      await this.updateTaskInit(taskId, "COMPLETED", null);
+      // All steps completed successfully - final completion
+      const finalStep = steps[steps.length - 1];
+      if (finalStep) {
+        await setTaskCompleted(taskId, finalStep);
+      }
 
       console.log(
         `[TASK_INIT] ${taskId}: Initialization completed successfully`
@@ -174,45 +182,32 @@ export class TaskInitializationEngine {
     userId: string
   ): Promise<void> {
     switch (step) {
-      case "CLONE_REPOSITORY":
-        await this.executeCloneRepository(taskId, userId);
+      // Local mode step
+      case "PREPARE_WORKSPACE":
+        await this.executePrepareWorkspace(taskId, userId);
         break;
 
-      case "PROVISION_MICROVM":
-        await this.executeProvisionMicroVM(taskId);
+      // Firecracker-specific steps
+      case "CREATE_VM":
+        await this.executeCreateVM(taskId, userId);
         break;
 
-      case "SETUP_ENVIRONMENT":
-        await this.executeSetupEnvironment(taskId);
+      case "WAIT_VM_READY":
+        await this.executeWaitVMReady(taskId);
         break;
 
-      case "INSTALL_DEPENDENCIES":
-        await this.executeInstallDependencies(taskId);
+      case "VERIFY_VM_WORKSPACE":
+        await this.executeVerifyVMWorkspace(taskId, userId);
         break;
 
-      case "CONFIGURE_TOOLS":
-        await this.executeConfigureTools(taskId);
+      // Repository indexing step (both modes)
+      case "INDEX_REPOSITORY":
+        await this.executeIndexRepository(taskId);
         break;
 
-      case "VALIDATE_SETUP":
-        await this.executeValidateSetup(taskId);
-        break;
-
-      // Remote mode specific steps
-      case "CREATE_POD":
-        await this.executeCreatePod(taskId, userId);
-        break;
-
-      case "WAIT_SIDECAR_READY":
-        await this.executeWaitSidecarReady(taskId);
-        break;
-
-      case "VERIFY_WORKSPACE":
-        await this.executeVerifyWorkspace(taskId, userId);
-        break;
-
-      case "CLEANUP_POD":
-        await this.executeCleanupPod(taskId);
+      // Cleanup step (firecracker only)
+      case "CLEANUP_WORKSPACE":
+        await this.executeCleanupWorkspace(taskId);
         break;
 
       default:
@@ -221,135 +216,107 @@ export class TaskInitializationEngine {
   }
 
   /**
-   * Clone repository step
+   * Prepare workspace step - local mode only
+   * Creates local workspace directory and clones repository
    */
-  private async executeCloneRepository(
+  private async executePrepareWorkspace(
     taskId: string,
     userId: string
   ): Promise<void> {
+    const agentMode = getAgentMode();
+    if (agentMode !== "local") {
+      throw new Error(
+        `PREPARE_WORKSPACE step should only be used in local mode, but agent mode is: ${agentMode}`
+      );
+    }
+
+    console.log(`[TASK_INIT] ${taskId}: Preparing local workspace`);
+
     // Get task info
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: { repoUrl: true, baseBranch: true, shadowBranch: true },
+      select: {
+        repoFullName: true,
+        repoUrl: true,
+        baseBranch: true,
+        shadowBranch: true,
+      },
     });
 
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
     }
 
-    const workspaceResult = await this.abstractWorkspaceManager.prepareWorkspace({
-      id: taskId,
-      repoUrl: task.repoUrl,
-      baseBranch: task.baseBranch || 'main',
-      shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
-      userId,
-    });
+    // Use workspace manager to prepare local workspace and clone repo
+    const workspaceResult =
+      await this.abstractWorkspaceManager.prepareWorkspace({
+        id: taskId,
+        repoFullName: task.repoFullName,
+        repoUrl: task.repoUrl,
+        baseBranch: task.baseBranch || "main",
+        shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
+        userId,
+      });
 
     if (!workspaceResult.success) {
-      throw new Error(workspaceResult.error || "Failed to clone repository");
+      throw new Error(
+        workspaceResult.error || "Failed to prepare local workspace"
+      );
     }
 
-    // Update task with workspace info
+    // Update task with workspace path
     await prisma.task.update({
       where: { id: taskId },
-      data: {
-        workspacePath: workspaceResult.workspacePath,
-      },
+      data: { workspacePath: workspaceResult.workspacePath },
     });
   }
 
   /**
-   * Provision microVM step (placeholder for future implementation)
+   * Create VM step - firecracker mode only
+   * Creates Firecracker VM pod (VM startup script handles repository cloning)
    */
-  private async executeProvisionMicroVM(taskId: string): Promise<void> {
-    // Placeholder - would provision microVM in the future
-    console.log(
-      `[TASK_INIT] ${taskId}: MicroVM provisioning not yet implemented`
-    );
+  private async executeCreateVM(taskId: string, userId: string): Promise<void> {
+    const agentMode = getAgentMode();
+    if (agentMode !== "firecracker") {
+      throw new Error(
+        `CREATE_VM step should only be used in firecracker mode, but agent mode is: ${agentMode}`
+      );
+    }
 
-    // Simulate some work
-    await delay(1000);
-  }
-
-  /**
-   * Setup environment step (placeholder)
-   */
-  private async executeSetupEnvironment(taskId: string): Promise<void> {
-    // Placeholder - would set up development environment
-    console.log(`[TASK_INIT] ${taskId}: Environment setup not yet implemented`);
-
-    // Simulate some work
-    await delay(500);
-  }
-
-  /**
-   * Install dependencies step (placeholder)
-   */
-  private async executeInstallDependencies(taskId: string): Promise<void> {
-    // Placeholder - would install npm/pip/etc dependencies
-    console.log(
-      `[TASK_INIT] ${taskId}: Dependency installation not yet implemented`
-    );
-
-    // Simulate some work
-    await delay(1500);
-  }
-
-  /**
-   * Configure tools step (placeholder)
-   */
-  private async executeConfigureTools(taskId: string): Promise<void> {
-    // Placeholder - would configure linters, formatters, etc
-    console.log(
-      `[TASK_INIT] ${taskId}: Tool configuration not yet implemented`
-    );
-
-    // Simulate some work
-    await delay(500);
-  }
-
-  /**
-   * Validate setup step (placeholder)
-   */
-  private async executeValidateSetup(taskId: string): Promise<void> {
-    // Placeholder - would validate that everything is working
-    console.log(`[TASK_INIT] ${taskId}: Setup validation not yet implemented`);
-
-    // Simulate some work
-    await delay(300);
-  }
-
-  /**
-   * Create pod step - Create Kubernetes pod for remote execution
-   */
-  private async executeCreatePod(taskId: string, userId: string): Promise<void> {
-    console.log(`[TASK_INIT] ${taskId}: Creating Kubernetes pod for remote execution`);
+    console.log(`[TASK_INIT] ${taskId}: Creating Firecracker VM for execution`);
 
     try {
       // Get task info
       const task = await prisma.task.findUnique({
         where: { id: taskId },
-        select: { repoUrl: true, baseBranch: true, shadowBranch: true },
+        select: {
+          repoFullName: true,
+          repoUrl: true,
+          baseBranch: true,
+          shadowBranch: true,
+        },
       });
 
       if (!task) {
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      // Use abstract workspace manager to prepare workspace (creates pod in remote mode)
-      const workspaceInfo = await this.abstractWorkspaceManager.prepareWorkspace({
-        id: taskId,
-        repoUrl: task.repoUrl,
-        baseBranch: task.baseBranch || 'main',
-        shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
-        userId,
-      });
+      // Use abstract workspace manager to prepare workspace (creates VM in firecracker mode)
+      const workspaceInfo =
+        await this.abstractWorkspaceManager.prepareWorkspace({
+          id: taskId,
+          repoFullName: task.repoFullName,
+          repoUrl: task.repoUrl,
+          baseBranch: task.baseBranch || "main",
+          shadowBranch: task.shadowBranch || `shadow/task-${taskId}`,
+          userId,
+        });
 
       if (!workspaceInfo.success) {
-        throw new Error(`Failed to create pod: ${workspaceInfo.error}`);
+        throw new Error(`Failed to create VM: ${workspaceInfo.error}`);
       }
 
-      // Create or update TaskSession with pod information
+      // Create or update TaskSession with VM information
       if (workspaceInfo.podName && workspaceInfo.podNamespace) {
         await prisma.taskSession.create({
           data: {
@@ -361,7 +328,7 @@ export class TaskInitializationEngine {
         });
       }
 
-      // Update task with workspace path (CRITICAL FIX)
+      // Update task with workspace path
       await prisma.task.update({
         where: { id: taskId },
         data: {
@@ -369,25 +336,30 @@ export class TaskInitializationEngine {
         },
       });
 
-      console.log(`[TASK_INIT] ${taskId}: Successfully created pod ${workspaceInfo.podName}`);
+      console.log(
+        `[TASK_INIT] ${taskId}: Successfully created VM ${workspaceInfo.podName}`
+      );
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed to create pod:`, error);
+      console.error(`[TASK_INIT] ${taskId}: Failed to create VM:`, error);
       throw error;
     }
   }
 
   /**
-   * Wait for sidecar ready step - Wait for sidecar API to become healthy and repository to be cloned
+   * Wait for VM ready step - Wait for VM boot and sidecar API to become healthy
    */
-  private async executeWaitSidecarReady(taskId: string): Promise<void> {
-    console.log(`[TASK_INIT] ${taskId}: Waiting for sidecar service and repository clone to complete`);
+  private async executeWaitVMReady(taskId: string): Promise<void> {
+    console.log(
+      `[TASK_INIT] ${taskId}: Waiting for sidecar service and repository clone to complete`
+    );
 
     try {
-      // Get the tool executor for this task (will contain sidecar endpoint info)
-      const executor = createToolExecutor(taskId);
+      // Use the workspace manager's getExecutor() method for consistent connectivity
+      // This ensures initialization uses the same approach as regular execution
+      const executor = await this.abstractWorkspaceManager.getExecutor(taskId);
 
       // Wait for both sidecar to be healthy AND repository to be cloned
-      const maxRetries = 30; // 30 * 2s = 60s timeout
+      const maxRetries = 5; // 5 * 2s = 10s timeout (faster for testing)
       const retryDelay = 2000; // 2 seconds between retries
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -396,31 +368,49 @@ export class TaskInitializationEngine {
           const listing = await executor.listDirectory(".");
 
           // Check that both sidecar is responding AND workspace has content
-          if (listing.success && listing.contents && listing.contents.length > 0) {
-            console.log(`[TASK_INIT] ${taskId}: Sidecar ready and repository cloned (attempt ${attempt})`);
+          if (
+            listing.success &&
+            listing.contents &&
+            listing.contents.length > 0
+          ) {
+            console.log(
+              `[TASK_INIT] ${taskId}: Sidecar ready and repository cloned (attempt ${attempt})`
+            );
             return;
           } else {
             throw new Error("Sidecar responding but workspace appears empty");
           }
         } catch (error) {
           if (attempt === maxRetries) {
-            throw new Error(`Sidecar/clone failed to become ready after ${maxRetries} attempts: ${error}`);
+            throw new Error(
+              `Sidecar/clone failed to become ready after ${maxRetries} attempts: ${error}`
+            );
           }
-          console.log(`[TASK_INIT] ${taskId}: Sidecar or clone not ready yet (attempt ${attempt}/${maxRetries}), retrying...`);
+          console.log(
+            `[TASK_INIT] ${taskId}: Sidecar or clone not ready yet (attempt ${attempt}/${maxRetries}), retrying...`
+          );
           await delay(retryDelay);
         }
       }
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed waiting for sidecar and clone:`, error);
+      console.error(
+        `[TASK_INIT] ${taskId}: Failed waiting for sidecar and clone:`,
+        error
+      );
       throw error;
     }
   }
 
   /**
-   * Verify workspace step - Verify workspace is ready and contains repository
+   * Verify VM workspace step - Verify workspace is ready and contains repository
    */
-  private async executeVerifyWorkspace(taskId: string, _userId: string): Promise<void> {
-    console.log(`[TASK_INIT] ${taskId}: Verifying workspace is ready and contains repository`);
+  private async executeVerifyVMWorkspace(
+    taskId: string,
+    _userId: string
+  ): Promise<void> {
+    console.log(
+      `[TASK_INIT] ${taskId}: Verifying workspace is ready and contains repository`
+    );
 
     try {
       // Get task info
@@ -433,30 +423,80 @@ export class TaskInitializationEngine {
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      // Get the tool executor for remote operations
-      const executor = createToolExecutor(taskId);
+      // Use the workspace manager's getExecutor() method for consistent connectivity
+      // This ensures initialization uses the same approach as regular execution
+      const executor = await this.abstractWorkspaceManager.getExecutor(taskId);
 
       // Final verification that workspace is fully ready with repository content
-      console.log(`[TASK_INIT] ${taskId}: Performing final workspace verification`);
+      console.log(
+        `[TASK_INIT] ${taskId}: Performing final workspace verification`
+      );
 
       // Verify the workspace is ready by checking contents
       const listing = await executor.listDirectory(".");
-      if (!listing.success || !listing.contents || listing.contents.length === 0) {
-        throw new Error("Workspace verification failed - workspace appears empty");
+      if (
+        !listing.success ||
+        !listing.contents ||
+        listing.contents.length === 0
+      ) {
+        throw new Error(
+          "Workspace verification failed - workspace appears empty"
+        );
       }
 
-      console.log(`[TASK_INIT] ${taskId}: Successfully verified workspace is ready with repository content`);
+      console.log(
+        `[TASK_INIT] ${taskId}: Successfully verified workspace is ready with repository content`
+      );
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed to verify workspace:`, error);
+      console.error(
+        `[TASK_INIT] ${taskId}: Failed to verify workspace:`,
+        error
+      );
       throw error;
     }
   }
 
   /**
-   * Cleanup pod step - Destroy Kubernetes pod and cleanup resources
+   * Index repository step - Index repository files for semantic search
    */
-  private async executeCleanupPod(taskId: string): Promise<void> {
-    console.log(`[TASK_INIT] ${taskId}: Cleaning up Kubernetes pod`);
+  private async executeIndexRepository(taskId: string): Promise<void> {
+    console.log(`[TASK_INIT] ${taskId}: Starting repository indexing`);
+
+    try {
+      // Get task info
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: { repoFullName: true },
+      });
+
+      if (!task) {
+        throw new Error(`Task not found: ${taskId}`);
+      }
+
+      // Index the repository with embeddings enabled
+      console.log(
+        `[TASK_INIT] ${taskId}: Indexing repository ${task.repoFullName}`
+      );
+      
+      await indexRepo(task.repoFullName, taskId, {
+        embed: true,
+        clearNamespace: true,
+      });
+
+      console.log(
+        `[TASK_INIT] ${taskId}: Successfully indexed repository ${task.repoFullName}`
+      );
+    } catch (error) {
+      console.error(`[TASK_INIT] ${taskId}: Failed to index repository:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cleanup workspace step - Clean up resources (local or VM)
+   */
+  private async executeCleanupWorkspace(taskId: string): Promise<void> {
+    console.log(`[TASK_INIT] ${taskId}: Cleaning up Firecracker VM`);
 
     try {
       // Cleanup through abstract workspace manager
@@ -471,100 +511,33 @@ export class TaskInitializationEngine {
         },
       });
 
-      console.log(`[TASK_INIT] ${taskId}: Successfully cleaned up pod`);
+      console.log(`[TASK_INIT] ${taskId}: Successfully cleaned up VM`);
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed to cleanup pod:`, error);
+      console.error(`[TASK_INIT] ${taskId}: Failed to cleanup VM:`, error);
       // Don't throw error for cleanup failures, just log them
       // We don't want cleanup failures to break the overall flow
     }
   }
 
   /**
-   * Update task initialization status in database
-   */
-  private async updateTaskInit(
-    taskId: string,
-    status: InitializationStatus,
-    step: InitStepType | null
-  ): Promise<void> {
-    await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        initializationStatus: status,
-        currentInitStep: step,
-      },
-    });
-  }
-
-  /**
    * Emit progress events via WebSocket
    */
-  private emitProgress(_taskId: string, progress: InitializationProgress): void {
-    emitStreamChunk({
-      type: "init-progress",
-      initProgress: progress,
-    });
+  private emitProgress(taskId: string, progress: InitializationProgress): void {
+    emitStreamChunk(
+      {
+        type: "init-progress",
+        initProgress: progress,
+      },
+      taskId
+    );
   }
 
   /**
-   * Get default initialization steps based on agent mode and task type
+   * Get default initialization steps based on agent mode
    */
-  getDefaultStepsForTask(
-    taskType: "simple" | "microvm" | "full" = "simple"
-  ): InitStepType[] {
+  getDefaultStepsForTask(): InitStepType[] {
     const agentMode = getAgentMode();
-
-    if (agentMode === "remote") {
-      // Remote mode uses pod-based execution
-      switch (taskType) {
-        case "simple":
-          return ["CREATE_POD", "WAIT_SIDECAR_READY", "VERIFY_WORKSPACE"];
-
-        case "microvm":
-          return [
-            "CREATE_POD",
-            "WAIT_SIDECAR_READY",
-            "VERIFY_WORKSPACE",
-            "SETUP_ENVIRONMENT"
-          ];
-
-        case "full":
-          return [
-            "CREATE_POD",
-            "WAIT_SIDECAR_READY",
-            "VERIFY_WORKSPACE",
-            "SETUP_ENVIRONMENT",
-            "INSTALL_DEPENDENCIES",
-            "CONFIGURE_TOOLS",
-            "VALIDATE_SETUP",
-          ];
-
-        default:
-          return ["CREATE_POD", "WAIT_SIDECAR_READY", "VERIFY_WORKSPACE"];
-      }
-    } else {
-      // Local/mock mode uses traditional local execution
-      switch (taskType) {
-        case "simple":
-          return ["CLONE_REPOSITORY"];
-
-        case "microvm":
-          return ["CLONE_REPOSITORY", "PROVISION_MICROVM", "SETUP_ENVIRONMENT"];
-
-        case "full":
-          return [
-            "CLONE_REPOSITORY",
-            "PROVISION_MICROVM",
-            "SETUP_ENVIRONMENT",
-            "INSTALL_DEPENDENCIES",
-            "CONFIGURE_TOOLS",
-            "VALIDATE_SETUP",
-          ];
-
-        default:
-          return ["CLONE_REPOSITORY"];
-      }
-    }
+    return getStepsForMode(agentMode);
   }
 
   /**
@@ -573,8 +546,8 @@ export class TaskInitializationEngine {
   getCleanupSteps(): InitStepType[] {
     const agentMode = getAgentMode();
 
-    if (agentMode === "remote") {
-      return ["CLEANUP_POD"];
+    if (agentMode === "firecracker") {
+      return ["CLEANUP_WORKSPACE"];
     } else {
       return []; // Local mode cleanup is handled automatically
     }

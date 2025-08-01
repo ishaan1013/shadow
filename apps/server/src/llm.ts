@@ -5,6 +5,7 @@ import {
   Message,
   ModelType,
   StreamChunk,
+  ToolResultTypes,
   getModelProvider,
   toCoreMessage,
 } from "@repo/types";
@@ -57,16 +58,37 @@ export class LLMService {
       // Create tools with task context if taskId is provided
       const tools = taskId ? createTools(taskId, workspacePath) : undefined;
 
+      // For Anthropic models, add system prompt as first message with cache control
+      // For other providers, use the system parameter
+      const isAnthropicModel = getModelProvider(model) === "anthropic";
+      const finalMessages: CoreMessage[] = isAnthropicModel
+        ? [
+            {
+              role: 'system',
+              content: systemPrompt,
+              providerOptions: {
+                anthropic: { cacheControl: { type: 'ephemeral' } },
+              },
+            } as CoreMessage,
+            ...coreMessages,
+          ]
+        : coreMessages;
+
       const streamConfig = {
         model: modelInstance,
-        system: systemPrompt,
-        messages: coreMessages,
+        ...(isAnthropicModel ? {} : { system: systemPrompt }),
+        messages: finalMessages,
         maxTokens: 4096,
         temperature: 0.7,
         maxSteps: MAX_STEPS,
         ...(enableTools && tools && { tools }),
         ...(abortSignal && { abortSignal }),
       };
+
+      // Log cache control usage for debugging
+      if (isAnthropicModel) {
+        console.log(`[LLM] Using Anthropic model ${model} with prompt caching enabled`);
+      }
 
       const result = streamText(streamConfig);
 
@@ -99,7 +121,7 @@ export class LLMService {
               type: "tool-result",
               toolResult: {
                 id: chunk.toolCallId,
-                result: chunk.result as any, // Cast to avoid unknown type issues
+                result: chunk.result as ToolResultTypes["result"],
               },
             };
             break;
@@ -113,6 +135,13 @@ export class LLMService {
                   promptTokens: chunk.usage.promptTokens,
                   completionTokens: chunk.usage.completionTokens,
                   totalTokens: chunk.usage.totalTokens,
+                  // Include cache metadata for Anthropic models if available
+                  // Note: Cache metadata will be available in future AI SDK versions
+                  // For now, we'll log when cache control is enabled for debugging
+                  ...(getModelProvider(model) === "anthropic" && {
+                    cacheCreationInputTokens: undefined, // Will be populated by future SDK versions
+                    cacheReadInputTokens: undefined, // Will be populated by future SDK versions
+                  }),
                 },
               };
             }
@@ -145,51 +174,6 @@ export class LLMService {
     }
   }
 
-  // Non-streaming method for simple tool usage
-  async generateWithTools(
-    systemPrompt: string,
-    messages: Message[],
-    model: ModelType = DEFAULT_MODEL,
-    enableTools: boolean = true,
-    taskId?: string,
-    workspacePath?: string
-  ) {
-    try {
-      const modelInstance = this.getModel(model);
-      const coreMessages: CoreMessage[] = messages.map(toCoreMessage);
-
-      // Create tools with task context if taskId is provided
-      const tools = taskId ? createTools(taskId, workspacePath) : undefined;
-
-      const config = {
-        model: modelInstance,
-        system: systemPrompt,
-        messages: coreMessages,
-        maxTokens: 4096,
-        temperature: 0.7,
-        maxSteps: MAX_STEPS,
-        ...(enableTools && tools && { tools }),
-      };
-
-      const result = await generateText(config);
-
-      return {
-        text: result.text,
-        usage: {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          totalTokens: result.usage.totalTokens,
-        },
-        finishReason: result.finishReason,
-        toolCalls: result.toolCalls || [],
-        toolResults: result.toolResults || [],
-      };
-    } catch (error) {
-      console.error("LLM Service Error:", error);
-      throw error;
-    }
-  }
-
   // Helper method to get available models based on configured API keys
   getAvailableModels(): ModelType[] {
     const models: ModelType[] = [];
@@ -203,5 +187,158 @@ export class LLMService {
     }
 
     return models;
+  }
+
+  /**
+   * Generate PR metadata using LLM based on task context and git changes
+   */
+  async generatePRMetadata(options: {
+    taskTitle: string;
+    gitDiff: string;
+    commitMessages: string[];
+    wasTaskCompleted: boolean;
+  }): Promise<{
+    title: string;
+    description: string;
+    isDraft: boolean;
+  }> {
+    try {
+      const prompt = this.buildPRGenerationPrompt(options);
+
+      const prModel = "gpt-4o-mini";
+      const isPrModelAnthropic = getModelProvider(prModel) === "anthropic";
+      
+      const { text } = await generateText({
+        model: this.getModel(prModel),
+        temperature: 0.3,
+        maxTokens: 1000,
+        ...(isPrModelAnthropic 
+          ? { 
+              messages: [{
+                role: 'system',
+                content: prompt,
+                providerOptions: {
+                  anthropic: { cacheControl: { type: 'ephemeral' } },
+                },
+              } as CoreMessage]
+            }
+          : { prompt }
+        ),
+      });
+
+      const result = this.parsePRMetadata(text);
+
+      console.log(`[LLM] Generated PR metadata:`, {
+        title: result.title,
+        isDraft: result.isDraft,
+        descriptionLength: result.description.length,
+      });
+
+      return result;
+    } catch (error) {
+      console.error(`[LLM] Failed to generate PR metadata:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Build the prompt for PR metadata generation
+   */
+  private buildPRGenerationPrompt(options: {
+    taskTitle: string;
+    gitDiff: string;
+    commitMessages: string[];
+    wasTaskCompleted: boolean;
+  }): string {
+    const sections = [
+      "Generate a pull request title and description based on the following information:",
+      "",
+      `**Task Title:** ${options.taskTitle}`,
+      `**Task Status:** ${options.wasTaskCompleted ? "Completed successfully" : "Partially completed or stopped early"}`,
+      "",
+    ];
+
+    if (options.commitMessages.length > 0) {
+      sections.push(
+        "**Recent Commits:**",
+        ...options.commitMessages.map((msg) => `- ${msg}`),
+        ""
+      );
+    }
+
+    if (options.gitDiff.trim()) {
+      sections.push(
+        "**Git Diff:**",
+        "```diff",
+        options.gitDiff.slice(0, 3000), // Limit diff size for token efficiency
+        "```",
+        ""
+      );
+    }
+
+    sections.push(
+      "Please respond with JSON in this exact format:",
+      "```json",
+      "{",
+      '  "title": "Concise PR title (max 50 chars)",',
+      '  "description": "• Bullet point description\\n• What was changed\\n• Key files modified",',
+      `  "isDraft": ${!options.wasTaskCompleted}`,
+      "}",
+      "```",
+      "",
+      "Guidelines:",
+      "- Title should be concise and action-oriented (e.g., 'Add user authentication', 'Fix API error handling')",
+      "- Description should use bullet points and be informative but concise",
+      "- Set isDraft to true only if the task was not fully completed",
+      "- Focus on what was implemented, not implementation details"
+    );
+
+    return sections.join("\n");
+  }
+
+  /**
+   * Parse the LLM response to extract PR metadata
+   */
+  private parsePRMetadata(response: string): {
+    title: string;
+    description: string;
+    isDraft: boolean;
+  } {
+    try {
+      // Extract JSON from response
+      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch || !jsonMatch[1]) {
+        throw new Error("No JSON found in response");
+      }
+
+      const parsed = JSON.parse(jsonMatch[1]);
+
+      if (!parsed.title || !parsed.description) {
+        throw new Error("Missing required fields in response");
+      }
+
+      return {
+        title: String(parsed.title).slice(0, 50), // Enforce length limit
+        description: String(parsed.description),
+        isDraft: Boolean(parsed.isDraft),
+      };
+    } catch (error) {
+      console.warn(`[LLM] Failed to parse PR metadata response:`, error);
+
+      const lines = response
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const title =
+        lines[0]?.replace(/^#+\s*/, "").slice(0, 50) ||
+        "Update code via Shadow agent";
+      const description = "Pull request description generation failed.";
+
+      return {
+        title,
+        description,
+        isDraft: true, // Default to draft
+      };
+    }
   }
 }

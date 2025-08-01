@@ -9,7 +9,6 @@ This document outlines the implementation plan for adding **dual-mode support** 
 - **Shared Core**: Agent logic, LLM integration, and tool definitions work identically in both modes
 - **Abstracted Execution**: Tool operations abstracted behind interfaces for local vs remote execution
 - **Configuration-Driven**: Mode selection via environment variables
-- **Backwards Compatible**: Existing local mode continues to work unchanged
 - **Incremental Migration**: Can be rolled out phase-by-phase
 - **Git-First Architecture**: GitHub branches serve as source of truth, eliminating need for long-term artifact storage
 
@@ -88,7 +87,6 @@ apps/server/src/execution/
 
 - Extract file operations from `tools/index.ts` into execution layer
 - Update tools to use `ToolExecutor` interface instead of direct fs calls
-- Maintain 100% backwards compatibility with current behavior
 
 #### 1.3 Configuration Extension
 

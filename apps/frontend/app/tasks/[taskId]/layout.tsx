@@ -1,7 +1,5 @@
 import { SidebarViews } from "@/components/sidebar";
 import { AgentEnvironmentProvider } from "@/components/agent-environment/agent-environment-context";
-import { CodebaseUnderstandingProvider } from "@/components/codebase-understanding/codebase-understanding-context";
-import { SidebarProvider } from "@/components/sidebar/sidebar-context";
 import { getModels } from "@/lib/actions/get-models";
 import { getUser } from "@/lib/auth/get-user";
 import { getTaskMessages } from "@/lib/db-operations/get-task-messages";
@@ -13,6 +11,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { notFound } from "next/navigation";
+import { getCodebases } from "@/lib/db-operations/get-codebases";
 
 export default async function TaskLayout({
   children,
@@ -25,11 +24,13 @@ export default async function TaskLayout({
   const user = await getUser();
   const [
     initialTasks,
+    initialCodebases,
     { task, todos, fileChanges, diffStats },
     taskMessages,
     models,
   ] = await Promise.all([
     user ? getTasks(user.id) : [],
+    user ? getCodebases(user.id) : [],
     getTaskWithDetails(taskId),
     getTaskMessages(taskId),
     getModels(),
@@ -59,17 +60,21 @@ export default async function TaskLayout({
       queryKey: ["models"],
       queryFn: () => models,
     }),
+    queryClient.prefetchQuery({
+      queryKey: ["task-title", taskId],
+      queryFn: () => task.title,
+    }),
   ]);
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
       <AgentEnvironmentProvider taskId={taskId}>
-        <SidebarProvider>
-          <CodebaseUnderstandingProvider>
-            <SidebarViews initialTasks={initialTasks} currentTaskId={task.id} />
-            {children}
-          </CodebaseUnderstandingProvider>
-        </SidebarProvider>
+        <SidebarViews
+          initialTasks={initialTasks}
+          initialCodebases={initialCodebases}
+          currentTaskId={task.id}
+        />
+        {children}
       </AgentEnvironmentProvider>
     </HydrationBoundary>
   );

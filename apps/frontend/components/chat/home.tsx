@@ -3,8 +3,16 @@
 import { useState } from "react";
 import { LogoHover } from "../logo/logo-hover";
 import { PromptForm } from "./prompt-form";
+import type { FilteredRepository } from "@/lib/github/types";
 
-export function HomePageContent() {
+export function HomePageContent({
+  initialGitCookieState,
+}: {
+  initialGitCookieState?: {
+    repo: FilteredRepository | null;
+    branch: { name: string; commitSha: string } | null;
+  } | null;
+}) {
   const [isFocused, setIsFocused] = useState(true);
 
   return (
@@ -20,6 +28,7 @@ export function HomePageContent() {
         isHome
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
+        initialGitCookieState={initialGitCookieState}
       />
     </div>
   );

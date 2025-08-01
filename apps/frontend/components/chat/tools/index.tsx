@@ -1,7 +1,6 @@
 import type { Message } from "@repo/types";
 
 // Tool-specific components
-import { CodebaseSearchTool } from "./codebase-search";
 import { SemanticSearchTool } from "./semantic-search";
 import { DeleteFileTool } from "./delete-file";
 import { EditFileTool } from "./edit-file";
@@ -15,12 +14,11 @@ import { TodoWriteTool } from "./todo-write";
 import { WebSearchTool } from "./web-search";
 
 // Export ToolType enum
-export { ToolType } from "./collapsible-tool";
+export { ToolType } from "@repo/types";
 
 // Tool component registry
 const TOOL_COMPONENTS = {
   todo_write: TodoWriteTool,
-  codebase_search: CodebaseSearchTool,
   semantic_search: SemanticSearchTool,
   read_file: ReadFileTool,
   run_terminal_cmd: RunTerminalCmdTool,
@@ -81,7 +79,6 @@ export function ToolMessage({ message }: { message: Message }) {
 
 // Export all tool components for potential individual use
 export {
-  CodebaseSearchTool,
   SemanticSearchTool,
   DeleteFileTool,
   EditFileTool,

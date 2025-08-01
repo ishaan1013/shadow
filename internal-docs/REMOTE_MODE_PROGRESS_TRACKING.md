@@ -79,19 +79,79 @@ Full dual-mode execution architecture with remote Kubernetes integration, comple
 
 ---
 
-## 🔥 Future Architecture (Phases 7-8)
+## 🔥 Future Architecture: Firecracker Integration (Phases 7-9)
 
-### **Phase 7: Firecracker Integration**
+### **Phase 7: VM Image Creation & Infrastructure**
+**Target Timeline: 2-3 weeks**
+
 Replace Docker containers with Firecracker microVMs for enhanced security isolation:
-- [ ] Firecracker runtime on K8s nodes with VM root filesystem images
-- [ ] VM lifecycle management with serial console communication (ttyS0)
-- [ ] Pod architecture changes for VM-to-sidecar communication bridge
 
-### **Phase 8: Production Hardening** 
-Security, monitoring, and scalability enhancements:
-- [ ] VM network isolation, per-user quotas, audit logging
-- [ ] Performance metrics, cost tracking, operational dashboards  
-- [ ] VM image caching, auto-scaling, warm pools for faster startup
+**7.1 Base VM Image Development**
+- [ ] Create Ubuntu 22.04 LTS root filesystem image (300-400MB compressed)
+- [ ] Pre-install core runtimes: Node.js 20, Python 3.11
+- [ ] Pre-install LSP servers: typescript-language-server, pylsp
+- [ ] Include essential tools: git, curl, ripgrep, build-essential
+- [ ] Compile Shadow sidecar service as optimized binary
+- [ ] Store in ECR with versioned tags (`shadow-vm:v1.0.0`)
+
+**7.2 Kubernetes Node Preparation**
+- [ ] Create Firecracker DaemonSet for Nitro instances (m5/c5)
+- [ ] Configure node labels (`firecracker=true`) and taints
+- [ ] Mount `/dev/kvm` via privileged sidecar containers
+- [ ] Update RBAC for VM pod creation permissions
+
+**7.3 Configuration Extensions**
+- [ ] Add Firecracker config options to `apps/server/src/config.ts`:
+  - `FIRECRACKER_ENABLED: boolean`
+  - `VM_IMAGE_REGISTRY: string`
+  - `VM_IMAGE_TAG: string`
+  - `FIRECRACKER_KERNEL_PATH: string`
+
+### **Phase 8: VM Communication & Lifecycle**
+**Target Timeline: 2-3 weeks**
+
+**8.1 VM Console Proxy Architecture**
+- [ ] Create `apps/sidecar/src/services/vm-console-proxy.ts`
+- [ ] Implement serial console (ttyS0) read/write operations
+- [ ] Protocol multiplexing: raw terminal vs JSON messages
+- [ ] Message framing with prefixes (`TERM:`, `JSON:`, `EXEC:`)
+- [ ] Maintain existing sidecar HTTP API as facade
+
+**8.2 VM Lifecycle Management**
+- [ ] Create `apps/server/src/services/firecracker-manager.ts`
+- [ ] VM creation with kernel + rootfs image loading
+- [ ] Resource allocation: 1 vCPU, 1-2GB RAM (auto-scaling)
+- [ ] Workspace volume mounting via virtio-fs
+- [ ] Health monitoring and VM recovery logic
+
+**8.3 Enhanced RemoteWorkspaceManager**
+- [ ] Extend `createAgentPodSpec()` for Firecracker mode
+- [ ] Add privileged container spec with `/dev/kvm` mount
+- [ ] Feature flag implementation (`FIRECRACKER_ENABLED`)
+- [ ] Backward compatibility with Docker mode
+
+### **Phase 9: Development Experience & Production Hardening**
+**Target Timeline: 2-3 weeks**
+
+**9.1 LSP Integration & Resource Management**
+- [ ] Add LSP management to VM image startup script
+- [ ] Create `apps/sidecar/src/services/lsp-manager.ts`
+- [ ] Extend sidecar API with `/diagnostics` endpoints
+- [ ] Implement memory auto-scaling (1GB → 2GB) for large builds
+- [ ] Add resource usage monitoring via VM metrics
+
+**9.2 Error Handling & Observability**
+- [ ] Define specific error codes: `KVM_MISSING`, `LSP_NOT_FOUND`, `VM_BOOT_FAILED`
+- [ ] Add error classification to `SidecarClient` and `RemoteWorkspaceManager`
+- [ ] No Docker fallback - fail fast with clear error messages
+- [ ] VM-specific metrics collection (boot time, memory usage, LSP response time)
+- [ ] Console log aggregation and structured logging
+
+**9.3 Migration Strategy**
+- [ ] A/B testing with percentage-based task allocation
+- [ ] Performance and stability monitoring
+- [ ] Gradual rollout alongside existing Docker deployments
+- [ ] Health dashboard for Firecracker node status
 
 ---
 
@@ -105,9 +165,11 @@ Security, monitoring, and scalability enhancements:
 - `apps/sidecar/src/services/filesystem-watcher.ts` - Real-time change detection
 
 ### **Future Firecracker Integration**
-- `apps/server/src/services/firecracker-manager.ts` - VM management service  
-- `apps/sidecar/src/services/vm-console.ts` - Serial console bridge
-- `apps/server/src/execution/k8s/firecracker-pod.yaml` - VM pod specifications
+- `apps/server/src/services/firecracker-manager.ts` - VM lifecycle management
+- `apps/sidecar/src/services/vm-console-proxy.ts` - Serial console communication bridge
+- `apps/sidecar/src/services/lsp-manager.ts` - LSP server management for TypeScript/Python
+- `apps/server/src/execution/k8s/firecracker-daemonset.yaml` - Firecracker runtime deployment
+- `apps/server/src/execution/k8s/firecracker-pod.yaml` - VM pod specifications with privileged containers
 
 ---
 
@@ -120,4 +182,24 @@ Security, monitoring, and scalability enhancements:
 - **Operational Monitoring (1.5%)**: Prometheus metrics, distributed tracing, alerting rules
 - **Enhanced Testing (0.5%)**: End-to-end K8s validation, load testing, chaos engineering
 
-The current Docker-based remote mode provides the core functionality. Firecracker integration will add enhanced security isolation while maintaining all existing capabilities.
+The current Docker-based remote mode provides the core functionality. Firecracker integration (Phases 7-9) will add enhanced security isolation while maintaining all existing capabilities.
+
+## 🏗️ Firecracker Implementation Strategy
+
+**Key Benefits:**
+1. **Enhanced Security**: Hardware-level VM isolation vs container isolation
+2. **Better Resource Utilization**: Direct metal performance without Docker overhead  
+3. **Rich Development Environment**: Pre-installed LSPs for TypeScript and Python
+4. **Operational Excellence**: Comprehensive error handling and monitoring
+5. **Backward Compatibility**: Seamless migration from existing Docker-based system
+
+**Implementation Approach:**
+- **Incremental**: Build alongside existing Docker mode with feature flags
+- **TypeScript/Python Focus**: Start with core language support (can expand later)
+- **A/B Testing**: Gradual rollout with performance monitoring
+- **Total Timeline**: 6-9 weeks across three phases
+
+**Resource Specifications:**
+- **VM Size**: 1 vCPU, 1-2GB RAM (auto-scaling for large builds)
+- **Image Size**: 300-400MB compressed Ubuntu 22.04 LTS
+- **Node Requirements**: Nitro instances (m5/c5) with `/dev/kvm` support

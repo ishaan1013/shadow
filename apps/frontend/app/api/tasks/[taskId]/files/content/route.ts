@@ -38,7 +38,7 @@ export async function GET(
     }
 
     // Proxy request to backend server
-    const backendUrl = process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     const params = new URLSearchParams({ path: filePath });
     const response = await fetch(`${backendUrl}/api/tasks/${taskId}/files/content?${params}`);
 

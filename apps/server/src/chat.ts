@@ -1,6 +1,7 @@
 import { prisma } from "@repo/db";
 import {
   AssistantMessagePart,
+  ErrorPart,
   Message,
   MessageMetadata,
   ModelType,
@@ -11,7 +12,8 @@ import { type ChatMessage } from "../../../packages/db/src/client";
 import { LLMService } from "./llm";
 import { systemPrompt } from "./prompt/system-prompt";
 import { GitManager } from "./services/git-manager";
-import { MessageCompactor, CompactionConfig } from "./services/message-compactor";
+import { PRManager } from "./services/pr-manager";
+import { GitHubService } from "./github";
 import {
   emitStreamChunk,
   endStream,
@@ -21,21 +23,23 @@ import {
 } from "./socket";
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
-import { SidecarClient } from "./execution/remote/sidecar-client";
-import { wouldExceedContextLimit, estimateContextTokens } from "./utils/token-estimator";
-import { compactionCache } from "./services/compaction-cache";
+import { createToolExecutor } from "./execution";
 
 export const DEFAULT_MODEL: ModelType = "gpt-4o";
 
 export class ChatService {
   private llmService: LLMService;
-  private messageCompactor: MessageCompactor;
+  private githubService: GitHubService;
   private activeStreams: Map<string, AbortController> = new Map();
   private stopRequested: Set<string> = new Set();
+  private queuedMessages: Map<
+    string,
+    { message: string; model: ModelType; workspacePath?: string }
+  > = new Map();
 
   constructor() {
     this.llmService = new LLMService();
-    this.messageCompactor = new MessageCompactor();
+    this.githubService = new GitHubService();
   }
 
   private async getNextSequence(taskId: string): Promise<number> {
@@ -50,6 +54,7 @@ export class ChatService {
   async saveUserMessage(
     taskId: string,
     content: string,
+    llmModel?: string,
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
     const sequence = await this.getNextSequence(taskId);
@@ -59,6 +64,8 @@ export class ChatService {
         content,
         role: "USER",
         sequence,
+        llmModel,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         metadata: (metadata as any) || undefined,
       },
     });
@@ -85,6 +92,7 @@ export class ChatService {
         role: "ASSISTANT",
         llmModel,
         sequence,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         metadata: (metadata as any) || undefined,
         // Denormalized usage fields for easier querying
         promptTokens: usage?.promptTokens,
@@ -102,7 +110,7 @@ export class ChatService {
   async saveToolMessage(
     taskId: string,
     toolName: string,
-    toolArgs: Record<string, any>,
+    toolArgs: Record<string, unknown>,
     toolResult: string,
     sequence: number,
     metadata?: MessageMetadata
@@ -114,6 +122,7 @@ export class ChatService {
         role: "TOOL",
         sequence,
         metadata: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(metadata as any),
           tool: {
             name: toolName,
@@ -121,6 +130,7 @@ export class ChatService {
             status: "COMPLETED",
             result: toolResult,
           },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any,
       },
     });
@@ -133,7 +143,10 @@ export class ChatService {
   /**
    * Commit changes to git if there are any changes after an LLM response
    */
-  private async commitChangesIfAny(taskId: string, workspacePath?: string): Promise<void> {
+  private async commitChangesIfAny(
+    taskId: string,
+    workspacePath?: string
+  ): Promise<boolean> {
     try {
       // Get task info including user and workspace details
       const task = await prisma.task.findUnique({
@@ -143,31 +156,34 @@ export class ChatService {
 
       if (!task) {
         console.warn(`[CHAT] Task not found for git commit: ${taskId}`);
-        return;
+        return false;
       }
 
       if (!task.shadowBranch) {
-        console.warn(`[CHAT] No shadow branch configured for task ${taskId}, skipping git commit`);
-        return;
+        console.warn(
+          `[CHAT] No shadow branch configured for task ${taskId}, skipping git commit`
+        );
+        return false;
       }
 
       // Determine workspace path - use provided path or fall back to task workspace path
       const resolvedWorkspacePath = workspacePath || task.workspacePath;
       if (!resolvedWorkspacePath) {
-        console.warn(`[CHAT] No workspace path available for task ${taskId}, skipping git commit`);
-        return;
+        console.warn(
+          `[CHAT] No workspace path available for task ${taskId}, skipping git commit`
+        );
+        return false;
       }
 
-      // For remote mode, we would need to make API calls to the sidecar
-      // For now, only handle local mode
+      // For firecracker mode, we use the tool executor to make API calls to the sidecar
+      // For local mode, we use GitManager directly
       if (config.agentMode === "local") {
-        const gitManager = new GitManager(resolvedWorkspacePath, taskId);
+        const gitManager = new GitManager(resolvedWorkspacePath);
 
-        // Check if there are changes to commit
         const hasChanges = await gitManager.hasChanges();
         if (!hasChanges) {
           console.log(`[CHAT] No changes to commit for task ${taskId}`);
-          return;
+          return false;
         }
 
         // Commit changes with user and Shadow co-author
@@ -178,103 +194,197 @@ export class ChatService {
           },
           {
             name: "Shadow",
-            email: "noreply@shadow.ai",
+            email: "noreply@shadowrealm.ai",
           }
         );
 
         if (committed) {
-          console.log(`[CHAT] Successfully committed changes for task ${taskId}`);
+          console.log(
+            `[CHAT] Successfully committed changes for task ${taskId}`
+          );
         }
+
+        return committed;
       } else {
-        // Remote mode: Use sidecar git APIs instead of direct git operations
-        await this.commitChangesRemoteMode(taskId, task);
+        return await this.commitChangesFirecrackerMode(taskId, task);
       }
     } catch (error) {
-      console.error(`[CHAT] Failed to commit changes for task ${taskId}:`, error);
+      console.error(
+        `[CHAT] Failed to commit changes for task ${taskId}:`,
+        error
+      );
       throw error;
     }
   }
 
   /**
-   * Commit changes in remote mode using sidecar git APIs
+   * Create a PR if needed after changes are committed
    */
-  private async commitChangesRemoteMode(taskId: string, task: { user: { name: string; email: string }; shadowBranch: string | null }): Promise<void> {
+  private async createPRIfNeeded(
+    taskId: string,
+    workspacePath?: string,
+    messageId?: string
+  ): Promise<void> {
     try {
-      console.log(`[CHAT] Checking for changes to commit in remote mode for task ${taskId}`);
+      console.log(`[CHAT] Attempting to create PR for task ${taskId}`);
 
-      // Create sidecar client for this task
-      const sidecarClient = new SidecarClient(taskId);
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        include: { user: true },
+      });
+
+      if (!task) {
+        console.warn(`[CHAT] Task not found for PR creation: ${taskId}`);
+        return;
+      }
+
+      if (!task.shadowBranch) {
+        console.warn(
+          `[CHAT] No shadow branch configured for task ${taskId}, skipping PR creation`
+        );
+        return;
+      }
+
+      const resolvedWorkspacePath = workspacePath || task.workspacePath;
+      if (!resolvedWorkspacePath) {
+        console.warn(
+          `[CHAT] No workspace path available for task ${taskId}, skipping PR creation`
+        );
+        return;
+      }
+
+      const gitManager = new GitManager(resolvedWorkspacePath);
+      const prManager = new PRManager(
+        this.githubService,
+        gitManager,
+        this.llmService
+      );
+
+      if (!messageId) {
+        console.warn(
+          `[CHAT] No messageId provided for PR creation for task ${taskId}`
+        );
+        return;
+      }
+
+      await prManager.createPRIfNeeded({
+        taskId,
+        repoFullName: task.repoFullName,
+        shadowBranch: task.shadowBranch,
+        baseBranch: task.baseBranch,
+        userId: task.userId,
+        taskTitle: task.title,
+        wasTaskCompleted: task.status === "COMPLETED",
+        messageId,
+      });
+    } catch (error) {
+      console.error(`[CHAT] Failed to create PR for task ${taskId}:`, error);
+      // Non-blocking - don't throw
+    }
+  }
+
+  /**
+   * Commit changes in firecracker mode using tool executor git APIs
+   */
+  private async commitChangesFirecrackerMode(
+    taskId: string,
+    task: {
+      user: { name: string; email: string };
+      shadowBranch: string | null;
+    }
+  ): Promise<boolean> {
+    try {
+      console.log(
+        `[CHAT] Checking for changes to commit in firecracker mode for task ${taskId}`
+      );
+
+      // Create tool executor for this task
+      const toolExecutor = createToolExecutor(taskId);
 
       // Check if there are any uncommitted changes
-      const statusResponse = await sidecarClient.getGitStatus();
+      const statusResponse = await toolExecutor.getGitStatus();
 
       if (!statusResponse.success) {
-        console.error(`[CHAT] Failed to check git status for task ${taskId}: ${statusResponse.message}`);
-        return;
+        console.error(
+          `[CHAT] Failed to check git status for task ${taskId}: ${statusResponse.message}`
+        );
+        return false;
       }
 
       if (!statusResponse.hasChanges) {
-        console.log(`[CHAT] No changes to commit for task ${taskId} in remote mode`);
-        return;
+        console.log(
+          `[CHAT] No changes to commit for task ${taskId} in firecracker mode`
+        );
+        return false;
       }
 
-      // Get diff from sidecar to generate commit message on server side
-      const diffResponse = await sidecarClient.getGitDiff();
+      // Get diff from tool executor to generate commit message on server side
+      const diffResponse = await toolExecutor.getGitDiff();
 
       let commitMessage = "Update code via Shadow agent";
       if (diffResponse.success && diffResponse.diff) {
         // Generate commit message using server-side GitManager (which has AI integration)
-        const tempGitManager = new GitManager("", taskId);
-        commitMessage = await tempGitManager.generateCommitMessage(diffResponse.diff);
+        const tempGitManager = new GitManager("");
+        commitMessage = await tempGitManager.generateCommitMessage(
+          diffResponse.diff
+        );
       }
 
       // Commit changes with user and Shadow co-author
-      const commitResponse = await sidecarClient.commitChanges(
-        {
+      const commitResponse = await toolExecutor.commitChanges({
+        user: {
           name: task.user.name,
           email: task.user.email,
         },
-        {
+        coAuthor: {
           name: "Shadow",
-          email: "noreply@shadow.ai",
+          email: "noreply@shadowrealm.ai",
         },
-        commitMessage
-      );
+        message: commitMessage,
+      });
 
       if (!commitResponse.success) {
-        console.error(`[CHAT] Failed to commit changes for task ${taskId}: ${commitResponse.message}`);
-        return;
+        console.error(
+          `[CHAT] Failed to commit changes for task ${taskId}: ${commitResponse.message}`
+        );
+        return false;
       }
 
       // Push the commit
       if (!task.shadowBranch) {
-        console.warn(`[CHAT] No shadow branch configured for task ${taskId}, skipping push`);
-        return;
+        console.warn(
+          `[CHAT] No shadow branch configured for task ${taskId}, skipping push`
+        );
+        return false;
       }
 
-      const pushResponse = await sidecarClient.pushBranch(task.shadowBranch, false);
+      const pushResponse = await toolExecutor.pushBranch({
+        branchName: task.shadowBranch,
+        setUpstream: false,
+      });
 
       if (!pushResponse.success) {
-        console.warn(`[CHAT] Failed to push changes for task ${taskId}: ${pushResponse.message}`);
+        console.warn(
+          `[CHAT] Failed to push changes for task ${taskId}: ${pushResponse.message}`
+        );
         // Don't throw here - commit succeeded even if push failed
       }
 
-      console.log(`[CHAT] Successfully committed changes for task ${taskId} in remote mode`);
+      console.log(
+        `[CHAT] Successfully committed changes for task ${taskId} in firecracker mode`
+      );
+      return true;
     } catch (error) {
-      console.error(`[CHAT] Error in remote mode git commit for task ${taskId}:`, error);
+      console.error(
+        `[CHAT] Error in firecracker mode git commit for task ${taskId}:`,
+        error
+      );
       // Don't throw here - we don't want git failures to break the chat flow
+      return false;
     }
   }
 
-
-  async getChatHistory(
-    taskId: string, 
-    options?: { 
-      compact?: boolean; 
-      model?: ModelType; 
-      compactionConfig?: Partial<CompactionConfig> 
-    }
-  ): Promise<Message[]> {
+  async getChatHistory(taskId: string): Promise<Message[]> {
     const dbMessages = await prisma.chatMessage.findMany({
       where: { taskId },
       orderBy: [
@@ -374,6 +484,7 @@ export class ChatService {
     enableTools = true,
     skipUserMessageSave = false,
     workspacePath,
+    queue = false,
   }: {
     taskId: string;
     userMessage: string;
@@ -381,25 +492,47 @@ export class ChatService {
     enableTools?: boolean;
     skipUserMessageSave?: boolean;
     workspacePath?: string;
+    queue?: boolean;
   }) {
-    // Save user message to database (unless skipped)
-    if (!skipUserMessageSave) {
-      await this.saveUserMessage(taskId, userMessage);
+    if (queue) {
+      if (this.activeStreams.has(taskId)) {
+        console.log(
+          `[CHAT] Queuing message for task ${taskId} (stream in progress)`
+        );
+
+        // Support only one queued message at a time for now, can extend to a list later
+        // Override the existing queued message if it exists
+        this.queuedMessages.set(taskId, {
+          message: userMessage,
+          model: llmModel,
+          workspacePath,
+        });
+        return;
+      }
+    } else {
+      // queue=false: interrupt any active stream and process immediately
+      if (this.activeStreams.has(taskId)) {
+        console.log(
+          `[CHAT] Interrupting active stream for task ${taskId} due to new message`
+        );
+        await this.stopStream(taskId);
+
+        // Override queued message if it exists
+        if (this.queuedMessages.has(taskId)) {
+          this.queuedMessages.delete(taskId);
+        }
+
+        // Cleanup time buffer
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
     }
 
-    // Get chat history for context with automatic compaction
-    const history = await this.getChatHistory(taskId, {
-      compact: true,
-      model: llmModel
-    });
+    // Save user message to database (unless skipped, e.g. on task initialization)
+    if (!skipUserMessageSave) {
+      await this.saveUserMessage(taskId, userMessage, llmModel);
+    }
 
-    // Emit context statistics for the frontend progress bar
-    const contextStats = this.messageCompactor.getContextStatistics(
-      history,
-      llmModel,
-      systemPrompt
-    );
-    emitContextStatistics(contextStats, taskId);
+    const history = await this.getChatHistory(taskId);
 
     // Prepare messages for LLM (exclude the user message we just saved to avoid duplication)
     // Filter out tool messages since they're embedded in assistant messages as parts
@@ -456,7 +589,7 @@ export class ChatService {
         }
 
         // Emit the chunk directly to clients
-        emitStreamChunk(chunk);
+        emitStreamChunk(chunk, taskId);
 
         // Handle text content chunks
         if (chunk.type === "content" && chunk.content) {
@@ -496,6 +629,7 @@ export class ChatService {
                   metadata: {
                     isStreaming: true,
                     parts: assistantParts,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   } as any,
                 },
               });
@@ -528,6 +662,7 @@ export class ChatService {
                 metadata: {
                   isStreaming: true,
                   parts: assistantParts,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any,
               },
             });
@@ -596,6 +731,7 @@ export class ChatService {
                 metadata: {
                   isStreaming: true,
                   parts: assistantParts,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any,
               },
             });
@@ -614,17 +750,20 @@ export class ChatService {
 
             if (toolMessage) {
               // Convert result to string for content field, keep object in metadata
-              const resultString = typeof chunk.toolResult.result === 'string'
-                ? chunk.toolResult.result
-                : JSON.stringify(chunk.toolResult.result);
+              const resultString =
+                typeof chunk.toolResult.result === "string"
+                  ? chunk.toolResult.result
+                  : JSON.stringify(chunk.toolResult.result);
 
               await prisma.chatMessage.update({
                 where: { id: toolMessage.id },
                 data: {
                   content: resultString,
                   metadata: {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     ...(toolMessage.metadata as any),
                     tool: {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       ...(toolMessage.metadata as any)?.tool,
                       status: "COMPLETED",
                       result: chunk.toolResult.result, // Keep as object for type safety
@@ -640,6 +779,58 @@ export class ChatService {
             `[TOOL_RESULT] ${chunk.toolResult.id}:`,
             chunk.toolResult.result
           );
+        }
+
+        // Handle error chunks from LLM service
+        if (chunk.type === "error") {
+          console.error(
+            `[CHAT] Received error chunk for task ${taskId}:`,
+            chunk.error
+          );
+          finishReason = chunk.finishReason || "error";
+
+          // Add error part to assistant message parts
+          const errorPart: ErrorPart = {
+            type: "error",
+            error: chunk.error || "Unknown error occurred",
+            finishReason: chunk.finishReason,
+          };
+          assistantParts.push(errorPart);
+
+          // Update assistant message with error part if we have one
+          if (assistantMessageId) {
+            const fullContent = assistantParts
+              .filter((part) => part.type === "text")
+              .map((part) => (part as TextPart).text)
+              .join("");
+
+            await prisma.chatMessage.update({
+              where: { id: assistantMessageId },
+              data: {
+                content: fullContent,
+                metadata: {
+                  isStreaming: false,
+                  parts: assistantParts,
+                  finishReason,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                } as any,
+              },
+            });
+          }
+
+          // Update task status to failed
+          await updateTaskStatus(taskId, "FAILED", "CHAT");
+
+          // Clean up stream tracking
+          this.activeStreams.delete(taskId);
+          this.stopRequested.delete(taskId);
+          endStream(taskId);
+
+          // Clear any queued messages (don't process them after error)
+          this.clearQueuedMessage(taskId);
+
+          // Exit the streaming loop
+          break;
         }
 
         // Track usage information
@@ -673,6 +864,7 @@ export class ChatService {
           where: { id: assistantMessageId },
           data: {
             content: fullContent,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             metadata: finalMetadata as any,
             promptTokens: usageMetadata.promptTokens,
             completionTokens: usageMetadata.completionTokens,
@@ -694,9 +886,24 @@ export class ChatService {
 
         // Commit changes if there are any (only for successfully completed responses)
         try {
-          await this.commitChangesIfAny(taskId, workspacePath);
+          const changesCommitted = await this.commitChangesIfAny(
+            taskId,
+            workspacePath
+          );
+
+          // Create PR if changes were committed
+          if (changesCommitted && assistantMessageId) {
+            await this.createPRIfNeeded(
+              taskId,
+              workspacePath,
+              assistantMessageId
+            );
+          }
         } catch (error) {
-          console.error(`[CHAT] Failed to commit changes for task ${taskId}:`, error);
+          console.error(
+            `[CHAT] Failed to commit changes for task ${taskId}:`,
+            error
+          );
           // Don't fail the entire response for git commit failures
         }
       }
@@ -704,7 +911,10 @@ export class ChatService {
       // Clean up stream tracking
       this.activeStreams.delete(taskId);
       this.stopRequested.delete(taskId);
-      endStream();
+      endStream(taskId);
+
+      // Process any queued message
+      await this.processQueuedMessage(taskId);
     } catch (error) {
       console.error("Error processing user message:", error);
 
@@ -712,46 +922,64 @@ export class ChatService {
       await updateTaskStatus(taskId, "FAILED", "CHAT");
 
       // Emit error chunk
-      emitStreamChunk({
-        type: "error",
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
-        finishReason: "error",
-      });
+      emitStreamChunk(
+        {
+          type: "error",
+          error:
+            error instanceof Error ? error.message : "Unknown error occurred",
+          finishReason: "error",
+        },
+        taskId
+      );
 
       // Clean up stream tracking on error
       this.activeStreams.delete(taskId);
       this.stopRequested.delete(taskId);
-      handleStreamError(error);
+      handleStreamError(error, taskId);
+
+      await this.processQueuedMessage(taskId);
       throw error;
     }
   }
 
-  // Get available models from LLM service
+  private async processQueuedMessage(taskId: string): Promise<void> {
+    const queuedMessage = this.queuedMessages.get(taskId);
+    if (!queuedMessage) {
+      return;
+    }
+
+    this.queuedMessages.delete(taskId);
+
+    console.log(`[CHAT] Processing queued message for task ${taskId}`);
+
+    try {
+      await this.processUserMessage({
+        taskId,
+        userMessage: queuedMessage.message,
+        llmModel: queuedMessage.model,
+        enableTools: true,
+        skipUserMessageSave: false,
+        workspacePath: queuedMessage.workspacePath,
+        queue: false,
+      });
+    } catch (error) {
+      console.error(
+        `[CHAT] Error processing queued message for task ${taskId}:`,
+        error
+      );
+    }
+  }
+
   getAvailableModels(): ModelType[] {
     return this.llmService.getAvailableModels();
   }
 
-  // Method to process coding tasks with specific configuration
-  async processCodingTask(
-    taskId: string,
-    userMessage: string,
-    llmModel: ModelType = DEFAULT_MODEL,
-    workspacePath?: string
-  ) {
-    console.log(`[CODING_TASK] Starting coding task for ${taskId}`);
-    console.log(`[CODING_TASK] Task: ${userMessage.substring(0, 100)}...`);
+  getQueuedMessage(taskId: string): string | undefined {
+    return this.queuedMessages.get(taskId)?.message;
+  }
 
-    // Update task status to running when processing a coding task
-    await updateTaskStatus(taskId, "RUNNING", "CODING");
-
-    return this.processUserMessage({
-      taskId,
-      userMessage,
-      llmModel,
-      enableTools: true,
-      workspacePath,
-    });
+  clearQueuedMessage(taskId: string): void {
+    this.queuedMessages.delete(taskId);
   }
 
   async stopStream(taskId: string): Promise<void> {
@@ -769,5 +997,94 @@ export class ChatService {
 
     // Update task status to stopped when manually stopped by user
     await updateTaskStatus(taskId, "STOPPED", "CHAT");
+  }
+
+  async editUserMessage({
+    taskId,
+    messageId,
+    newContent,
+    newModel,
+    workspacePath,
+  }: {
+    taskId: string;
+    messageId: string;
+    newContent: string;
+    newModel: ModelType;
+    workspacePath?: string;
+  }): Promise<void> {
+    console.log(`[CHAT] Editing user message ${messageId} in task ${taskId}`);
+
+    // First, stop any active stream and clear queued messages
+    if (this.activeStreams.has(taskId)) {
+      await this.stopStream(taskId);
+    }
+    this.clearQueuedMessage(taskId);
+
+    // Update the message in database
+    await prisma.chatMessage.update({
+      where: { id: messageId },
+      data: {
+        content: newContent,
+        llmModel: newModel,
+        editedAt: new Date(),
+      },
+    });
+
+    // Get the sequence of the edited message
+    const editedMessage = await prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      select: { sequence: true },
+    });
+
+    if (!editedMessage) {
+      throw new Error("Edited message not found");
+    }
+
+    // Delete all messages that come after the edited message
+    await prisma.chatMessage.deleteMany({
+      where: {
+        taskId,
+        sequence: {
+          gt: editedMessage.sequence,
+        },
+      },
+    });
+
+    console.log(
+      `[CHAT] Deleted messages after sequence ${editedMessage.sequence} in task ${taskId}`
+    );
+
+    // Get chat history up to the edited message
+    const history = await this.getChatHistory(taskId);
+
+    // Process the edited message as if it were a new message
+    // Filter out tool messages and use the updated content
+    const messages: Message[] = history
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .map((msg) => {
+        if (msg.id === messageId) {
+          return {
+            ...msg,
+            content: newContent,
+            llmModel: newModel,
+          };
+        }
+        return msg;
+      });
+
+    console.log(
+      `[CHAT] Re-processing from edited message with ${messages.length} context messages`
+    );
+
+    // Start streaming from the edited message
+    await this.processUserMessage({
+      taskId,
+      userMessage: newContent,
+      llmModel: newModel,
+      enableTools: true,
+      skipUserMessageSave: true, // Don't save again, already updated
+      workspacePath,
+      queue: false,
+    });
   }
 }

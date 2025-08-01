@@ -81,7 +81,7 @@ export class LocalWorkspaceManager implements WorkspaceManager {
   }
 
   async prepareWorkspace(taskConfig: TaskConfig): Promise<WorkspaceInfo> {
-    const { id: taskId, repoUrl, baseBranch, shadowBranch, userId } = taskConfig;
+    const { id: taskId, repoFullName, baseBranch, shadowBranch, userId } = taskConfig;
     const workspacePath = this.getTaskWorkspaceDir(taskId);
 
     try {
@@ -94,7 +94,7 @@ export class LocalWorkspaceManager implements WorkspaceManager {
 
       // Clone the repository
       const cloneResult = await this.githubService.cloneRepository(
-        repoUrl,
+        repoFullName,
         baseBranch,
         workspacePath,
         userId
@@ -169,7 +169,7 @@ export class LocalWorkspaceManager implements WorkspaceManager {
     shadowBranch: string,
     userId: string
   ): Promise<void> {
-    const gitManager = new GitManager(workspacePath, taskId);
+    const gitManager = new GitManager(workspacePath);
 
     try {
       // Get user information from database
@@ -372,7 +372,7 @@ export class LocalWorkspaceManager implements WorkspaceManager {
             await readDirectory(fullPath, relativeFilePath);
           } else {
             // Read file content
-              try {
+            try {
               const content = await fs.readFile(fullPath, 'utf8');
               files.push({
                 path: relativeFilePath,
@@ -380,7 +380,7 @@ export class LocalWorkspaceManager implements WorkspaceManager {
                 type: "file"
               });
             } catch (error) {
-                logger.error(`Error reading file ${relativeFilePath}: ${error}`);
+              logger.error(`Error reading file ${relativeFilePath}: ${error}`);
             }
           }
         }

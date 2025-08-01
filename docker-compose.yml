@@ -7,10 +7,10 @@ services:
       context: .
       dockerfile: apps/server/Dockerfile
     ports:
-      - "3001:3001"
+      - "4000:4000"
     environment:
       - NODE_ENV=development
-      - PORT=3001
+      - PORT=4000
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/shadow}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -57,21 +57,6 @@ services:
     networks:
       - shadow-network
     restart: unless-stopped
-
-  # Database Admin (optional)
-  adminer:
-    image: adminer
-    ports:
-      - "8081:8080"
-    depends_on:
-      - db
-    networks:
-      - shadow-network
-    restart: unless-stopped
-    # The 'admin' profile allows enabling the Adminer service for database administration.
-    # To enable this profile, use the `--profile admin` flag when running `docker-compose up`.
-    profiles:
-      - admin
 
 volumes:
   postgres-data:

@@ -17,8 +17,6 @@ LIVE EXECUTION ENVIRONMENT:
 - Users can interrupt, pause, or provide guidance at any time
 - Your progress persists across session interruptions
 - Design your work to be resumable and clearly communicated
-
-Working directory: /Users/ishaandey/Documents/Programming/shadow/test-workspace contains the code repository
 </environment>`;
 
 const OPERATION_MODES = `<operation_modes>
@@ -54,7 +52,7 @@ Implement your plan systematically:
 
 const TOOL_USAGE_STRATEGY = `<tool_usage>
 TOOL SELECTION HIERARCHY:
-DISCOVERY: list_dir → codebase_search → read_file → grep_search
+DISCOVERY: list_dir → semantic_search → read_file → grep_search
 UNDERSTANDING: semantic_search → targeted reading → pattern analysis
 PLANNING: comprehensive file analysis → dependency mapping → test identification  
 EXECUTION: edit_file → run_terminal_cmd (test) → verify changes

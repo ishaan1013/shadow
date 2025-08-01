@@ -13,8 +13,8 @@ import { getHash, getNodeHash } from "@/indexing/utils/hash";
 import { sliceByLoc } from "@/indexing/utils/text";
 import { tokenize } from "@/indexing/utils/tokenize";
 import TreeSitter from "tree-sitter";
-import { embedAndUpsertToPinecone } from "./embedder";
-import { getOwnerRepo, isValidRepo } from "./utils/repository";
+import { embedAndUpsertToPinecone } from "./embedderWrapper";
+import { getOwnerFromRepo, isValidRepo } from "./utils/repository";
 import { LocalWorkspaceManager } from "@/execution/local/local-workspace-manager";
 
 export interface FileContentResponse {
@@ -33,8 +33,7 @@ export interface IndexRepoOptions {
 
 // Add GitHub API helper
 async function fetchRepoFiles(
-  taskId: string,
-  path: string = ""
+  taskId: string
 ): Promise<Array<{ path: string; content: string; type: string }>> {
   // For local indexing, we'll use the workspace manager
   // The repo parameter should be the taskId or we need to map repo to taskId
@@ -56,7 +55,12 @@ async function indexRepo(
   invertedIndex: any;
   embeddings?: { index: any; binary: Buffer };
 }> {
-  const { maxLines = 200, embed = false, paths = null, clearNamespace = true } = options;
+  const {
+    maxLines = 200,
+    embed = false,
+    paths = null,
+    clearNamespace = true,
+  } = options;
 
   logger.info(
     `Indexing ${repoName}${paths ? " (filtered)" : ""}${embed ? " + embeddings" : ""}`
@@ -67,7 +71,7 @@ async function indexRepo(
 
   // Check if it's a GitHub repo (format: "owner/repo")
   if (isValidRepo(repoName)) {
-    const { owner, repo } = getOwnerRepo(repoName);
+    const { owner, repo } = getOwnerFromRepo(repoName);
     logger.info(`Fetching GitHub repo: ${owner}/${repo}`);
 
     files = await fetchRepoFiles(taskId);
@@ -78,6 +82,7 @@ async function indexRepo(
 
     repoId = getHash(`${owner}/${repo}`, 12);
     logger.info(`Number of files fetched: ${files.length}`);
+    logger.info(`Files found: ${files.map((f) => f.path).join(", ")}`);
     const graph = new Graph(repoId);
     // Track symbols across all files for cross-file call resolution
     const globalSym = new Map<string, string[]>(); // name -> [nodeId]
@@ -98,13 +103,33 @@ async function indexRepo(
       if (!spec || !spec.language) {
         logger.warn(`Skipping unsupported: ${file.path}`);
         continue;
-      } else {
-        console.log("Parsing", file.path);
       }
+
       const parser = new TreeSitter();
-      parser.setLanguage(spec.language);
-      const tree = parser.parse(file.content);
-      const rootNode = tree.rootNode;
+      try {
+        if (spec.language && typeof spec.language === "object") {
+          parser.setLanguage(spec.language);
+        } else {
+          logger.warn(`Invalid language object for ${file.path}`);
+          continue;
+        }
+      } catch (error) {
+        logger.warn(
+          `Failed to set language for ${file.path}: ${error instanceof Error ? error.message : String(error)}`
+        );
+        continue;
+      }
+
+      let tree, rootNode;
+      try {
+        tree = parser.parse(file.content);
+        rootNode = tree.rootNode;
+      } catch (error) {
+        logger.warn(
+          `Failed to parse ${file.path}: ${error instanceof Error ? error.message : String(error)}`
+        );
+        continue;
+      }
 
       // FILE node (record content hash + mtime for future incremental checks)
       // TODO: Should get time of commit instead!
@@ -137,6 +162,9 @@ async function indexRepo(
         file.content
       );
       const symNodes: GraphNode[] = [];
+      logger.info(
+        `File ${file.path}: Found ${defs.length} definitions, ${imports.length} imports, ${calls.length} calls, ${docs.length} docs`
+      );
 
       // SYMBOL defs
       for (const d of defs) {
@@ -236,6 +264,7 @@ async function indexRepo(
       }
 
       // CHUNK nodes per symbol
+      let hasChunks = false;
       for (const symNode of symNodes) {
         const d = defs.find(
           (x) =>
@@ -271,6 +300,70 @@ async function indexRepo(
               })
             );
           prev = ch;
+          hasChunks = true;
+        }
+      }
+
+      // If no symbols found, create file-level chunks for the entire file content
+      if (!hasChunks && file.content.trim()) {
+        const lines = file.content.split("\n");
+        const chunkSize = maxLines;
+        let chunkIndex = 0;
+
+        for (
+          let startLine = 0;
+          startLine < lines.length;
+          startLine += chunkSize
+        ) {
+          const endLine = Math.min(startLine + chunkSize - 1, lines.length - 1);
+          const chunkContent = lines.slice(startLine, endLine + 1).join("\n");
+
+          if (chunkContent.trim()) {
+            const chunkId = getNodeHash(
+              repoId,
+              file.path,
+              "CHUNK",
+              `file-chunk-${chunkIndex}`,
+              {
+                startLine,
+                endLine,
+                startCol: 0,
+                endCol: 0,
+                byteStart: 0,
+                byteEnd: chunkContent.length,
+              }
+            );
+
+            const chunkNode = new GraphNode({
+              id: chunkId,
+              kind: GraphNodeKind.CHUNK,
+              name: `${file.path}#${chunkIndex}`,
+              path: file.path,
+              lang: spec.id,
+              loc: {
+                startLine,
+                endLine,
+                startCol: 0,
+                endCol: 0,
+                byteStart: 0,
+                byteEnd: chunkContent.length,
+              },
+              code: chunkContent,
+              meta: { strategy: "file-level" },
+            });
+
+            graph.addNode(chunkNode);
+            graph.addEdge(
+              new GraphEdge({
+                from: nodeHash,
+                to: chunkNode.id,
+                kind: GraphEdgeKind.CONTAINS,
+                meta: {},
+              })
+            );
+
+            chunkIndex++;
+          }
         }
       }
 
@@ -347,7 +440,7 @@ async function indexRepo(
 // Quick signature to see what a function does
 function buildSignatureFromNode(
   node: { startIndex: number; endIndex: number } | undefined,
-  spec: any,
+  _spec: any,
   sourceText: string | undefined
 ): string {
   if (!node || !sourceText) return "";

@@ -1,5 +1,6 @@
-import { z } from "zod";
 import { CommandSecurityLevel } from "@repo/command-security";
+import { z } from "zod";
+import { GrepMatch } from "./tools/results";
 
 // === Base Response Interface ===
 export interface SidecarResponse {
@@ -21,18 +22,10 @@ export interface ErrorResponse {
 
 // === File Operations ===
 
-export const FileReadOptionsSchema = z.object({
-  shouldReadEntireFile: z.boolean().default(true),
-  startLineOneIndexed: z.number().min(1).optional(),
-  endLineOneIndexedInclusive: z.number().min(1).optional(),
-});
 
-export const FileWriteRequestSchema = z.object({
-  content: z.string(),
-  instructions: z.string(),
-});
 
 export const SearchReplaceRequestSchema = z.object({
+  path: z.string().optional(),
   oldString: z.string(),
   newString: z.string(),
 });
@@ -48,6 +41,15 @@ export interface FileWriteResponse extends SidecarResponse {
   isNewFile?: boolean;
   linesAdded?: number;
   linesRemoved?: number;
+}
+
+export interface SearchReplaceResponse extends SidecarResponse {
+  isNewFile: false;
+  linesAdded: number;
+  linesRemoved: number;
+  occurrences: number;
+  oldLength: number;
+  newLength: number;
 }
 
 export interface FileDeleteResponse extends SidecarResponse {
@@ -87,11 +89,6 @@ export const GrepSearchRequestSchema = z.object({
   caseSensitive: z.boolean().default(false),
 });
 
-export const CodebaseSearchRequestSchema = z.object({
-  query: z.string(),
-  targetDirectories: z.array(z.string()).optional(),
-});
-
 export interface FileSearchResponse extends SidecarResponse {
   files?: string[];
   query: string;
@@ -100,20 +97,39 @@ export interface FileSearchResponse extends SidecarResponse {
 
 export interface GrepSearchResponse extends SidecarResponse {
   matches?: string[];
+  detailedMatches?: GrepMatch[];
   query: string;
   matchCount: number;
 }
 
-export interface CodebaseSearchResult {
-  id: number;
-  content: string;
-  relevance: number;
+// === Terminal Operations ===
+
+export interface TerminalBufferStats {
+  totalEntries: number;
+  memoryUsage: number;
+  droppedCount: number;
+  backpressureActive: boolean;
+  oldestEntry?: number;
+  newestEntry?: number;
 }
 
-export interface CodebaseSearchResponse extends SidecarResponse {
-  results?: CodebaseSearchResult[];
-  query: string;
-  searchTerms?: string[];
+export interface TerminalHistoryResponse extends SidecarResponse {
+  entries?: Array<{
+    id: number;
+    timestamp: number;
+    data: string;
+    type: "stdout" | "stderr" | "command" | "system";
+    processId?: number;
+  }>;
+  stats?: TerminalBufferStats;
+}
+
+export interface TerminalStatsResponse extends SidecarResponse {
+  stats?: TerminalBufferStats;
+}
+
+export interface TerminalClearResponse extends SidecarResponse {
+  message: string;
 }
 
 // === Command Operations ===
@@ -159,10 +175,12 @@ export const GitCommitRequestSchema = z.object({
     name: z.string(),
     email: z.string(),
   }),
-  coAuthor: z.object({
-    name: z.string(),
-    email: z.string(),
-  }).optional(),
+  coAuthor: z
+    .object({
+      name: z.string(),
+      email: z.string(),
+    })
+    .optional(),
   message: z.string().min(1, "Commit message is required"),
 });
 
@@ -172,12 +190,9 @@ export const GitPushRequestSchema = z.object({
 });
 
 // TypeScript interfaces derived from Zod schemas
-export type FileReadOptions = z.infer<typeof FileReadOptionsSchema>;
-export type FileWriteRequest = z.infer<typeof FileWriteRequestSchema>;
 export type SearchReplaceRequest = z.infer<typeof SearchReplaceRequestSchema>;
 export type FileSearchRequest = z.infer<typeof FileSearchRequestSchema>;
 export type GrepSearchRequest = z.infer<typeof GrepSearchRequestSchema>;
-export type CodebaseSearchRequest = z.infer<typeof CodebaseSearchRequestSchema>;
 export type CommandRequest = z.infer<typeof CommandRequestSchema>;
 export type GitCloneRequest = z.infer<typeof GitCloneRequestSchema>;
 export type GitConfigRequest = z.infer<typeof GitConfigRequestSchema>;
@@ -245,12 +260,12 @@ export interface WorkspaceStatusResponse extends SidecarResponse {
 // === Error Handling ===
 
 export enum SidecarErrorType {
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
-  CLIENT_ERROR = 'CLIENT_ERROR',
-  SERVER_ERROR = 'SERVER_ERROR',
-  CIRCUIT_BREAKER_OPEN = 'CIRCUIT_BREAKER_OPEN',
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+  NETWORK_ERROR = "NETWORK_ERROR",
+  TIMEOUT_ERROR = "TIMEOUT_ERROR",
+  CLIENT_ERROR = "CLIENT_ERROR",
+  SERVER_ERROR = "SERVER_ERROR",
+  CIRCUIT_BREAKER_OPEN = "CIRCUIT_BREAKER_OPEN",
+  UNKNOWN_ERROR = "UNKNOWN_ERROR",
 }
 
 export interface SidecarError extends Error {
@@ -270,4 +285,4 @@ export interface SidecarClientConfig {
   retryDelay?: number;
   circuitBreakerThreshold?: number;
   circuitBreakerTimeout?: number;
-} 
+}

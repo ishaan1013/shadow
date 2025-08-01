@@ -14,9 +14,6 @@ export const TOOL_GUIDANCE = `<tool_guidance>
 ### todo_write
 ${readToolInstructions('todo_write')}
 
-### codebase_search
-${readToolInstructions('codebase_search')}
-
 ### read_file
 ${readToolInstructions('read_file')}
 

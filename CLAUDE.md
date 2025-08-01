@@ -50,8 +50,8 @@ npm run docker:build
 npm run docker:up
 
 # Build individual services  
-npm run docker:server    # Backend server (Note: has TypeScript build issues)
-npm run docker:sidecar   # Sidecar service (working)
+npm run docker:server    # Backend server
+npm run docker:sidecar   # Sidecar service for Firecracker mode
 
 # Individual Docker operations
 npm run docker:down      # Stop all services
@@ -69,215 +69,285 @@ docker-compose logs -f   # Follow logs
 
 ## Architecture Overview
 
-This is a Turborepo monorepo for an AI coding agent platform that allows users to submit GitHub repositories and natural language instructions to have AI agents perform coding tasks.
+This is a Turborepo monorepo for Shadow - an AI coding agent platform that allows users to submit GitHub repositories and natural language instructions to have AI agents perform coding tasks in isolated execution environments.
 
 ### Core Components
 
 **Apps:**
-- `frontend/` - Next.js UI with chat interface, terminal emulator, and task management
-- `server/` - Node.js orchestrator handling LLM integration, WebSocket management, and API
-- `indexing/` - Code embedding and retrieval system using Pinecone
+- `frontend/` - Next.js application with real-time chat interface, terminal emulator, and task management
+- `server/` - Node.js orchestrator handling LLM integration, WebSocket communication, and API endpoints
+- `sidecar/` - Express.js service providing REST APIs for file operations within Firecracker VMs
+- `indexing/` - Code embedding and semantic search system (optional)
 
 **Packages:**
-- `db/` - Prisma/PostgreSQL schema and client
-- `types/` - Shared TypeScript definitions
+- `db/` - Prisma schema and PostgreSQL client
+- `types/` - Shared TypeScript type definitions
 - `eslint-config/` & `typescript-config/` - Shared configurations
+- `command-security/` - Security utilities for command validation
+
+### Execution Modes
+
+The system supports two primary execution modes via an abstraction layer:
+
+1. **Local Mode** (Development): Direct filesystem execution on the host machine
+2. **Firecracker Mode** (Production): Hardware-isolated execution in Firecracker microVMs
+
+**Mode Selection:**
+- Development: Local mode (fast iteration, direct file access)
+- Production: Firecracker mode (true isolation, security, scalability)
+- Configuration via `NODE_ENV` and `AGENT_MODE` environment variables
 
 ### Key Data Flow
 
-1. **Task Creation**: User selects GitHub repo/branch, chooses LLM model, enters instructions
-2. **Live Session**: Real-time chat interface shows agent reasoning, terminal output, and file diffs
-3. **Agent Execution**: Backend coordinates between LLM API calls and sandbox environment
-4. **Storage**: Chat history in PostgreSQL, workspace files in EFS during execution, persistent state in GitHub branches
+1. **Task Initialization**: User creates task with GitHub repo, branch, and instructions
+2. **Workspace Setup**: System clones repository into isolated workspace (local directory or VM)
+3. **Agent Session**: Real-time chat interface with LLM streaming responses and tool execution
+4. **Git Integration**: All changes committed to shadow branch with proper authorship
+5. **Cleanup**: Resources cleaned up after task completion
 
-### Authentication & Security
+### Database Schema (PostgreSQL + Prisma)
 
-- Uses Better Auth for GitHub OAuth
-- Always authenticate users in Next.js server actions and route handlers
-- Environment variables required for GitHub integration and LLM APIs
+**Core Models:**
+- `Task` - Task metadata, repository info, status, workspace paths
+- `ChatMessage` - Conversation history with structured parts (text, tool-call, tool-result)
+- `Todo` - Task management within sessions
+- `TerminalCommand` - Command execution history
+- `TaskSession` - VM/pod session tracking for Firecracker mode
+- `User/Account/Session` - Authentication via Better Auth
 
-### WebSocket Communication
+**Message Storage Architecture:**
+- Streaming messages saved incrementally with sequence ordering
+- Rich metadata including token usage, finish reasons, tool execution details
+- Structured parts system supporting text content, tool calls, and results
 
-The system uses WebSockets for real-time updates between frontend and backend, streaming:
-- Chat messages and LLM responses
-- Terminal command output
-- File change notifications
-- Task status updates
+## Agent Execution System
 
-### Database Schema
+### Initialization Engine (`apps/server/src/initialization/`)
 
-PostgreSQL with Prisma ORM. Schema location: `packages/db/prisma/schema.prisma`
+**TaskInitializationEngine** orchestrates task setup with mode-specific steps:
 
-## Coding Agent Deep Dive
+**Local Mode Steps:**
+- `PREPARE_WORKSPACE` - Create local directory and clone repository
 
-### Agent Initiation Process
+**Firecracker Mode Steps:**
+- `CREATE_VM` - Create Firecracker VM pod in Kubernetes
+- `WAIT_VM_READY` - Wait for VM boot and sidecar service health
+- `VERIFY_VM_WORKSPACE` - Confirm repository cloned and workspace ready
 
-**Task Creation Flow** (`apps/server/src/app.ts:64-187`):
-- **Endpoint**: `POST /api/tasks/:taskId/initiate`
-- **Authentication**: Validates GitHub access token for user
-- **Initialization**: Uses `TaskInitializationEngine` with configurable steps:
-  - `CLONE_REPOSITORY` (implemented) - clones GitHub repo to workspace
-  - `PROVISION_MICROVM`, `SETUP_ENVIRONMENT`, etc. (placeholders for future)
-- **Status Tracking**: Updates task status through `INITIALIZING` → `RUNNING` → `COMPLETED/FAILED`
+**Real-time Progress:** WebSocket events stream initialization progress to frontend
 
-**Task Cleanup Flow** (`apps/server/src/app.ts:216-305`):
-- **Endpoint**: `DELETE /api/tasks/:taskId/cleanup`
-- **Mode-Agnostic**: Uses abstraction layer to work with local/remote/mock modes
-- **Status Validation**: Checks if workspace already cleaned up
-- **Database Update**: Marks `workspaceCleanedUp: true` on success
+### Execution Abstraction Layer (`apps/server/src/execution/`)
 
-**Workspace Management** (via execution abstraction layer):
-- **Path Structure**: `{workspaceDir}/tasks/{taskId}/` (local mode) or `/workspace` (remote mode)
-- **Repository Cloning**: Handled by workspace manager implementations
-- **Cleanup**: Mode-aware cleanup via `WorkspaceManager` interface
-
-**Agent Modes**:
-- **Local Mode**: Direct filesystem execution (default, backwards compatible)
-- **Remote Mode**: Distributed execution via Kubernetes pods + sidecar APIs  
-- **Mock Mode**: Simulated remote behavior for testing
-- **Terminal Agent**: Basic terminal-based mode for local development testing (`apps/server/src/agent.ts`)
-
-### Storage & Data Architecture
-
-**Database Models** (PostgreSQL + Prisma):
-- **Tasks**: Core task metadata, repo info, status tracking
-- **ChatMessages**: Conversation history with sequence ordering and token usage
-- **FileChanges**: Git-style diffs tracking all file modifications 
-- **Todos**: Structured task management within each session
-- **Users/Sessions**: Authentication via Better Auth
-
-**Message Storage** (`apps/server/src/chat.ts:114-131`):
-- **Structured Parts**: Messages stored as typed parts (text, tool-call, tool-result)
-- **Sequence Ordering**: Explicit sequence numbers ensure conversation order
-- **Real-time Updates**: Streaming messages saved incrementally during generation
-- **Usage Tracking**: Token counts and finish reasons denormalized for analytics
-
-**File Change Tracking** (`apps/server/src/tools/index.ts:26-102`):
-- **Operations**: CREATE, UPDATE, DELETE, RENAME, MOVE
-- **Diff Generation**: Git-style patches with addition/deletion counts
-- **Real-time Streaming**: File changes broadcast via WebSocket immediately
-
-**Git-First Data Persistence**:
-- **GitHub Branches**: Each task works on isolated branch (e.g., `task/abc123`)
-- **Continuous Commits**: Agent commits changes frequently during execution
-- **State Recovery**: Pods can be destroyed and recreated from latest git state
-- **No Long-Term Storage**: Eliminates need for S3 or persistent artifact storage
-- **Cost Effective**: Trade storage costs for compute time (rebuild from source)
-
-### LLM Integration & Tool System
-
-**LLM Service** (`apps/server/src/llm.ts`):
-- **Multi-Provider**: Anthropic Claude & OpenAI with AI SDK
-- **Streaming**: Real-time token streaming with tool call/result handling
-- **Max Steps**: 20-step limit for tool usage loops
-- **Context Management**: Workspace path passed to tools for file operations
-
-**Tool Arsenal** (`apps/server/src/tools/index.ts`):
-- **File Operations**: read_file, edit_file, search_replace, delete_file
-- **Code Search**: codebase_search (ripgrep), grep_search, file_search
-- **Execution**: run_terminal_cmd with optional approval system
-- **Directory**: list_dir for workspace exploration
-- **Task Management**: todo_write for structured progress tracking
-
-**Tool Context**:
-- **Task-Specific Workspace**: Each tool execution scoped to task workspace
-- **File Change Logging**: All modifications automatically tracked in database
-- **Safety**: Terminal approval system (configurable) for command execution
-
-### Real-time Communication
-
-**WebSocket Architecture** (`apps/server/src/socket.ts`):
-- **Bidirectional**: Client ↔ Server real-time communication
-- **Stream Management**: Content accumulation and state tracking
-- **Multi-Client**: Broadcast updates to all connected clients
-
-**Event Types**:
-- **user-message**: Initiates agent processing
-- **stream-chunk**: Real-time LLM output, tool calls, file changes
-- **task-status-updated**: Status transitions (RUNNING, COMPLETED, etc.)
-- **stop-stream**: User-initiated stream termination
-
-**Stream Chunks** (type safety via TypeScript):
-- **content**: Text generation from LLM
-- **tool-call/tool-result**: Tool execution lifecycle  
-- **file-change**: File modification notifications
-- **init-progress**: Initialization step updates
-- **usage**: Token consumption metrics
-
-### Key Architecture Insights
-
-1. **Stateful Sessions**: Each task maintains persistent workspace and conversation history
-2. **Tool Safety**: File operations scoped to task workspace, optional command approval
-3. **Real-time Everything**: All agent actions (text, tools, files) streamed live to frontend
-4. **Structured Storage**: Rich metadata capture for debugging, analytics, and replay
-5. **Flexible Initialization**: Modular setup system ready for containerization/microVMs
-6. **Authentication Integration**: GitHub OAuth + token management for repo access
-
-## Execution Abstraction Layer
-
-### Overview
-
-The codebase includes a dual-mode execution abstraction layer that allows the agent to run either locally or in distributed Kubernetes pods. This provides flexibility for development and production deployments.
-
-**Directory Structure:**
-```
-apps/server/src/execution/
-├── interfaces/           # Core interfaces and types
-├── local/               # Local filesystem implementation
-├── remote/              # Remote K8s pod implementation  
-├── mock/                # Mock implementations for testing
-└── index.ts            # Factory functions for mode selection
-```
-
-**Agent Modes:**
-- `local`: Direct filesystem execution (default, backwards compatible)
-- `remote`: Distributed execution via Kubernetes pods + sidecar APIs
-- `mock`: Simulated remote behavior for testing and development
-
-**Configuration:**
+**Factory Pattern:** Mode-agnostic tool execution through common interfaces
 ```typescript
-// Environment variable
-AGENT_MODE=local|remote|mock
-
-// Programmatic
-const executor = createToolExecutor(taskId, workspacePath, "remote");
-const manager = createWorkspaceManager("remote");
+// Automatically selects local or firecracker mode based on config
+const executor = createToolExecutor(taskId, workspacePath);
+const workspaceManager = createWorkspaceManager();
 ```
 
-**Key Architecture Points:**
-- Factory pattern allows seamless switching between execution modes
-- All tool operations abstracted behind common interfaces
-- Remote mode uses HTTP communication to sidecar service in pods
-- Mock mode simulates network delays and failures for testing
-- Backwards compatible - existing code works unchanged in local mode
+**Key Interfaces:**
+- `ToolExecutor` - File operations, command execution, code search
+- `WorkspaceManager` - Workspace lifecycle, health checks, cleanup
 
-### Sidecar Service
+**Local Implementation:**
+- Direct filesystem operations via Node.js APIs
+- Command execution through child processes
+- File watching for real-time updates
 
-A separate Express.js service (`apps/sidecar/`) provides REST APIs for file operations and command execution within Kubernetes pods. This enables secure, isolated execution environments.
+**Firecracker Implementation:**
+- HTTP API calls to sidecar service within Kata Container VMs
+- Kubernetes pod management with kata-fc RuntimeClass
+- VM lifecycle orchestration via Kata Containers runtime
 
-**Security Features:**
-- Path traversal protection using `path.relative()` to prevent directory escape attacks
-- Workspace isolation ensuring all operations stay within designated directories
-- Protection against symlink-based bypass attempts
+### Tool System (`apps/server/src/tools/`)
 
-## Docker Support
+**Available Tools:**
+- `read_file` - Read file contents with line range support
+- `edit_file` - Write/modify files with change tracking
+- `search_replace` - Precise string replacement in files
+- `list_dir` - Directory listing and exploration
+- `run_terminal_cmd` - Command execution with real-time output
+- `grep_search` - Pattern matching with regex support
+- `file_search` - Fuzzy filename search
+- `semantic_search` - AI-powered semantic code search
+- `todo_write` - Structured task management
+- `delete_file` - File deletion with safety checks
 
-The monorepo includes Docker support for containerized deployment:
+**Tool Context:**
+- Each tool scoped to task-specific workspace
+- Real-time output streaming via WebSocket
+- Automatic file change tracking and git commits
+- Security isolation (path traversal protection)
 
-- **Sidecar Service**: Fully containerized with multi-stage builds
-- **Backend Server**: Dockerfile available (may need TypeScript fixes)
-- **Docker Compose**: Development environment configuration
+### LLM Integration (`apps/server/src/llm.ts`)
 
-Services use Turborepo's `turbo prune` pattern for efficient builds with minimal dependencies.
+**Multi-Provider Support:**
+- Anthropic Claude (Claude-3.5-Sonnet, Claude-3-Haiku)
+- OpenAI (GPT-4o, GPT-4o-mini)
+- Unified streaming interface via Vercel AI SDK
 
-### Important Notes
+**Streaming Architecture:**
+- Real-time token streaming to frontend
+- Tool call/result lifecycle management
+- Automatic message persistence with structured parts
+- Usage tracking and analytics
 
-- Do NOT run `npm run dev` or `turbo dev` without filters - causes chat to hang
-- The system is designed for both local development and cloud deployment
-- Future plans include Kubernetes deployment with Firecracker microVMs for enhanced isolation
+### Real-time Communication (`apps/server/src/socket.ts`)
+
+**WebSocket Events:**
+- `user-message` - Initiates LLM processing
+- `stream-chunk` - Real-time content, tool calls, file changes
+- `terminal-output` - Command execution output
+- `task-status-updated` - Status transitions
+- `init-progress` - Initialization step updates
+
+**Connection Management:**
+- Task-based room isolation
+- Reconnection handling with state recovery
+- Heartbeat/keepalive for connection health
+
+### Git Integration (`apps/server/src/services/git-manager.ts`)
+
+**Shadow Branch Workflow:**
+- Each task creates isolated shadow branch (e.g., `shadow/task-abc123`)
+- Automatic commits after LLM responses with proper co-authorship
+- AI-generated commit messages based on file diffs
+- Push to remote for persistence and collaboration
+
+**Commit Attribution:**
+- Primary author: GitHub user who created the task
+- Co-author: Shadow AI agent for transparency
+
+## Security & Isolation
+
+### Firecracker MicroVMs
+
+**Hardware-Level Isolation:**
+- True VM isolation via Firecracker hypervisor
+- Minimal attack surface with purpose-built kernel
+- Resource limits (CPU, memory, storage)
+- Network isolation with controlled egress
+
+**Sidecar Architecture:**
+- Express.js API service within each VM
+- Path traversal protection
+- Workspace boundary enforcement
+- Secure file operations and command execution
+
+### Local Mode Security
+
+**Workspace Isolation:**
+- Operations restricted to task-specific directories
+- Path validation and sanitization
+- File system watching for unauthorized changes
+
+## Infrastructure & Deployment
+
+### Firecracker Infrastructure (Production)
+
+**EKS Cluster Configuration:**
+- AWS EKS with Amazon Linux 2023 nodes (required for glibc 2.34 compatibility)
+- Bare metal instances (c5.metal) for nested virtualization support
+- Kata Containers + Firecracker for VM-level isolation
+- GitHub Container Registry integration for VM images
+
+**Deployment Scripts:**
+```bash
+# Deploy full EKS cluster with Firecracker support
+./scripts/deploy-firecracker-infrastructure.sh
+
+# Deploy ECS backend + Firecracker infrastructure  
+./scripts/deploy-full-infrastructure.sh
+
+# Build and deploy VM images via GitHub Actions
+# Triggered by: .github/workflows/build-vm-images.yml
+```
+
+**Infrastructure Components:**
+- **EKS Control Plane**: Kubernetes API and scheduling
+- **Firecracker Nodes**: c5.metal instances with KVM/nested virtualization
+- **System Nodes**: m5.large instances for cluster services
+- **VM Image Registry**: GitHub Container Registry (ghcr.io)
+- **Kata Containers**: Runtime for Firecracker VM orchestration
+
+### Kubernetes Integration (Firecracker Mode)
+
+**Pod Management:**
+- Dynamic VM pod creation for each task using `kata-fc` RuntimeClass
+- Resource allocation and limits per Firecracker VM
+- Health monitoring and automatic cleanup
+- Service discovery for sidecar communication within VMs
+
+**VM Configuration:**
+```yaml
+# Pod template with Firecracker runtime
+spec:
+  runtimeClassName: kata-fc
+  nodeSelector:
+    firecracker: "true"
+  tolerations:
+  - key: firecracker.shadow.ai/dedicated
+    value: "true"
+    effect: NoSchedule
+  containers:
+  - name: sidecar
+    resources:
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+        storage: "10Gi"
+```
+
+### Docker Support
+
+**Multi-Service Architecture:**
+- Frontend: Next.js application
+- Server: Node.js API and orchestrator
+- Sidecar: File operations service for VMs
+- Database: PostgreSQL with connection pooling
+
+**Development Environment:**
+```bash
+docker-compose up -d  # Full stack locally
+```
+
+## Authentication & GitHub Integration
+
+**Better Auth Integration:**
+- GitHub OAuth for user authentication
+- GitHub App installation for repository access
+- Token management with refresh handling
+- Repository permission validation
+
+**GitHub API Usage:**
+- Repository cloning with user credentials
+- Branch creation and management
+- Commit and push operations
+- Installation webhook handling
 
 ## Development Practices
 
-- **Maintenance**: When making big codebase changes, keep Claude.md updated with a high-level overview of the codebase.
-- **README Maintenance**: Keep README.md updated when setup instructions, environment variables, or development workflows change. The README should always reflect the current state of the project setup.
-- **No Context Poisoning**: Do NOT update Claude.md with minor details about implementation progress or details that are very specific to individual tasks.
+### Environment Setup
+- Local mode for development (fast iteration)
+- Docker Compose for full stack testing
+- Kubernetes for production Firecracker deployment
+
+### Code Organization
+- Turborepo monorepo with shared packages
+- TypeScript throughout with strict type checking
+- Shared configurations and utilities
+- Clean separation between execution modes
+
+### Important Notes
+- Do NOT run npm run dev anywhere
+- Always test both local and Firecracker modes for production features
+- Keep initialization steps mode-aware and properly abstracted
+- Maintain WebSocket event compatibility across frontend/backend changes
+- **Firecracker mode requires Amazon Linux 2023 nodes** for Kata Containers compatibility
+- Use `kata-fc` RuntimeClass for Firecracker VM isolation, not direct firecracker runtime
+
+### Maintenance Guidelines
+- Update CLAUDE.md when making architectural changes
+- Keep README.md current with setup instructions
+- Avoid documenting implementation details that change frequently
+- Focus on high-level architecture and key integration points
