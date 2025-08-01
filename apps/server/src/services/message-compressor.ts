@@ -154,48 +154,67 @@ export class MessageCompressor {
   }
 
   // Light compression: Remove verbose metadata, compress code blocks
+  // Improved to preserve context while reducing size - keeps important parts visible
   private lightCompression(content: string, _metadata: unknown): string {
     let compressed = content;
 
-    // Compress large code blocks
+    // Compress very large code blocks (>20 lines) - keep first few lines + summary
     compressed = compressed.replace(
       /```[\s\S]*?```/g,
       (match) => {
         const lines = match.split('\n');
-        if (lines.length > 10) {
-          const firstLine = lines[0];
+        if (lines.length > 20) {
+          const firstLine = lines[0]; // ```language
           const language = firstLine?.replace('```', '').trim();
-          return `[CODE: ${language} - ${lines.length - 2} lines]`;
+          const firstCodeLines = lines.slice(1, 4).join('\n'); // First 3 lines of actual code
+          const totalLines = lines.length - 2; // Exclude ``` lines
+          return `${firstLine}\n${firstCodeLines}\n[... ${totalLines - 3} more lines of ${language} code]\n\`\`\``;
         }
         return match;
       }
     );
 
-    // Compress long file content references
+    // Compress very long file content (>500 chars) - keep beginning + summary  
     compressed = compressed.replace(
-      /File content:|Reading file:|File contents:/gi,
-      (match, offset, string) => {
-        const nextNewlines = string.slice(offset).indexOf('\n\n');
-        if (nextNewlines > 200) {
-          return `${match} [Content compressed - ${Math.floor(nextNewlines/4)} tokens]`;
+      /(File content:|Reading file:|File contents:)([\s\S]*?)(?=\n\n|$)/gi,
+      (match, prefix, content) => {
+        if (content && content.length > 500) {
+          const truncated = content.substring(0, 200);
+          const totalChars = content.length;
+          return `${prefix}${truncated}\n[... file content truncated - ${totalChars} chars total]`;
+        }
+        return match;
+      }
+    );
+
+    // Compress long lists (>10 items) - keep first few + summary
+    compressed = compressed.replace(
+      /(\n- [^\n]+(?:\n- [^\n]+){9,})/g,
+      (match) => {
+        const items = match.split('\n- ').filter(item => item.trim());
+        if (items.length > 10) {
+          const firstItems = items.slice(0, 3).map(item => `- ${item}`).join('\n');
+          const remainingCount = items.length - 3;
+          return `${firstItems}\n[... ${remainingCount} more items]`;
         }
         return match;
       }
     );
 
     // Remove extra whitespace
-    compressed = compressed.replace(/\n{3,}/g, '\n\n');
+    compressed = compressed.replace(/\n{3,}/g, '\n\n'); // Remove 3+ newlines
 
     return compressed;
   }
 
   // Medium compression: Summarize tool outputs and long responses
+  // More conservative than original - preserves context while reducing size
   private mediumCompression(content: string, metadata: unknown): string {
     let compressed = this.lightCompression(content, metadata);
 
     // Compress tool results to summaries
     compressed = compressed.replace(
-      /Tool result:|Command output:|Search results:/gi,
+      /Tool result:|Command output:|Search results:/gi, // Tool result:|Command output:|Search results:
       (match, offset, string) => {
         const section = string.slice(offset, offset + 500);
         const words = section.split(' ').length;
@@ -206,15 +225,27 @@ export class MessageCompressor {
       }
     );
 
-    // Compress long paragraphs
+    // Compress very long paragraphs (8+ sentences) - keep first sentence + summary
     compressed = compressed.replace(
-      /([.!?]\s+)([A-Z][^.!?]*[.!?](?:\s+[A-Z][^.!?]*[.!?]){3,})/g,
+      /([A-Z][^.!?]*[.!?])(\s+[A-Z][^.!?]*[.!?]){7,}/g,
       (match) => {
         const sentences = match.split(/[.!?]/).filter(s => s.trim());
-        if (sentences.length > 4) {
-          return ` [${sentences.length} sentences summarized]`;
+        if (sentences.length >= 8) {
+          const firstSentence = sentences[0]?.trim() || "";
+          const remainingCount = sentences.length - 1;
+          return `${firstSentence}. [${remainingCount} additional sentences compressed]`;
         }
         return match;
+      }
+    );
+
+    // Compress extremely long single sentences (>300 characters)
+    compressed = compressed.replace(
+      /[A-Z][^.!?]{300,}[.!?]/g,
+      (match) => {
+        const truncated = match.substring(0, 100);
+        const charCount = match.length;
+        return `${truncated}... [sentence truncated - ${charCount} chars total]`;
       }
     );
 
