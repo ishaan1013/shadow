@@ -11,7 +11,7 @@ export class TaskCleanupService {
    */
   start(): void {
     const agentMode = getAgentMode();
-    
+
     // Only run cleanup in firecracker mode
     if (agentMode !== "firecracker") {
       console.log("[TASK_CLEANUP] Cleanup service disabled in local mode");
@@ -19,10 +19,26 @@ export class TaskCleanupService {
     }
 
     console.log("[TASK_CLEANUP] Starting background cleanup service");
-    
+
+    this.processStartupCleanup();
+
     this.interval = setInterval(async () => {
       await this.processCleanupQueue();
     }, this.CLEANUP_INTERVAL_MS);
+  }
+
+  /**
+   * Process any cleanup tasks that were scheduled but missed due to server shutdown
+   */
+  private async processStartupCleanup(): Promise<void> {
+    try {
+      console.log(
+        "[TASK_CLEANUP] Checking for missed cleanup tasks on startup"
+      );
+      await this.processCleanupQueue();
+    } catch (error) {
+      console.error("[TASK_CLEANUP] Error during startup cleanup:", error);
+    }
   }
 
   /**
@@ -44,23 +60,25 @@ export class TaskCleanupService {
       const tasksToCleanup = await prisma.task.findMany({
         where: {
           scheduledCleanupAt: {
-            lte: new Date()
+            lte: new Date(),
           },
           NOT: {
-            scheduledCleanupAt: null
-          }
+            scheduledCleanupAt: null,
+          },
         },
         select: {
           id: true,
-          scheduledCleanupAt: true
-        }
+          scheduledCleanupAt: true,
+        },
       });
 
       if (tasksToCleanup.length === 0) {
         return;
       }
 
-      console.log(`[TASK_CLEANUP] Processing ${tasksToCleanup.length} tasks for cleanup`);
+      console.log(
+        `[TASK_CLEANUP] Processing ${tasksToCleanup.length} tasks for cleanup`
+      );
 
       for (const task of tasksToCleanup) {
         await this.cleanupTask(task.id);
@@ -85,9 +103,9 @@ export class TaskCleanupService {
 
       // Update TaskSession to mark as inactive
       await prisma.taskSession.updateMany({
-        where: { 
-          taskId, 
-          isActive: true 
+        where: {
+          taskId,
+          isActive: true,
         },
         data: {
           isActive: false,
@@ -108,17 +126,22 @@ export class TaskCleanupService {
       console.log(`[TASK_CLEANUP] Successfully cleaned up task ${taskId}`);
     } catch (error) {
       console.error(`[TASK_CLEANUP] Failed to cleanup task ${taskId}:`, error);
-      
+
       // Clear the cleanup schedule even if cleanup failed to prevent infinite retries
       // The task will remain in COMPLETED state but won't be retried
-      await prisma.task.update({
-        where: { id: taskId },
-        data: {
-          scheduledCleanupAt: null,
-        },
-      }).catch((updateError) => {
-        console.error(`[TASK_CLEANUP] Failed to clear cleanup schedule for task ${taskId}:`, updateError);
-      });
+      await prisma.task
+        .update({
+          where: { id: taskId },
+          data: {
+            scheduledCleanupAt: null,
+          },
+        })
+        .catch((updateError) => {
+          console.error(
+            `[TASK_CLEANUP] Failed to clear cleanup schedule for task ${taskId}:`,
+            updateError
+          );
+        });
     }
   }
 }
