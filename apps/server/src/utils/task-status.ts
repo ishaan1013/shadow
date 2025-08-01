@@ -38,7 +38,10 @@ export async function updateTaskStatus(
 /**
  * Set task as in progress with current step
  */
-export async function setTaskInProgress(taskId: string, step: InitStepType): Promise<void> {
+export async function setTaskInProgress(
+  taskId: string,
+  step: InitStepType
+): Promise<void> {
   await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -51,7 +54,10 @@ export async function setTaskInProgress(taskId: string, step: InitStepType): Pro
 /**
  * Set task as completed with final step
  */
-export async function setTaskCompleted(taskId: string, lastStep: InitStepType): Promise<void> {
+export async function setTaskCompleted(
+  taskId: string,
+  lastStep: InitStepType
+): Promise<void> {
   await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -64,7 +70,11 @@ export async function setTaskCompleted(taskId: string, lastStep: InitStepType): 
 /**
  * Set task as failed with error message
  */
-export async function setTaskFailed(taskId: string, step: InitStepType, error: string): Promise<void> {
+export async function setTaskFailed(
+  taskId: string,
+  step: InitStepType,
+  error: string
+): Promise<void> {
   await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -85,4 +95,28 @@ export async function clearTaskProgress(taskId: string): Promise<void> {
       initializationError: null,
     },
   });
+}
+
+/**
+ * Updates a task's updatedAt timestamp to reflect recent activity
+ * @param taskId - The task ID to update
+ * @param context - Optional context for logging (e.g., "MESSAGE", "CHAT", "TOOL")
+ */
+export async function updateTaskActivity(
+  taskId: string,
+  context?: string
+): Promise<void> {
+  try {
+    await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        updatedAt: new Date(),
+      },
+    });
+
+    const logPrefix = context ? `[${context}]` : "[ACTIVITY]";
+    console.log(`${logPrefix} Task ${taskId} activity timestamp updated`);
+  } catch (error) {
+    console.error(`Failed to update task ${taskId} activity timestamp:`, error);
+  }
 }
