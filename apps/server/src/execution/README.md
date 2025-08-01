@@ -40,7 +40,7 @@ Set the agent mode using the `AGENT_MODE` environment variable:
 export AGENT_MODE=local
 
 # Firecracker mode (requires Kubernetes with KVM support)
-export AGENT_MODE=firecracker
+export AGENT_MODE=remote
 ```
 
 ### Factory Usage

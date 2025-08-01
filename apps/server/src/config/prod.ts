@@ -13,10 +13,10 @@ if (!process.env.VM_IMAGE_REGISTRY) {
 
 /**
  * Production environment configuration schema
- * Focused on Firecracker VM deployment with comprehensive validation
+ * Focused on Kata QEMU VM deployment with comprehensive validation
  *
  * This configuration enables secure, isolated execution of user code through:
- * - Firecracker microVMs for hardware-level isolation
+ * - Kata QEMU microVMs for hardware-level isolation
  * - Kubernetes orchestration on bare metal nodes
  * - Comprehensive monitoring and resource management
  */
@@ -25,9 +25,7 @@ const prodConfigSchema = sharedConfigSchema.extend({
   // Controls how agent code executes - 'remote' for VM isolation, 'local' for direct execution
   AGENT_MODE: z.enum(["local", "remote"]).default("remote"),
 
-  // === FIRECRACKER VM CORE CONFIGURATION ===
-  // Enable Firecracker microVM execution (hardware-isolated containers)
-  FIRECRACKER_ENABLED: z.boolean().default(true),
+  // === KATA QEMU VM CORE CONFIGURATION ===
   // Docker registry containing VM images with pre-installed tools (Node.js, Python, etc.)
   VM_IMAGE_REGISTRY: z
     .string()
@@ -41,7 +39,7 @@ const prodConfigSchema = sharedConfigSchema.extend({
 
 
   // === KUBERNETES CLUSTER CONFIGURATION ===
-  // Namespace where Firecracker pods are deployed
+  // Namespace where Kata QEMU pods are deployed
   KUBERNETES_NAMESPACE: z.string().default("shadow"),
   // Kubernetes API server hostname (auto-detected if not specified)
   KUBERNETES_SERVICE_HOST: z.string().optional(),
@@ -53,8 +51,6 @@ const prodConfigSchema = sharedConfigSchema.extend({
     .min(1, "K8S_SERVICE_ACCOUNT_TOKEN is required in production"),
 
   // === KUBERNETES POD CONFIGURATION ===
-  // Node selector to target bare metal instances with KVM support
-  FIRECRACKER_NODE_SELECTOR: z.string().default("remote=true"),
   // Pod restart policy (Never = single-use pods, OnFailure = retry on crashes)
   POD_RESTART_POLICY: z.string().default("Never"),
   // Service account for pod security and RBAC permissions
@@ -185,7 +181,7 @@ const prodValidationRules = (data: z.infer<typeof prodConfigSchema>) => {
   const errors: string[] = [];
 
   // If remote mode is enabled, ensure required fields are present
-  if (data.AGENT_MODE === "remote" && data.FIRECRACKER_ENABLED) {
+  if (data.AGENT_MODE === "remote") {
     if (!data.VM_IMAGE_REGISTRY) {
       errors.push("VM_IMAGE_REGISTRY is required when using remote mode");
     }
@@ -264,8 +260,7 @@ const prodConfig = {
   // Production workspace
   workspaceDir: parsed.data.WORKSPACE_DIR,
 
-  // Firecracker VM configuration
-  firecrackerEnabled: parsed.data.FIRECRACKER_ENABLED,
+  // Kata QEMU VM configuration
   vmImageRegistry: parsed.data.VM_IMAGE_REGISTRY,
   vmImageTag: parsed.data.VM_IMAGE_TAG,
   vmCpuCount: parsed.data.VM_CPU_COUNT,
@@ -279,7 +274,6 @@ const prodConfig = {
   k8sServiceAccountToken: parsed.data.K8S_SERVICE_ACCOUNT_TOKEN,
 
   // Kubernetes Pod Configuration
-  firecrackerNodeSelector: parsed.data.FIRECRACKER_NODE_SELECTOR,
   podRestartPolicy: parsed.data.POD_RESTART_POLICY,
   podServiceAccount: parsed.data.POD_SERVICE_ACCOUNT,
   runtimeClass: parsed.data.RUNTIME_CLASS,
