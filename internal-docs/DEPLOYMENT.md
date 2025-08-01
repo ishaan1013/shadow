@@ -73,7 +73,7 @@ aws configure
 ./scripts/deploy-firecracker-infrastructure.sh
 
 # Source cluster configuration
-source firecracker-cluster-config.env
+source .env.production
 
 # Verify deployment
 kubectl get nodes -l firecracker=true

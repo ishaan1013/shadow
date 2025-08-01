@@ -68,7 +68,7 @@ check_prerequisites() {
     
     # Check if EKS cluster exists
     if ! aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" --profile "$AWS_PROFILE" &> /dev/null; then
-        error "EKS cluster '$CLUSTER_NAME' not found. Run deploy-firecracker-infrastructure.sh first"
+        error "EKS cluster '$CLUSTER_NAME' not found. Run deploy-remote-infrastructure.sh first"
     fi
     
     log "Prerequisites check passed"
@@ -281,16 +281,16 @@ EOF
 store_k8s_token() {
     log "Storing K8s service account token..."
     
-    # Check if firecracker-cluster-config.env exists
-    if [[ ! -f "firecracker-cluster-config.env" ]]; then
-        error "firecracker-cluster-config.env not found. Run deploy-firecracker-infrastructure.sh first"
+    # Check if .env.production exists
+    if [[ ! -f ".env.production" ]]; then
+        error ".env.production not found. Run deploy-remote-infrastructure.sh first"
     fi
     
     # Extract token from config file
-    K8S_TOKEN=$(grep "K8S_SERVICE_ACCOUNT_TOKEN=" firecracker-cluster-config.env | cut -d'=' -f2)
+    K8S_TOKEN=$(grep "K8S_SERVICE_ACCOUNT_TOKEN=" .env.production | cut -d'=' -f2)
     
     if [[ -z "$K8S_TOKEN" ]]; then
-        error "K8S service account token not found in firecracker-cluster-config.env"
+        error "K8S service account token not found in .env.production"
     fi
     
     # Store in Parameter Store

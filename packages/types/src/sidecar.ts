@@ -22,16 +22,7 @@ export interface ErrorResponse {
 
 // === File Operations ===
 
-export const FileReadOptionsSchema = z.object({
-  shouldReadEntireFile: z.boolean().default(true),
-  startLineOneIndexed: z.number().min(1).optional(),
-  endLineOneIndexedInclusive: z.number().min(1).optional(),
-});
 
-export const FileWriteRequestSchema = z.object({
-  content: z.string(),
-  instructions: z.string(),
-});
 
 export const SearchReplaceRequestSchema = z.object({
   path: z.string().optional(),
@@ -199,8 +190,6 @@ export const GitPushRequestSchema = z.object({
 });
 
 // TypeScript interfaces derived from Zod schemas
-export type FileReadOptions = z.infer<typeof FileReadOptionsSchema>;
-export type FileWriteRequest = z.infer<typeof FileWriteRequestSchema>;
 export type SearchReplaceRequest = z.infer<typeof SearchReplaceRequestSchema>;
 export type FileSearchRequest = z.infer<typeof FileSearchRequestSchema>;
 export type GrepSearchRequest = z.infer<typeof GrepSearchRequestSchema>;

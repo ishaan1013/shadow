@@ -1,5 +1,5 @@
 {
-  "files.exclude": {
+  "search.exclude": {
     "apps/server/dist/**": true,
     "apps/frontend/.next/**": true
   },

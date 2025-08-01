@@ -28,7 +28,7 @@ export function createToolExecutor(
 
   // For Firecracker mode, workspacePath should be the sidecar URL
   // This will be provided by the FirecrackerWorkspaceManager
-  const sidecarUrl = workspacePath || `http://shadow-vm-${taskId}.${config.kubernetesNamespace}.svc.cluster.local:8080`;
+  const sidecarUrl = workspacePath || `http://shadow-vm-${taskId.toLowerCase()}.${config.kubernetesNamespace}.svc.cluster.local:8080`;
   return new FirecrackerToolExecutor(taskId, sidecarUrl);
 }
 

@@ -127,7 +127,13 @@ export function SidebarNavigation({
           className="flex size-7 items-center justify-center"
           aria-label="Home"
         >
-          <LogoHover />
+          <LogoHover
+            className={cn(
+              process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
+                ? "text-red-400"
+                : ""
+            )}
+          />
         </Link>
         <div className="flex flex-col gap-3">
           <Tooltip>

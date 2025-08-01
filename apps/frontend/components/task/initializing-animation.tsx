@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 // height of each step
 const LINE_HEIGHT = 20;
+const GAP = 8;
 // extra padding to hide stream if its too fast
 const BOTTOM_PADDING = 150;
 
@@ -20,7 +21,8 @@ export default function InitializingAnimation({ taskId }: { taskId: string }) {
   }
 
   const mode =
-    process.env.NEXT_PUBLIC_VERCEL_ENV === "production"
+    process.env.NEXT_PUBLIC_VERCEL_ENV === "production" ||
+    process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
       ? "firecracker"
       : "local";
 
@@ -34,7 +36,7 @@ export default function InitializingAnimation({ taskId }: { taskId: string }) {
   return (
     <div
       className={cn(
-        "font-departureMono bg-background pointer-events-none absolute top-16 flex w-full select-none flex-col gap-1 px-3 tracking-tight transition-all duration-1000 ease-in-out",
+        "font-departureMono bg-background top-18 pointer-events-none absolute z-20 flex w-full select-none flex-col gap-1 px-3 tracking-tight transition-all duration-1000 ease-in-out",
         currentStepIndex === steps.length
           ? "invisible opacity-0"
           : "visible opacity-100"
@@ -44,25 +46,26 @@ export default function InitializingAnimation({ taskId }: { taskId: string }) {
       }}
     >
       <AnimationHeader />
-      <div className="h-18 relative z-0 flex w-full overflow-hidden pt-7">
+      <div className="relative z-0 flex h-20 w-full overflow-hidden pt-7">
         <div className="from-background via-background/60 absolute left-0 top-0 z-10 h-6 w-full bg-gradient-to-b to-transparent" />
 
         <div
           className="flex flex-col gap-2 transition-transform duration-1000 ease-in-out"
           style={{
-            transform: `translateY(-${currentStepIndex * LINE_HEIGHT}px)`,
+            transform: `translateY(-${currentStepIndex * (LINE_HEIGHT + GAP)}px)`,
           }}
         >
           {steps.map((step, index) => (
             <div
               key={index}
               className={cn(
-                "flex items-center gap-2 capitalize transition-colors",
+                "flex items-center capitalize transition-colors",
                 index !== currentStepIndex
                   ? "text-muted-foreground/50"
                   : "text-foreground"
               )}
               style={{
+                gap: `${GAP}px`,
                 height: `${LINE_HEIGHT}px`,
               }}
             >

@@ -12,6 +12,9 @@ export const STEP_DISPLAY_NAMES: Record<InitStepType, string> = {
   WAIT_VM_READY: "Starting VM",
   VERIFY_VM_WORKSPACE: "Verifying Workspace",
 
+  // Repository indexing step (both modes)
+  INDEX_REPOSITORY: "Indexing Repository",
+
   // Cleanup step (firecracker only)
   CLEANUP_WORKSPACE: "Cleaning Up"
 };
@@ -24,11 +27,13 @@ export function getStepsForMode(mode: "local" | "firecracker"): InitStepType[] {
     return [
       "CREATE_VM",
       "WAIT_VM_READY",
-      "VERIFY_VM_WORKSPACE"
+      "VERIFY_VM_WORKSPACE",
+      "INDEX_REPOSITORY"
     ];
   } else {
     return [
-      "PREPARE_WORKSPACE"
+      "PREPARE_WORKSPACE",
+      "INDEX_REPOSITORY"
     ];
   }
 }

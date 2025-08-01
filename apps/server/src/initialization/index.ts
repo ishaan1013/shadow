@@ -3,7 +3,6 @@ import { getStepsForMode, InitializationProgress } from "@repo/types";
 import { emitStreamChunk } from "../socket";
 import {
   createWorkspaceManager,
-  createToolExecutor,
   getAgentMode,
 } from "../execution";
 import type { WorkspaceManager as AbstractWorkspaceManager } from "../execution";
@@ -13,6 +12,7 @@ import {
   setTaskFailed,
   clearTaskProgress,
 } from "../utils/task-status";
+import indexRepo from "../indexing/indexer.js";
 
 // Helper for async delays
 const delay = (ms: number) =>
@@ -41,6 +41,12 @@ const STEP_DEFINITIONS: Record<
   VERIFY_VM_WORKSPACE: {
     name: "Verifying Workspace",
     description: "Verify workspace is ready and contains repository",
+  },
+
+  // Repository indexing step (both modes)
+  INDEX_REPOSITORY: {
+    name: "Indexing Repository",
+    description: "Index repository files for semantic search",
   },
 
   // Cleanup step (firecracker only)
@@ -194,6 +200,11 @@ export class TaskInitializationEngine {
         await this.executeVerifyVMWorkspace(taskId, userId);
         break;
 
+      // Repository indexing step (both modes)
+      case "INDEX_REPOSITORY":
+        await this.executeIndexRepository(taskId);
+        break;
+
       // Cleanup step (firecracker only)
       case "CLEANUP_WORKSPACE":
         await this.executeCleanupWorkspace(taskId);
@@ -343,11 +354,12 @@ export class TaskInitializationEngine {
     );
 
     try {
-      // Get the tool executor for this task (will contain sidecar endpoint info)
-      const executor = createToolExecutor(taskId);
+      // Use the workspace manager's getExecutor() method for consistent connectivity
+      // This ensures initialization uses the same approach as regular execution
+      const executor = await this.abstractWorkspaceManager.getExecutor(taskId);
 
       // Wait for both sidecar to be healthy AND repository to be cloned
-      const maxRetries = 30; // 30 * 2s = 60s timeout
+      const maxRetries = 5; // 5 * 2s = 10s timeout (faster for testing)
       const retryDelay = 2000; // 2 seconds between retries
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -411,8 +423,9 @@ export class TaskInitializationEngine {
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      // Get the tool executor for remote operations
-      const executor = createToolExecutor(taskId);
+      // Use the workspace manager's getExecutor() method for consistent connectivity
+      // This ensures initialization uses the same approach as regular execution
+      const executor = await this.abstractWorkspaceManager.getExecutor(taskId);
 
       // Final verification that workspace is fully ready with repository content
       console.log(
@@ -439,6 +452,42 @@ export class TaskInitializationEngine {
         `[TASK_INIT] ${taskId}: Failed to verify workspace:`,
         error
       );
+      throw error;
+    }
+  }
+
+  /**
+   * Index repository step - Index repository files for semantic search
+   */
+  private async executeIndexRepository(taskId: string): Promise<void> {
+    console.log(`[TASK_INIT] ${taskId}: Starting repository indexing`);
+
+    try {
+      // Get task info
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: { repoFullName: true },
+      });
+
+      if (!task) {
+        throw new Error(`Task not found: ${taskId}`);
+      }
+
+      // Index the repository with embeddings enabled
+      console.log(
+        `[TASK_INIT] ${taskId}: Indexing repository ${task.repoFullName}`
+      );
+      
+      await indexRepo(task.repoFullName, taskId, {
+        embed: true,
+        clearNamespace: true,
+      });
+
+      console.log(
+        `[TASK_INIT] ${taskId}: Successfully indexed repository ${task.repoFullName}`
+      );
+    } catch (error) {
+      console.error(`[TASK_INIT] ${taskId}: Failed to index repository:`, error);
       throw error;
     }
   }

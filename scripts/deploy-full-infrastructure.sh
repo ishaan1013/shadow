@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Shadow Full Infrastructure Deployment Script
-# Deploys both Firecracker K8s cluster and ECS backend in sequence
+# Deploys both remote execution K8s cluster and ECS backend in sequence
 #
 # Usage:
 #   ./deploy-full-infrastructure.sh
 #
 # Environment Variables:
-#   All variables from both deploy-firecracker-infrastructure.sh and deploy-backend-ecs.sh
+#   All variables from both deploy-remote-infrastructure.sh and deploy-backend-ecs.sh
 #   can be set to customize the deployment
 
 set -euo pipefail
@@ -44,8 +44,8 @@ info() {
 check_prerequisites() {
     log "Checking deployment scripts..."
     
-    if [ ! -f "$SCRIPT_DIR/deploy-firecracker-infrastructure.sh" ]; then
-        error "deploy-firecracker-infrastructure.sh not found in scripts directory"
+    if [ ! -f "$SCRIPT_DIR/deploy-remote-infrastructure.sh" ]; then
+        error "deploy-remote-infrastructure.sh not found in scripts directory"
     fi
     
     if [ ! -f "$SCRIPT_DIR/deploy-backend-ecs.sh" ]; then
@@ -53,22 +53,22 @@ check_prerequisites() {
     fi
     
     # Make sure scripts are executable
-    chmod +x "$SCRIPT_DIR/deploy-firecracker-infrastructure.sh"
+    chmod +x "$SCRIPT_DIR/deploy-remote-infrastructure.sh"
     chmod +x "$SCRIPT_DIR/deploy-backend-ecs.sh"
     
     log "Deployment scripts found and ready"
 }
 
-# Deploy Firecracker infrastructure
-deploy_firecracker() {
-    log "🚀 Starting Firecracker infrastructure deployment..."
+# Deploy remote execution infrastructure
+deploy_remote() {
+    log "🚀 Starting remote execution infrastructure deployment..."
     log "======================================================="
     
-    # Run the Firecracker deployment script
-    if "$SCRIPT_DIR/deploy-firecracker-infrastructure.sh"; then
-        log "✅ Firecracker infrastructure deployment completed successfully"
+    # Run the remote infrastructure deployment script
+    if "$SCRIPT_DIR/deploy-remote-infrastructure.sh"; then
+        log "✅ Remote execution infrastructure deployment completed successfully"
     else
-        error "❌ Firecracker infrastructure deployment failed"
+        error "❌ Remote execution infrastructure deployment failed"
     fi
     
     log "======================================================="
@@ -93,12 +93,12 @@ deploy_ecs_backend() {
 verify_full_deployment() {
     log "🔍 Verifying full infrastructure deployment..."
     
-    # Check Firecracker cluster
-    info "Checking Firecracker cluster status..."
-    if kubectl get nodes -l firecracker=true --no-headers 2>/dev/null | grep -q Ready; then
-        log "✅ Firecracker cluster is running"
+    # Check remote execution cluster
+    info "Checking remote execution cluster status..."
+    if kubectl get nodes -l remote=true --no-headers 2>/dev/null | grep -q Ready; then
+        log "✅ Remote execution cluster is running"
     else
-        warn "⚠️  Could not verify Firecracker cluster status"
+        warn "⚠️  Could not verify remote execution cluster status"
     fi
     
     # Check ECS service
@@ -128,18 +128,18 @@ print_summary() {
     log ""
     log "📋 Deployment Summary:"
     log "====================="
-    log "✅ Firecracker K8s cluster deployed"
+    log "✅ Remote execution K8s cluster deployed"
     log "✅ ECS backend service deployed"
     log ""
     log "🔧 Configuration Files Generated:"
-    log "- firecracker-cluster-config.env (Firecracker cluster access)"
+    log "- .env.production (remote execution cluster access)"
     log ""
     log "📚 Next Steps:"
-    log "1. Source the Firecracker configuration:"
-    log "   source firecracker-cluster-config.env"
+    log "1. Source the remote execution configuration:"
+    log "   source .env.production"
     log ""
     log "2. Verify deployments:"
-    log "   kubectl get nodes -l firecracker=true"
+    log "   kubectl get nodes -l remote=true"
     log "   aws ecs describe-services --cluster ${ECS_CLUSTER_NAME:-shadow-ecs-cluster} --services ${SERVICE_NAME:-shadow-backend-service}"
     log ""
     log "3. Deploy your frontend application to use the ECS backend endpoint"
@@ -147,7 +147,7 @@ print_summary() {
     log "4. Test end-to-end functionality with a Shadow task"
     log ""
     log "🆘 Troubleshooting:"
-    log "- Firecracker logs: kubectl logs -l app=firecracker-runtime -n shadow-agents"
+    log "- Remote execution logs: kubectl logs -l app=shadow-remote -n shadow-agents"
     log "- ECS logs: aws logs tail /ecs/shadow-server --follow"
     log "- Check AWS Console for ECS service and ALB status"
 }
@@ -155,13 +155,13 @@ print_summary() {
 # Main execution
 main() {
     log "Starting Shadow full infrastructure deployment..."
-    log "This will deploy both Firecracker K8s cluster and ECS backend"
+    log "This will deploy both remote execution K8s cluster and ECS backend"
     log ""
     
     # Show configuration summary
     info "Configuration Summary:"
     info "- AWS Region: ${AWS_REGION:-us-east-1}"
-    info "- Firecracker Cluster: ${CLUSTER_NAME:-shadow-firecracker}"
+    info "- Remote Execution Cluster: ${CLUSTER_NAME:-shadow-remote}"
     info "- ECS Cluster: ${ECS_CLUSTER_NAME:-shadow-ecs-cluster}"
     info "- VM Image: ${VM_IMAGE_REGISTRY:-ghcr.io/ishaan1013/shadow}/${VM_IMAGE_NAME:-shadow-vm}:${VM_IMAGE_TAG:-latest}"
     log ""
@@ -175,7 +175,7 @@ main() {
     fi
     
     check_prerequisites
-    deploy_firecracker
+    deploy_remote
     deploy_ecs_backend
     verify_full_deployment
     print_summary

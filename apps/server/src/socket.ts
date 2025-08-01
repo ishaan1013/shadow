@@ -177,11 +177,13 @@ async function verifyTaskAccess(
   taskId: string
 ): Promise<boolean> {
   try {
+    console.log(`[SOCKET] Verifying access for task: ${taskId}`);
     // For now, just check if task exists
     // TODO: Add proper user authentication and authorization
     const task = await prisma.task.findUnique({
       where: { id: taskId },
     });
+    console.log(`[SOCKET] Task found:`, !!task, task ? `(${task.status})` : '(not found)');
     return !!task;
   } catch (error) {
     console.error(`[SOCKET] Error verifying task access:`, error);

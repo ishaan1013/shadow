@@ -247,7 +247,7 @@ const workspaceManager = createWorkspaceManager();
 
 **EKS Cluster Configuration:**
 - AWS EKS with Amazon Linux 2023 nodes (required for glibc 2.34 compatibility)
-- Bare metal instances (c5n.metal) for nested virtualization support
+- Bare metal instances (c5.metal) for nested virtualization support
 - Kata Containers + Firecracker for VM-level isolation
 - GitHub Container Registry integration for VM images
 
@@ -265,7 +265,7 @@ const workspaceManager = createWorkspaceManager();
 
 **Infrastructure Components:**
 - **EKS Control Plane**: Kubernetes API and scheduling
-- **Firecracker Nodes**: c5n.metal instances with KVM/nested virtualization
+- **Firecracker Nodes**: c5.metal instances with KVM/nested virtualization
 - **System Nodes**: m5.large instances for cluster services
 - **VM Image Registry**: GitHub Container Registry (ghcr.io)
 - **Kata Containers**: Runtime for Firecracker VM orchestration

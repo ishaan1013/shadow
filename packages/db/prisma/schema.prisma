@@ -240,6 +240,9 @@ enum InitStepType {
   WAIT_VM_READY
   VERIFY_VM_WORKSPACE
 
+  // Repository indexing step (both modes)
+  INDEX_REPOSITORY
+
   // Cleanup step (firecracker only)
   CLEANUP_WORKSPACE
 }

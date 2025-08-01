@@ -18,32 +18,42 @@ import { FirecrackerVMRunner } from "./firecracker-vm-runner";
 export class FirecrackerWorkspaceManager implements WorkspaceManager {
   private vmRunner: FirecrackerVMRunner;
 
-  constructor(options: {
-    k8sApiUrl?: string;
-    namespace?: string;
-    token?: string;
-    timeout?: number;
-  } = {}) {
+  constructor(
+    options: {
+      k8sApiUrl?: string;
+      namespace?: string;
+      token?: string;
+      timeout?: number;
+    } = {}
+  ) {
     this.vmRunner = new FirecrackerVMRunner(options);
   }
-
 
   /**
    * Prepare a workspace for a task by creating a Firecracker VM
    */
   async prepareWorkspace(taskConfig: TaskConfig): Promise<WorkspaceInfo> {
     try {
-      console.log(`[FIRECRACKER_WM] Preparing Firecracker VM workspace for task ${taskConfig.id}`);
+      console.log(
+        `[FIRECRACKER_WM] Preparing Firecracker VM workspace for task ${taskConfig.id}`
+      );
 
       // Get GitHub access token for the user
       const githubToken = await getGitHubAccessToken(taskConfig.userId);
       if (!githubToken) {
-        throw new Error(`No GitHub access token found for user ${taskConfig.userId}`);
+        throw new Error(
+          `No GitHub access token found for user ${taskConfig.userId}`
+        );
       }
 
       // Create the Firecracker VM pod using the VM runner
-      const createdPod = await this.vmRunner.createVMPod(taskConfig, githubToken);
-      console.log(`[FIRECRACKER_WM] Created Firecracker VM pod: ${createdPod.metadata?.name}`);
+      const createdPod = await this.vmRunner.createVMPod(
+        taskConfig,
+        githubToken
+      );
+      console.log(
+        `[FIRECRACKER_WM] Created Firecracker VM pod: ${createdPod.metadata?.name}`
+      );
 
       // Wait for VM to be ready (this includes VM boot time and sidecar startup)
       await this.vmRunner.waitForVMReady(taskConfig.id);
@@ -53,8 +63,12 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
       const podIP = podDetails.status?.podIP;
       const workspacePath = `/workspace`; // Standard workspace path in VM
 
-      console.log(`[FIRECRACKER_WM] Firecracker VM workspace ready at ${podIP}:8080`);
-      console.log(`[FIRECRACKER_WM] VM is running with true hardware isolation`);
+      console.log(
+        `[FIRECRACKER_WM] Firecracker VM workspace ready at ${podIP}:8080`
+      );
+      console.log(
+        `[FIRECRACKER_WM] VM is running with true hardware isolation`
+      );
 
       return {
         success: true,
@@ -64,7 +78,10 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
         serviceName: `http://${podIP}:8080`,
       };
     } catch (error) {
-      console.error(`[FIRECRACKER_WM] Failed to prepare Firecracker VM workspace:`, error);
+      console.error(
+        `[FIRECRACKER_WM] Failed to prepare Firecracker VM workspace:`,
+        error
+      );
       return {
         success: false,
         workspacePath: "",
@@ -73,21 +90,30 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
     }
   }
 
-  async cleanupWorkspace(taskId: string): Promise<{ success: boolean; message: string }> {
+  async cleanupWorkspace(
+    taskId: string
+  ): Promise<{ success: boolean; message: string }> {
     try {
-      console.log(`[FIRECRACKER_WM] Cleaning up Firecracker VM workspace for task ${taskId}`);
+      console.log(
+        `[FIRECRACKER_WM] Cleaning up Firecracker VM workspace for task ${taskId}`
+      );
 
       // Delete the VM pod using the VM runner
       await this.vmRunner.deleteVMPod(taskId);
 
-      console.log(`[FIRECRACKER_WM] Deleted Firecracker VM pod: shadow-vm-${taskId}`);
+      console.log(
+        `[FIRECRACKER_WM] Deleted Firecracker VM pod: shadow-vm-${taskId.toLowerCase().replaceAll("_", "-")}`
+      );
 
       return {
         success: true,
         message: `Firecracker VM workspace cleaned up successfully for task ${taskId}`,
       };
     } catch (error) {
-      console.error(`[FIRECRACKER_WM] Failed to cleanup Firecracker VM workspace:`, error);
+      console.error(
+        `[FIRECRACKER_WM] Failed to cleanup Firecracker VM workspace:`,
+        error
+      );
       return {
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",
@@ -144,29 +170,37 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
     if (!match) return 10 * 1024 * 1024 * 1024; // Default 10GB
 
     const value = parseInt(match[1]!);
-    const unit = match[2]!
+    const unit = match[2]!;
 
     const multipliers: Record<string, number> = {
-      'K': 1024,
-      'Ki': 1024,
-      'M': 1024 * 1024,
-      'Mi': 1024 * 1024,
-      'G': 1024 * 1024 * 1024,
-      'Gi': 1024 * 1024 * 1024,
-      'T': 1024 * 1024 * 1024 * 1024,
-      'Ti': 1024 * 1024 * 1024 * 1024,
+      K: 1024,
+      Ki: 1024,
+      M: 1024 * 1024,
+      Mi: 1024 * 1024,
+      G: 1024 * 1024 * 1024,
+      Gi: 1024 * 1024 * 1024,
+      T: 1024 * 1024 * 1024 * 1024,
+      Ti: 1024 * 1024 * 1024 * 1024,
     };
 
     return value * (multipliers[unit] || 1);
   }
 
   async getExecutor(taskId: string): Promise<ToolExecutor> {
+    // Get pod IP for direct connectivity
     const pod = await this.vmRunner.getVMPodStatus(taskId);
     const podIP = pod.status?.podIP;
-    const sidecarUrl = `http://${podIP}:8080`;
 
+    if (!podIP) {
+      throw new Error(`Pod IP not available for task ${taskId}`);
+    }
+
+    // Use direct pod IP connectivity
+    const sidecarUrl = `http://${podIP}:8080`;
+    console.log(`[FIRECRACKER_WM] Using direct pod IP: ${sidecarUrl}`);
     return new FirecrackerToolExecutor(taskId, sidecarUrl);
   }
+
 
   async healthCheck(taskId: string): Promise<HealthStatus> {
     try {

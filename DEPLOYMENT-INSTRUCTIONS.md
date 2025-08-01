@@ -77,7 +77,7 @@ spec:
 
 ```bash
 # Set cluster configuration
-source firecracker-cluster-config.env
+source .env.production
 
 # Test Shadow application with Firecracker mode
 AGENT_MODE=firecracker NODE_ENV=production npm run start:server
