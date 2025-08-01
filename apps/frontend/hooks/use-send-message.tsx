@@ -44,7 +44,7 @@ export function useSendMessage() {
       // Return a context object with the snapshotted value
       return { previousMessages };
     },
-    onError: (err, variables, context) => {
+    onError: (_err, variables, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousMessages) {
         queryClient.setQueryData(

@@ -5,10 +5,10 @@ import {
   ClientToServerEvents,
   TerminalEntry,
   TerminalHistoryResponse,
+  ModelType,
 } from "@repo/types";
 import http from "http";
 import { Server, Socket } from "socket.io";
-import { DEFAULT_MODEL } from "./chat";
 import { chatService } from "./app";
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
@@ -322,7 +322,7 @@ export function createSocketServer(
         await chatService.processUserMessage({
           taskId: data.taskId,
           userMessage: data.message,
-          llmModel: data.llmModel || DEFAULT_MODEL,
+          llmModel: data.llmModel as ModelType,
           workspacePath: task?.workspacePath || undefined,
           queue: data.queue || false,
         });

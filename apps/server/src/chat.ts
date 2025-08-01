@@ -24,8 +24,6 @@ import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
 import { createToolExecutor } from "./execution";
 
-export const DEFAULT_MODEL: ModelType = "gpt-4o";
-
 export class ChatService {
   private llmService: LLMService;
   private githubService: GitHubService;
@@ -53,7 +51,7 @@ export class ChatService {
   async saveUserMessage(
     taskId: string,
     content: string,
-    llmModel?: string,
+    llmModel: string,
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
     const sequence = await this.getNextSequence(taskId);
@@ -104,6 +102,7 @@ export class ChatService {
     toolArgs: Record<string, unknown>,
     toolResult: string,
     sequence: number,
+    llmModel: string,
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
     return await prisma.chatMessage.create({
@@ -112,6 +111,7 @@ export class ChatService {
         content: toolResult,
         role: "TOOL",
         sequence,
+        llmModel,
         metadata: {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(metadata as any),
@@ -393,7 +393,7 @@ export class ChatService {
   async processUserMessage({
     taskId,
     userMessage,
-    llmModel = DEFAULT_MODEL,
+    llmModel,
     enableTools = true,
     skipUserMessageSave = false,
     workspacePath,
@@ -401,7 +401,7 @@ export class ChatService {
   }: {
     taskId: string;
     userMessage: string;
-    llmModel?: ModelType;
+    llmModel: ModelType;
     enableTools?: boolean;
     skipUserMessageSave?: boolean;
     workspacePath?: string;
@@ -591,6 +591,7 @@ export class ChatService {
             chunk.toolCall.args,
             "Running...", // Placeholder content
             toolSequence,
+            llmModel,
             {
               tool: {
                 name: chunk.toolCall.name,

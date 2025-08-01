@@ -120,7 +120,7 @@ model ChatMessage {
   id                  String               @id @default(cuid())
   content             String
   role                MessageRole
-  llmModel            String?
+  llmModel            String
   metadata            Json?
   sequence            Int
   promptTokens        Int?

@@ -10,7 +10,6 @@ import {
   toCoreMessage,
 } from "@repo/types";
 import { CoreMessage, LanguageModel, generateText, streamText } from "ai";
-import { DEFAULT_MODEL } from "./chat";
 import config from "./config";
 import { createTools } from "./tools";
 
@@ -41,7 +40,7 @@ export class LLMService {
   async *createMessageStream(
     systemPrompt: string,
     messages: Message[],
-    model: ModelType = DEFAULT_MODEL,
+    model: ModelType,
     enableTools: boolean = true,
     taskId?: string,
     workspacePath?: string,
@@ -64,10 +63,10 @@ export class LLMService {
       const finalMessages: CoreMessage[] = isAnthropicModel
         ? [
             {
-              role: 'system',
+              role: "system",
               content: systemPrompt,
               providerOptions: {
-                anthropic: { cacheControl: { type: 'ephemeral' } },
+                anthropic: { cacheControl: { type: "ephemeral" } },
               },
             } as CoreMessage,
             ...coreMessages,
@@ -87,7 +86,9 @@ export class LLMService {
 
       // Log cache control usage for debugging
       if (isAnthropicModel) {
-        console.log(`[LLM] Using Anthropic model ${model} with prompt caching enabled`);
+        console.log(
+          `[LLM] Using Anthropic model ${model} with prompt caching enabled`
+        );
       }
 
       const result = streamText(streamConfig);
@@ -207,23 +208,24 @@ export class LLMService {
 
       const prModel = "gpt-4o-mini";
       const isPrModelAnthropic = getModelProvider(prModel) === "anthropic";
-      
+
       const { text } = await generateText({
         model: this.getModel(prModel),
         temperature: 0.3,
         maxTokens: 1000,
-        ...(isPrModelAnthropic 
-          ? { 
-              messages: [{
-                role: 'system',
-                content: prompt,
-                providerOptions: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
-                },
-              } as CoreMessage]
+        ...(isPrModelAnthropic
+          ? {
+              messages: [
+                {
+                  role: "system",
+                  content: prompt,
+                  providerOptions: {
+                    anthropic: { cacheControl: { type: "ephemeral" } },
+                  },
+                } as CoreMessage,
+              ],
             }
-          : { prompt }
-        ),
+          : { prompt }),
       });
 
       const result = this.parsePRMetadata(text);

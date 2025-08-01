@@ -1,10 +1,11 @@
 import { router as IndexingRouter } from "@/indexing/index";
 import { prisma } from "@repo/db";
-import { ModelInfos } from "@repo/types";
+import { ModelInfos, AvailableModels, ModelType } from "@repo/types";
 import cors from "cors";
 import express from "express";
 import http from "http";
-import { ChatService, DEFAULT_MODEL } from "./chat";
+import { z } from "zod";
+import { ChatService } from "./chat";
 import { TaskInitializationEngine } from "./initialization";
 import { errorHandler } from "./middleware/error-handler";
 import { createSocketServer } from "./socket";
@@ -16,6 +17,14 @@ import { filesRouter } from "./routes/files";
 const app = express();
 export const chatService = new ChatService();
 const initializationEngine = new TaskInitializationEngine();
+
+const initiateTaskSchema = z.object({
+  message: z.string().min(1, "Message is required"),
+  model: z.enum(Object.values(AvailableModels) as [string, ...string[]], {
+    errorMap: () => ({ message: "Invalid model type" }),
+  }),
+  userId: z.string().min(1, "User ID is required"),
+});
 
 const socketIOServer = http.createServer(app);
 createSocketServer(socketIOServer);
@@ -68,15 +77,20 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
   try {
     console.log("RECEIVED TASK INITIATE REQUEST: /api/tasks/:taskId/initiate");
     const { taskId } = req.params;
-    const { message, model, userId } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: "Message is required" });
+    // Validate request body with Zod
+    const validation = initiateTaskSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: validation.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
     }
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
+    const { message, model, userId } = validation.data;
 
     // Verify task exists
     const task = await prisma.task.findUnique({
@@ -128,7 +142,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       await chatService.processUserMessage({
         taskId,
         userMessage: message,
-        llmModel: model || DEFAULT_MODEL,
+        llmModel: model as ModelType,
         enableTools: true,
         skipUserMessageSave: true,
         workspacePath: updatedTask?.workspacePath || undefined,

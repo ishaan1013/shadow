@@ -75,17 +75,20 @@ export function PromptForm({
 
   const [isPending, startTransition] = useTransition();
 
-  const handleSelectModel = useCallback(async (model: ModelType | null) => {
-    setSelectedModel(model);
-    // Persist the model selection if on home page
-    if (isHome) {
-      try {
-        await saveModelSelectorCookie(model);
-      } catch (error) {
-        console.error("Failed to save model selection:", error);
+  const handleSelectModel = useCallback(
+    async (model: ModelType | null) => {
+      setSelectedModel(model);
+      // Persist the model selection if on home page
+      if (isHome) {
+        try {
+          await saveModelSelectorCookie(model);
+        } catch (error) {
+          console.error("Failed to save model selection:", error);
+        }
       }
-    }
-  }, [isHome]);
+    },
+    [isHome]
+  );
 
   const queryClient = useQueryClient();
 
