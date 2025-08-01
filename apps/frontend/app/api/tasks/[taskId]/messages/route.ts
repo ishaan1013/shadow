@@ -7,9 +7,9 @@ export async function GET(
 ) {
   try {
     const { taskId } = await params;
-    const messages = await getTaskMessages(taskId);
+    const { messages, mostRecentMessageModel } = await getTaskMessages(taskId);
 
-    return NextResponse.json({ messages });
+    return NextResponse.json({ messages, mostRecentMessageModel });
   } catch (error) {
     console.error("Error fetching messages:", error);
     return NextResponse.json(

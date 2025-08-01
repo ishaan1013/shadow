@@ -9,15 +9,17 @@ import { useParams } from "next/navigation";
 import { ScrollToBottom } from "./scroll-to-bottom";
 import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getMostRecentMessageModel } from "@/lib/utils/model-utils";
 
 export function TaskPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
 
   const queryClient = useQueryClient();
 
-  const { data: messages = [], error: taskMessagesError } =
-    useTaskMessages(taskId);
+  const {
+    data: { messages = [], mostRecentMessageModel = null } = {},
+    error: taskMessagesError,
+  } = useTaskMessages(taskId);
+
   const sendMessageMutation = useSendMessage();
 
   const { streamingAssistantParts, isStreaming, sendMessage, stopStream } =
@@ -52,11 +54,6 @@ export function TaskPageContent() {
     );
   }
 
-  // Get the most recent message model for intelligent defaults
-  const initialSelectedModel = useMemo(() => {
-    return getMostRecentMessageModel(messages);
-  }, [messages]);
-
   // Combine real messages with current streaming content
   const displayMessages = useMemo(() => {
     const msgs = [...messages];
@@ -68,6 +65,7 @@ export function TaskPageContent() {
         role: "assistant",
         content: "", // Content will come from parts
         createdAt: new Date().toISOString(),
+        llmModel: mostRecentMessageModel || "",
         metadata: {
           isStreaming: true,
           parts: streamingAssistantParts,
@@ -88,7 +86,7 @@ export function TaskPageContent() {
         onSubmit={handleSendMessage}
         onStopStream={handleStopStream}
         isStreaming={isStreaming || sendMessageMutation.isPending}
-        initialSelectedModel={initialSelectedModel}
+        initialSelectedModel={mostRecentMessageModel}
         onFocus={() => {
           queryClient.setQueryData(["edit-message-id", taskId], null);
         }}

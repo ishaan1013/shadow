@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createTask } from "@/lib/actions/create-task";
 import { saveModelSelectorCookie } from "@/lib/actions/model-selector-cookie";
 import { cn } from "@/lib/utils";
-import { AvailableModels, type ModelType } from "@repo/types";
+import { type ModelType } from "@repo/types";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUp,

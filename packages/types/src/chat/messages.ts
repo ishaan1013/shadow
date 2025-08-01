@@ -5,7 +5,6 @@ import type {
   ToolResultPart,
   FinishReason,
 } from "ai";
-import { randomUUID } from "crypto";
 import { ToolExecutionStatusType } from "../tools/execution";
 import { ToolResultTypes } from "../tools/results";
 import type { PullRequestSnapshot } from "@repo/db";
@@ -33,7 +32,7 @@ export type Message = {
   id: string;
   role: "user" | "assistant" | "tool" | "system";
   content: string;
-  llmModel?: string; // Model used for this message (primarily for assistant messages)
+  llmModel: string;
   createdAt: string;
   metadata?: MessageMetadata;
   pullRequestSnapshot?: PullRequestSnapshot;
@@ -98,30 +97,4 @@ export function toCoreMessage(message: Message): CoreMessage {
     role: message.role,
     content: message.content,
   } as CoreMessage;
-}
-
-export function fromCoreMessage(
-  coreMessage: CoreMessage,
-  id?: string
-): Omit<Message, "createdAt"> {
-  return {
-    id: id || randomUUID(),
-    role: coreMessage.role,
-    content:
-      typeof coreMessage.content === "string"
-        ? coreMessage.content
-        : Array.isArray(coreMessage.content)
-          ? coreMessage.content
-              .map((part) =>
-                typeof part === "string"
-                  ? part
-                  : "text" in part
-                    ? part.text
-                    : "image" in part
-                      ? "[image]"
-                      : JSON.stringify(part)
-              )
-              .join("")
-          : JSON.stringify(coreMessage.content),
-  };
 }

@@ -1,7 +1,13 @@
 import { db } from "@repo/db";
-import { type Message } from "@repo/types";
+import { ModelType, type Message } from "@repo/types";
+import { getMostRecentMessageModel } from "../utils/model-utils";
 
-export async function getTaskMessages(taskId: string): Promise<Message[]> {
+export type TaskMessages = {
+  messages: Message[];
+  mostRecentMessageModel: ModelType | null;
+};
+
+export async function getTaskMessages(taskId: string): Promise<TaskMessages> {
   try {
     const messages = await db.chatMessage.findMany({
       where: { taskId },
@@ -14,17 +20,22 @@ export async function getTaskMessages(taskId: string): Promise<Message[]> {
       ],
     });
 
-    return messages.map((msg) => ({
+    const finalMessages: Message[] = messages.map((msg) => ({
       id: msg.id,
       role: msg.role as "user" | "assistant" | "tool",
       content: msg.content,
       createdAt: msg.createdAt.toISOString(),
+      llmModel: msg.llmModel,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       metadata: (msg.metadata as any) || { isStreaming: false },
       pullRequestSnapshot: msg.pullRequestSnapshot || undefined,
     }));
+
+    const mostRecentMessageModel = getMostRecentMessageModel(finalMessages);
+
+    return { messages: finalMessages, mostRecentMessageModel };
   } catch (err) {
     console.error("Failed to fetch task messages", err);
-    return [];
+    return { messages: [], mostRecentMessageModel: null };
   }
 }

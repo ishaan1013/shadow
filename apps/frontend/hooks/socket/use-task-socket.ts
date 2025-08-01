@@ -13,6 +13,8 @@ import type {
 } from "@repo/types";
 import { TextPart, ToolCallPart, ToolResultPart } from "ai";
 import type { TaskWithDetails } from "@/lib/db-operations/get-task-with-details";
+import { TaskMessages } from "@/lib/db-operations/get-task-messages";
+import { getMostRecentMessageModel } from "@/lib/utils/model-utils";
 import { CodebaseTreeResponse } from "../use-codebase-tree";
 import { Task, TodoStatus } from "@repo/db";
 
@@ -282,7 +284,11 @@ export function useTaskSocket(taskId: string | undefined) {
       queuedMessage: string | null;
     }) {
       if (data.taskId === taskId) {
-        queryClient.setQueryData(["task-messages", taskId], data.messages);
+        const mostRecentMessageModel = getMostRecentMessageModel(data.messages);
+        queryClient.setQueryData<TaskMessages>(["task-messages", taskId], {
+          messages: data.messages,
+          mostRecentMessageModel,
+        });
         queryClient.setQueryData(
           ["queued-message", taskId],
           data.queuedMessage
