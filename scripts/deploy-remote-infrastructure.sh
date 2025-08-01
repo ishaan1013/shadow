@@ -300,7 +300,7 @@ K8S_SERVICE_ACCOUNT_TOKEN=$SERVICE_ACCOUNT_TOKEN
 KUBERNETES_NAMESPACE=shadow-agents
 
 # Agent Configuration
-AGENT_MODE=firecracker
+AGENT_MODE=remote
 NODE_ENV=production
 
 # VM Resource Configuration
@@ -403,7 +403,7 @@ main() {
     log ""
     log "Next steps:"
     log "1. Source the configuration: source .env.production"
-    log "2. Deploy Shadow application with AGENT_MODE=firecracker"
+    log "2. Deploy Shadow application with AGENT_MODE=remote"
     log "3. Test task execution with Kata QEMU VMs"
     log ""
     log "Cluster access:"

@@ -422,7 +422,7 @@ create_task_definition() {
       ],
       "environment": [
         {"name": "NODE_ENV", "value": "production"},
-        {"name": "AGENT_MODE", "value": "firecracker"},
+        {"name": "AGENT_MODE", "value": "remote"},
         {"name": "AWS_REGION", "value": "$AWS_REGION"},
         {"name": "EKS_CLUSTER_NAME", "value": "$CLUSTER_NAME"},
         {"name": "KUBERNETES_NAMESPACE", "value": "shadow-agents"},
