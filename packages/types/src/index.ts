@@ -1,6 +1,7 @@
 // === Chat Message Types ===
 export * from "./chat/messages";
 export * from "./chat/streaming";
+export * from "./chat/compression";
 
 // === Tool Result Types ===
 export * from "./tools/results";

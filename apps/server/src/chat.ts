@@ -23,10 +23,12 @@ import {
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
 import { createToolExecutor } from "./execution";
+import { ContextManager } from "./services/context-manager";
 
 export class ChatService {
   private llmService: LLMService;
   private githubService: GitHubService;
+  private contextManager: ContextManager;
   private activeStreams: Map<string, AbortController> = new Map();
   private stopRequested: Set<string> = new Set();
   private queuedMessages: Map<
@@ -37,6 +39,7 @@ export class ChatService {
   constructor() {
     this.llmService = new LLMService();
     this.githubService = new GitHubService();
+    this.contextManager = new ContextManager();
   }
 
   private async getNextSequence(taskId: string): Promise<number> {
@@ -449,22 +452,19 @@ export class ChatService {
       await this.saveUserMessage(taskId, userMessage, llmModel);
     }
 
-    const history = await this.getChatHistory(taskId);
-
-    // Prepare messages for LLM (exclude the user message we just saved to avoid duplication)
-    // Filter out tool messages since they're embedded in assistant messages as parts
-    const messages: Message[] = history
-      .slice(0, -1) // Remove the last message (the one we just saved)
-      .filter((msg) => msg.role === "user" || msg.role === "assistant")
-      .concat([
-        {
-          id: randomUUID(),
-          role: "user",
-          content: userMessage,
-          createdAt: new Date().toISOString(),
-          llmModel,
-        },
-      ]);
+    // Use context manager to build optimal context with compression - if no compression it does nothing
+    const contextMessages = await this.contextManager.buildOptimalContext(taskId, llmModel);
+    
+    // Add the current user message to the context
+    const messages: Message[] = contextMessages.concat([
+      {
+        id: randomUUID(),
+        role: "user",
+        content: userMessage,
+        createdAt: new Date().toISOString(),
+        llmModel,
+      },
+    ]);
 
     console.log(
       `[CHAT] Processing message for task ${taskId} with ${messages.length} context messages`

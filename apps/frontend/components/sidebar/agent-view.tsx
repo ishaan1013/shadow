@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { fetchIndexApi } from "@/lib/actions/index-repo";
 import Link from "next/link";
 import { Badge } from "../ui/badge";
+import { ContextUsage } from "./context-usage";
 
 const todoStatusConfig = {
   PENDING: { icon: Square, className: "text-muted-foreground" },
@@ -207,6 +208,13 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
               </div>
             </SidebarMenuItem>
           )}
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      {/* Context Usage */}
+      <SidebarGroup>
+        <SidebarGroupContent>
+          <ContextUsage taskId={taskId} />
         </SidebarGroupContent>
       </SidebarGroup>
 

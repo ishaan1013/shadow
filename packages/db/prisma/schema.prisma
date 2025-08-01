@@ -117,25 +117,31 @@ model Todo {
 }
 
 model ChatMessage {
-  id                  String               @id @default(cuid())
-  content             String
-  role                MessageRole
-  llmModel            String
-  metadata            Json?
-  sequence            Int
-  promptTokens        Int?
-  completionTokens    Int?
-  totalTokens         Int?
-  finishReason        String?
-  createdAt           DateTime             @default(now())
-  editedAt            DateTime?
-  taskId              String
-  task                Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  pullRequestSnapshot PullRequestSnapshot?
+  id                     String               @id @default(cuid())
+  content                String
+  role                   MessageRole
+  llmModel               String
+  metadata               Json?
+  sequence               Int
+  promptTokens           Int?
+  completionTokens       Int?
+  totalTokens            Int?
+  finishReason           String?
+  createdAt              DateTime             @default(now())
+  editedAt               DateTime?
+  taskId                 String
+  task                   Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  pullRequestSnapshot    PullRequestSnapshot?
+  
+  // Compression fields
+  compressedVersions     Json?                // Store compressed versions as JSON
+  activeCompressionLevel String               @default("NONE")
+  originalTokens         Int?                 // Store original token count for compression stats
 
   @@index([taskId, sequence])
   @@index([taskId, role, sequence])
   @@index([llmModel, createdAt])
+  @@index([taskId, activeCompressionLevel])
 }
 
 model TerminalCommand {
