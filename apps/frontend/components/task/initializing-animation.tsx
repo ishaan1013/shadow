@@ -23,7 +23,7 @@ export default function InitializingAnimation({ taskId }: { taskId: string }) {
   const mode =
     process.env.NEXT_PUBLIC_VERCEL_ENV === "production" ||
     process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
-      ? "firecracker"
+      ? "remote"
       : "local";
 
   const steps = getStepsForMode(mode);

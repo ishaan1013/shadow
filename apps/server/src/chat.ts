@@ -166,7 +166,7 @@ export class ChatService {
         return false;
       }
 
-      // For firecracker mode, we use the tool executor to make API calls to the sidecar
+      // For remote mode, we use the tool executor to make API calls to the sidecar
       // For local mode, we use GitManager directly
       if (config.agentMode === "local") {
         const gitManager = new GitManager(resolvedWorkspacePath);
@@ -197,7 +197,7 @@ export class ChatService {
 
         return committed;
       } else {
-        return await this.commitChangesFirecrackerMode(taskId, task);
+        return await this.commitChangesRemoteMode(taskId, task);
       }
     } catch (error) {
       console.error(
@@ -275,9 +275,9 @@ export class ChatService {
   }
 
   /**
-   * Commit changes in firecracker mode using tool executor git APIs
+   * Commit changes in remote mode using tool executor git APIs
    */
-  private async commitChangesFirecrackerMode(
+  private async commitChangesRemoteMode(
     taskId: string,
     task: {
       user: { name: string; email: string };
@@ -286,7 +286,7 @@ export class ChatService {
   ): Promise<boolean> {
     try {
       console.log(
-        `[CHAT] Checking for changes to commit in firecracker mode for task ${taskId}`
+        `[CHAT] Checking for changes to commit in remote mode for task ${taskId}`
       );
 
       // Create tool executor for this task
@@ -304,7 +304,7 @@ export class ChatService {
 
       if (!statusResponse.hasChanges) {
         console.log(
-          `[CHAT] No changes to commit for task ${taskId} in firecracker mode`
+          `[CHAT] No changes to commit for task ${taskId} in remote mode`
         );
         return false;
       }
@@ -362,12 +362,12 @@ export class ChatService {
       }
 
       console.log(
-        `[CHAT] Successfully committed changes for task ${taskId} in firecracker mode`
+        `[CHAT] Successfully committed changes for task ${taskId} in remote mode`
       );
       return true;
     } catch (error) {
       console.error(
-        `[CHAT] Error in firecracker mode git commit for task ${taskId}:`,
+        `[CHAT] Error in remote mode git commit for task ${taskId}:`,
         error
       );
       // Don't throw here - we don't want git failures to break the chat flow

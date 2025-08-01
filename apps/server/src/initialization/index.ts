@@ -1,10 +1,7 @@
 import { InitStatus, prisma } from "@repo/db";
 import { getStepsForMode, InitializationProgress } from "@repo/types";
 import { emitStreamChunk } from "../socket";
-import {
-  createWorkspaceManager,
-  getAgentMode,
-} from "../execution";
+import { createWorkspaceManager, getAgentMode } from "../execution";
 import type { WorkspaceManager as AbstractWorkspaceManager } from "../execution";
 import {
   setInitStatus,
@@ -32,7 +29,7 @@ const STEP_DEFINITIONS: Record<
   },
   CREATE_VM: {
     name: "Creating VM",
-    description: "Create Firecracker VM for task execution",
+    description: "Create remote VM for task execution",
   },
   WAIT_VM_READY: {
     name: "Starting VM",
@@ -180,7 +177,7 @@ export class TaskInitializationEngine {
         await this.executePrepareWorkspace(taskId, userId);
         break;
 
-      // Firecracker-specific steps
+      // Remote mode steps
       case "CREATE_VM":
         await this.executeCreateVM(taskId, userId);
         break;
@@ -265,18 +262,18 @@ export class TaskInitializationEngine {
   }
 
   /**
-   * Create VM step - firecracker mode only
-   * Creates Firecracker VM pod (VM startup script handles repository cloning)
+   * Create VM step - remote mode only
+   * Creates remote VM pod (VM startup script handles repository cloning)
    */
   private async executeCreateVM(taskId: string, userId: string): Promise<void> {
     const agentMode = getAgentMode();
-    if (agentMode !== "firecracker") {
+    if (agentMode !== "remote") {
       throw new Error(
-        `CREATE_VM step should only be used in firecracker mode, but agent mode is: ${agentMode}`
+        `CREATE_VM step should only be used in remote mode, but agent mode is: ${agentMode}`
       );
     }
 
-    console.log(`[TASK_INIT] ${taskId}: Creating Firecracker VM for execution`);
+    console.log(`[TASK_INIT] ${taskId}: Creating remote VM for execution`);
 
     try {
       // Get task info
@@ -294,7 +291,6 @@ export class TaskInitializationEngine {
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      // Use abstract workspace manager to prepare workspace (creates VM in firecracker mode)
       const workspaceInfo =
         await this.abstractWorkspaceManager.prepareWorkspace({
           id: taskId,
@@ -470,7 +466,7 @@ export class TaskInitializationEngine {
       console.log(
         `[TASK_INIT] ${taskId}: Indexing repository ${task.repoFullName}`
       );
-      
+
       await indexRepo(task.repoFullName, taskId, {
         embed: true,
         clearNamespace: true,
@@ -480,11 +476,13 @@ export class TaskInitializationEngine {
         `[TASK_INIT] ${taskId}: Successfully indexed repository ${task.repoFullName}`
       );
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed to index repository:`, error);
+      console.error(
+        `[TASK_INIT] ${taskId}: Failed to index repository:`,
+        error
+      );
       throw error;
     }
   }
-
 
   /**
    * Emit progress events via WebSocket

@@ -209,9 +209,9 @@ export function createSocketServer(
     },
   });
 
-  // Set up sidecar namespace for filesystem watching (only in firecracker mode)
+  // Set up sidecar namespace for filesystem watching (only in remote mode)
   const agentMode = config.agentMode;
-  if (agentMode === "firecracker") {
+  if (agentMode === "remote") {
     setupSidecarNamespace(io);
   }
 

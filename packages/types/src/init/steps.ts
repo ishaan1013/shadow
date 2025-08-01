@@ -10,24 +10,21 @@ export const STEP_DISPLAY_NAMES: Record<InitStatus, string> = {
   WAIT_VM_READY: "Starting VM",
   VERIFY_VM_WORKSPACE: "Verifying Workspace",
   INDEX_REPOSITORY: "Indexing Repository",
-  ACTIVE: "Ready"
+  ACTIVE: "Ready",
 };
 
 /**
  * Get all step display names in execution order for a given mode
  */
-export function getStepsForMode(mode: "local" | "firecracker"): InitStatus[] {
-  if (mode === "firecracker") {
+export function getStepsForMode(mode: "local" | "remote"): InitStatus[] {
+  if (mode === "remote") {
     return [
       "CREATE_VM",
       "WAIT_VM_READY",
       "VERIFY_VM_WORKSPACE",
-      "INDEX_REPOSITORY"
+      "INDEX_REPOSITORY",
     ];
   } else {
-    return [
-      "PREPARE_WORKSPACE",
-      "INDEX_REPOSITORY"
-    ];
+    return ["PREPARE_WORKSPACE", "INDEX_REPOSITORY"];
   }
 }

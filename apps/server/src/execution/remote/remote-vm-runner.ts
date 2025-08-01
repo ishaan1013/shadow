@@ -2,7 +2,7 @@ import { TaskConfig } from "../interfaces/types";
 import config from "../../config";
 import * as k8s from "@kubernetes/client-node";
 
-export class FirecrackerVMRunner {
+export class RemoteVMRunner {
   private namespace: string;
   private k8sConfig: k8s.KubeConfig;
   private coreV1Api: k8s.CoreV1Api;
@@ -27,7 +27,7 @@ export class FirecrackerVMRunner {
    * Create kata-qemu VM pod specification
    * Kata QEMU handles VM lifecycle automatically - no manual VM management needed
    */
-  createFirecrackerVMPodSpec(
+  createRemoteVMPodSpec(
     taskConfig: TaskConfig,
     githubToken: string
   ): k8s.V1Pod {
@@ -60,7 +60,7 @@ export class FirecrackerVMRunner {
         serviceAccountName: "shadow-firecracker-vm-sa",
         runtimeClassName: "kata-qemu",
         nodeSelector: {
-          firecracker: "true", // TODO: Rename to kata-qemu or vm in future
+          remote: "true", // Updated to match current infrastructure
         },
         tolerations: [
           {
@@ -217,7 +217,7 @@ export class FirecrackerVMRunner {
     taskConfig: TaskConfig,
     githubToken: string
   ): Promise<k8s.V1Pod> {
-    const podSpec = this.createFirecrackerVMPodSpec(taskConfig, githubToken);
+    const podSpec = this.createRemoteVMPodSpec(taskConfig, githubToken);
 
     try {
       const response = await this.coreV1Api.createNamespacedPod({
@@ -227,9 +227,9 @@ export class FirecrackerVMRunner {
 
       return response;
     } catch (error) {
-      console.error(`[FIRECRACKER_VM_RUNNER] Failed to create VM pod:`, error);
+      console.error(`[REMOTE_VM_RUNNER] Failed to create VM pod:`, error);
       throw new Error(
-        `Failed to create Firecracker VM pod: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Failed to create remote VM pod: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
   }
@@ -243,14 +243,14 @@ export class FirecrackerVMRunner {
         namespace: this.namespace,
       });
 
-      console.log(`[FIRECRACKER_VM_RUNNER] Deleted VM pod: ${podName}`);
+      console.log(`[REMOTE_VM_RUNNER] Deleted VM pod: ${podName}`);
     } catch (error) {
       console.error(
-        `[FIRECRACKER_VM_RUNNER] Failed to delete VM pod ${podName}:`,
+        `[REMOTE_VM_RUNNER] Failed to delete VM pod ${podName}:`,
         error
       );
       throw new Error(
-        `Failed to delete Firecracker VM pod: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Failed to delete remote VM pod: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
   }
@@ -267,11 +267,11 @@ export class FirecrackerVMRunner {
       return pod;
     } catch (error) {
       console.error(
-        `[FIRECRACKER_VM_RUNNER] Failed to get VM pod status for ${podName}:`,
+        `[REMOTE_VM_RUNNER] Failed to get VM pod status for ${podName}:`,
         error
       );
       throw new Error(
-        `Failed to get Firecracker VM pod status: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Failed to get remote VM pod status: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
   }
@@ -298,7 +298,7 @@ export class FirecrackerVMRunner {
         );
 
         if (phase === "Running" && readyCondition?.status === "True") {
-          console.log(`[FIRECRACKER_VM_RUNNER] VM pod ${podName} is ready`);
+          console.log(`[REMOTE_VM_RUNNER] VM pod ${podName} is ready`);
           return;
         }
 
@@ -307,7 +307,7 @@ export class FirecrackerVMRunner {
         }
 
         console.log(
-          `[FIRECRACKER_VM_RUNNER] Waiting for VM pod ${podName} to be ready... (${phase})`
+          `[REMOTE_VM_RUNNER] Waiting for VM pod ${podName} to be ready... (${phase})`
         );
         await new Promise((resolve) => setTimeout(resolve, pollInterval));
       } catch (error) {

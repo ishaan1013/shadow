@@ -81,7 +81,7 @@ model Task {
   repoUrl      String
 
   workspacePath       String?
-  initStatus          InitStatus    @default(INACTIVE)
+  initStatus          InitStatus        @default(INACTIVE)
   scheduledCleanupAt  DateTime?
   initializationError String?
   workspaceCleanedUp  Boolean           @default(false)

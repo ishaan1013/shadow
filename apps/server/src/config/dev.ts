@@ -10,12 +10,12 @@ dotenv.config();
  */
 const devConfigSchema = sharedConfigSchema.extend({
   // Development execution mode (defaults to local)
-  AGENT_MODE: z.enum(["local", "firecracker"]).default("local"),
+  AGENT_MODE: z.enum(["local", "remote"]).default("local"),
   
   // Local development workspace
   WORKSPACE_DIR: z.string().default("/workspace"),
   
-  // Optional Firecracker testing (for local VM testing)
+  // Optional remote VM testing (for local VM testing)
   FIRECRACKER_ENABLED: z.boolean().default(false),
   VM_IMAGE_REGISTRY: z.string().optional(),
   VM_IMAGE_TAG: z.string().default("latest"),
@@ -68,7 +68,7 @@ const devConfig = {
   // Local development
   workspaceDir: parsed.data.WORKSPACE_DIR,
   
-  // Optional Firecracker testing
+  // Optional remote VM testing
   firecrackerEnabled: parsed.data.FIRECRACKER_ENABLED,
   vmImageRegistry: parsed.data.VM_IMAGE_REGISTRY,
   vmImageTag: parsed.data.VM_IMAGE_TAG,

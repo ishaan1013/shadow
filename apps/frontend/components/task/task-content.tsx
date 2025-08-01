@@ -9,6 +9,7 @@ import { useParams } from "next/navigation";
 import { ScrollToBottom } from "./scroll-to-bottom";
 import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ModelType } from "@repo/types";
 
 export function TaskPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -26,7 +27,7 @@ export function TaskPageContent() {
     useTaskSocket(taskId);
 
   const handleSendMessage = useCallback(
-    (message: string, model: string, queue: boolean) => {
+    (message: string, model: ModelType, queue: boolean) => {
       if (!taskId || !message.trim()) return;
 
       // Use the mutation for optimistic updates

@@ -25,10 +25,10 @@ import { CommandResult } from "../interfaces/types";
 import { performSemanticSearch } from "@/utils/semantic-search";
 
 /**
- * FirecrackerToolExecutor executes tools in Firecracker microVMs via sidecar API
+ * RemoteToolExecutor executes tools in remote VMs via sidecar API
  * Communicates with the sidecar service running inside the VM
  */
-export class FirecrackerToolExecutor implements ToolExecutor {
+export class RemoteToolExecutor implements ToolExecutor {
   private taskId: string;
   private sidecarUrl: string;
   private timeout: number;

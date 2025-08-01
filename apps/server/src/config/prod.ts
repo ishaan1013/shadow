@@ -22,8 +22,8 @@ if (!process.env.VM_IMAGE_REGISTRY) {
  */
 const prodConfigSchema = sharedConfigSchema.extend({
   // === EXECUTION MODE ===
-  // Controls how agent code executes - 'firecracker' for VM isolation, 'local' for direct execution
-  AGENT_MODE: z.enum(["local", "firecracker"]).default("firecracker"),
+  // Controls how agent code executes - 'remote' for VM isolation, 'local' for direct execution
+  AGENT_MODE: z.enum(["local", "remote"]).default("remote"),
 
   // === FIRECRACKER VM CORE CONFIGURATION ===
   // Enable Firecracker microVM execution (hardware-isolated containers)
@@ -34,29 +34,11 @@ const prodConfigSchema = sharedConfigSchema.extend({
     .min(1, "VM_IMAGE_REGISTRY is required in production"),
   // Image tag/version to pull (e.g., 'v1.2.3', 'latest')
   VM_IMAGE_TAG: z.string().default("latest"),
-  // Path to custom Firecracker kernel (optional, uses image default if not specified)
-  FIRECRACKER_KERNEL_PATH: z.string().optional(),
   // Number of vCPUs allocated per VM (1-16 cores)
   VM_CPU_COUNT: z.coerce.number().min(1).max(16).default(1),
   // Memory allocated per VM in megabytes (512MB - 16GB)
   VM_MEMORY_SIZE_MB: z.coerce.number().min(512).max(16384).default(512),
 
-  // === VM IMAGE BUILD CONFIGURATION ===
-  // These control how VM images are built during deployment
-  // Ubuntu base image version for VM filesystem
-  UBUNTU_VERSION: z.string().default("22.04"),
-  // Node.js version installed in VM for JavaScript execution
-  NODE_VERSION: z.string().default("20"),
-  // Python version installed in VM for Python execution
-  PYTHON_VERSION: z.string().default("3.11"),
-  // Linux kernel version for Firecracker VMs
-  KERNEL_VERSION: z.string().default("5.15.0-91-generic"),
-  // VM disk image size (how much storage each VM gets)
-  VM_IMAGE_SIZE: z.string().default("2G"),
-  // Compression for root filesystem (reduces image size)
-  ROOTFS_COMPRESSION: z.string().default("gzip"),
-  // Compression for kernel image (reduces boot time)
-  KERNEL_COMPRESSION: z.string().default("gzip"),
 
   // === KUBERNETES CLUSTER CONFIGURATION ===
   // Namespace where Firecracker pods are deployed
@@ -72,15 +54,13 @@ const prodConfigSchema = sharedConfigSchema.extend({
 
   // === KUBERNETES POD CONFIGURATION ===
   // Node selector to target bare metal instances with KVM support
-  FIRECRACKER_NODE_SELECTOR: z.string().default("firecracker=true"),
-  // Path to KVM device on host nodes (required for VM execution)
-  KVM_DEVICE_PATH: z.string().default("/dev/kvm"),
+  FIRECRACKER_NODE_SELECTOR: z.string().default("remote=true"),
   // Pod restart policy (Never = single-use pods, OnFailure = retry on crashes)
   POD_RESTART_POLICY: z.string().default("Never"),
   // Service account for pod security and RBAC permissions
   POD_SERVICE_ACCOUNT: z.string().default("shadow-firecracker-vm-sa"),
-  // Runtime class for Firecracker container execution
-  RUNTIME_CLASS: z.string().default("firecracker"),
+  // Runtime class for Kata QEMU container execution
+  RUNTIME_CLASS: z.string().default("kata-qemu"),
   // Enable privileged containers (required for VM creation)
   PRIVILEGED_CONTAINERS: z.boolean().default(true),
   // Linux capabilities needed for VM management
@@ -101,12 +81,6 @@ const prodConfigSchema = sharedConfigSchema.extend({
   VM_NETWORK_POLICY: z.string().default("shadow-vm-isolation"),
 
   // === VM SECURITY SETTINGS ===
-  // User ID for Firecracker jailer (isolates VM process)
-  JAILER_UID: z.coerce.number().default(1000),
-  // Group ID for Firecracker jailer
-  JAILER_GID: z.coerce.number().default(1000),
-  // Base directory for chroot jail (VM filesystem isolation)
-  CHROOT_BASE_DIR: z.string().default("/srv/jailer"),
   // Maximum file size limit per VM (128MB = prevents disk abuse)
   VM_FILE_SIZE_LIMIT: z.coerce.number().default(134217728), // 128MB
   // Maximum open file descriptors per VM (prevents resource exhaustion)
@@ -210,14 +184,14 @@ const prodConfigSchema = sharedConfigSchema.extend({
 const prodValidationRules = (data: z.infer<typeof prodConfigSchema>) => {
   const errors: string[] = [];
 
-  // If firecracker mode is enabled, ensure required fields are present
-  if (data.AGENT_MODE === "firecracker" && data.FIRECRACKER_ENABLED) {
+  // If remote mode is enabled, ensure required fields are present
+  if (data.AGENT_MODE === "remote" && data.FIRECRACKER_ENABLED) {
     if (!data.VM_IMAGE_REGISTRY) {
-      errors.push("VM_IMAGE_REGISTRY is required when using firecracker mode");
+      errors.push("VM_IMAGE_REGISTRY is required when using remote mode");
     }
     if (!data.K8S_SERVICE_ACCOUNT_TOKEN) {
       errors.push(
-        "K8S_SERVICE_ACCOUNT_TOKEN is required when using firecracker mode"
+        "K8S_SERVICE_ACCOUNT_TOKEN is required when using remote mode"
       );
     }
   }
@@ -238,7 +212,7 @@ const prodValidationRules = (data: z.infer<typeof prodConfigSchema>) => {
     return {
       success: false,
       error: {
-        message: "Production configuration validation failed",
+        message: "Remote execution configuration validation failed",
         details: errors,
       },
     };
@@ -294,18 +268,9 @@ const prodConfig = {
   firecrackerEnabled: parsed.data.FIRECRACKER_ENABLED,
   vmImageRegistry: parsed.data.VM_IMAGE_REGISTRY,
   vmImageTag: parsed.data.VM_IMAGE_TAG,
-  firecrackerKernelPath: parsed.data.FIRECRACKER_KERNEL_PATH,
   vmCpuCount: parsed.data.VM_CPU_COUNT,
   vmMemorySizeMB: parsed.data.VM_MEMORY_SIZE_MB,
 
-  // VM Image Build Configuration
-  ubuntuVersion: parsed.data.UBUNTU_VERSION,
-  nodeVersion: parsed.data.NODE_VERSION,
-  pythonVersion: parsed.data.PYTHON_VERSION,
-  kernelVersion: parsed.data.KERNEL_VERSION,
-  vmImageSize: parsed.data.VM_IMAGE_SIZE,
-  rootfsCompression: parsed.data.ROOTFS_COMPRESSION,
-  kernelCompression: parsed.data.KERNEL_COMPRESSION,
 
   // Kubernetes configuration
   kubernetesNamespace: parsed.data.KUBERNETES_NAMESPACE,
@@ -315,7 +280,6 @@ const prodConfig = {
 
   // Kubernetes Pod Configuration
   firecrackerNodeSelector: parsed.data.FIRECRACKER_NODE_SELECTOR,
-  kvmDevicePath: parsed.data.KVM_DEVICE_PATH,
   podRestartPolicy: parsed.data.POD_RESTART_POLICY,
   podServiceAccount: parsed.data.POD_SERVICE_ACCOUNT,
   runtimeClass: parsed.data.RUNTIME_CLASS,
@@ -332,9 +296,6 @@ const prodConfig = {
   vmNetworkPolicy: parsed.data.VM_NETWORK_POLICY,
 
   // VM Security settings
-  jailerUid: parsed.data.JAILER_UID,
-  jailerGid: parsed.data.JAILER_GID,
-  chrootBaseDir: parsed.data.CHROOT_BASE_DIR,
   vmFileSizeLimit: parsed.data.VM_FILE_SIZE_LIMIT,
   vmOpenFilesLimit: parsed.data.VM_OPEN_FILES_LIMIT,
   vmProcessLimit: parsed.data.VM_PROCESS_LIMIT,

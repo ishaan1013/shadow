@@ -8,15 +8,15 @@ import {
 } from "../interfaces/types";
 import config from "../../config";
 import { getGitHubAccessToken } from "../../utils/github-account";
-import { FirecrackerToolExecutor } from "./firecracker-tool-executor";
-import { FirecrackerVMRunner } from "./firecracker-vm-runner";
+import { RemoteToolExecutor } from "./remote-tool-executor";
+import { RemoteVMRunner } from "./remote-vm-runner";
 
 /**
- * FirecrackerWorkspaceManager manages Firecracker microVMs for isolated agent execution
+ * RemoteWorkspaceManager manages remote VMs for isolated agent execution
  * Each task gets its own VM with hardware-level isolation
  */
-export class FirecrackerWorkspaceManager implements WorkspaceManager {
-  private vmRunner: FirecrackerVMRunner;
+export class RemoteWorkspaceManager implements WorkspaceManager {
+  private vmRunner: RemoteVMRunner;
 
   constructor(
     options: {
@@ -26,16 +26,16 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
       timeout?: number;
     } = {}
   ) {
-    this.vmRunner = new FirecrackerVMRunner(options);
+    this.vmRunner = new RemoteVMRunner(options);
   }
 
   /**
-   * Prepare a workspace for a task by creating a Firecracker VM
+   * Prepare a workspace for a task by creating a remote VM
    */
   async prepareWorkspace(taskConfig: TaskConfig): Promise<WorkspaceInfo> {
     try {
       console.log(
-        `[FIRECRACKER_WM] Preparing Firecracker VM workspace for task ${taskConfig.id}`
+        `[REMOTE_WM] Preparing remote VM workspace for task ${taskConfig.id}`
       );
 
       // Get GitHub access token for the user
@@ -46,13 +46,13 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
         );
       }
 
-      // Create the Firecracker VM pod using the VM runner
+      // Create the remote VM pod using the VM runner
       const createdPod = await this.vmRunner.createVMPod(
         taskConfig,
         githubToken
       );
       console.log(
-        `[FIRECRACKER_WM] Created Firecracker VM pod: ${createdPod.metadata?.name}`
+        `[REMOTE_WM] Created remote VM pod: ${createdPod.metadata?.name}`
       );
 
       // Wait for VM to be ready (this includes VM boot time and sidecar startup)
@@ -64,10 +64,10 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
       const workspacePath = `/workspace`; // Standard workspace path in VM
 
       console.log(
-        `[FIRECRACKER_WM] Firecracker VM workspace ready at ${podIP}:8080`
+        `[REMOTE_WM] Remote VM workspace ready at ${podIP}:8080`
       );
       console.log(
-        `[FIRECRACKER_WM] VM is running with true hardware isolation`
+        `[REMOTE_WM] VM is running with true hardware isolation`
       );
 
       return {
@@ -79,7 +79,7 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
       };
     } catch (error) {
       console.error(
-        `[FIRECRACKER_WM] Failed to prepare Firecracker VM workspace:`,
+        `[REMOTE_WM] Failed to prepare remote VM workspace:`,
         error
       );
       return {
@@ -95,23 +95,23 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
   ): Promise<{ success: boolean; message: string }> {
     try {
       console.log(
-        `[FIRECRACKER_WM] Cleaning up Firecracker VM workspace for task ${taskId}`
+        `[REMOTE_WM] Cleaning up remote VM workspace for task ${taskId}`
       );
 
       // Delete the VM pod using the VM runner
       await this.vmRunner.deleteVMPod(taskId);
 
       console.log(
-        `[FIRECRACKER_WM] Deleted Firecracker VM pod: shadow-vm-${taskId.toLowerCase().replaceAll("_", "-")}`
+        `[REMOTE_WM] Deleted remote VM pod: shadow-vm-${taskId.toLowerCase().replaceAll("_", "-")}`
       );
 
       return {
         success: true,
-        message: `Firecracker VM workspace cleaned up successfully for task ${taskId}`,
+        message: `Remote VM workspace cleaned up successfully for task ${taskId}`,
       };
     } catch (error) {
       console.error(
-        `[FIRECRACKER_WM] Failed to cleanup Firecracker VM workspace:`,
+        `[REMOTE_WM] Failed to cleanup remote VM workspace:`,
         error
       );
       return {
@@ -197,8 +197,8 @@ export class FirecrackerWorkspaceManager implements WorkspaceManager {
 
     // Use direct pod IP connectivity
     const sidecarUrl = `http://${podIP}:8080`;
-    console.log(`[FIRECRACKER_WM] Using direct pod IP: ${sidecarUrl}`);
-    return new FirecrackerToolExecutor(taskId, sidecarUrl);
+    console.log(`[REMOTE_WM] Using direct pod IP: ${sidecarUrl}`);
+    return new RemoteToolExecutor(taskId, sidecarUrl);
   }
 
 

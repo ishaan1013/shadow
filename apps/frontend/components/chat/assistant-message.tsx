@@ -191,6 +191,7 @@ export function AssistantMessage({
             role: "tool",
             content: "",
             createdAt: message.createdAt,
+            llmModel: message.llmModel,
             metadata: {
               tool: {
                 name: part.toolName,
