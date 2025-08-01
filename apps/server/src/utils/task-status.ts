@@ -38,7 +38,10 @@ export async function updateTaskStatus(
 /**
  * Set task initialization status
  */
-export async function setInitStatus(taskId: string, status: InitStatus): Promise<void> {
+export async function setInitStatus(
+  taskId: string,
+  status: InitStatus
+): Promise<void> {
   await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -51,7 +54,11 @@ export async function setInitStatus(taskId: string, status: InitStatus): Promise
 /**
  * Set task as failed with error message
  */
-export async function setTaskFailed(taskId: string, step: InitStatus, error: string): Promise<void> {
+export async function setTaskFailed(
+  taskId: string,
+  step: InitStatus,
+  error: string
+): Promise<void> {
   await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -77,16 +84,19 @@ export async function clearTaskProgress(taskId: string): Promise<void> {
 /**
  * Schedule task for cleanup (remote mode only)
  */
-export async function scheduleTaskCleanup(taskId: string, delayMinutes: number): Promise<void> {
+export async function scheduleTaskCleanup(
+  taskId: string,
+  delayMinutes: number
+): Promise<void> {
   const agentMode = getAgentMode();
-  
+
   // Only schedule cleanup for remote mode
-  if (agentMode !== "firecracker") {
+  if (agentMode !== "remote") {
     return;
   }
 
   const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
-  
+
   await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -95,7 +105,9 @@ export async function scheduleTaskCleanup(taskId: string, delayMinutes: number):
     },
   });
 
-  console.log(`[TASK_CLEANUP] Task ${taskId} scheduled for cleanup at ${scheduledAt.toISOString()}`);
+  console.log(
+    `[TASK_CLEANUP] Task ${taskId} scheduled for cleanup at ${scheduledAt.toISOString()}`
+  );
 }
 
 /**
@@ -108,6 +120,6 @@ export async function cancelTaskCleanup(taskId: string): Promise<void> {
       scheduledCleanupAt: null,
     },
   });
-  
+
   console.log(`[TASK_CLEANUP] Cancelled cleanup for task ${taskId}`);
 }

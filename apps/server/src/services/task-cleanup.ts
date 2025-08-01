@@ -13,7 +13,7 @@ export class TaskCleanupService {
     const agentMode = getAgentMode();
 
     // Only run cleanup in firecracker mode
-    if (agentMode !== "firecracker") {
+    if (agentMode !== "remote") {
       console.log("[TASK_CLEANUP] Cleanup service disabled in local mode");
       return;
     }
