@@ -1,6 +1,7 @@
 import { app, socketIOServer } from "./app";
 import config from "./config";
 import { stopAllFileSystemWatchers } from "./tools";
+import { taskCleanupService } from "./services/task-cleanup";
 
 const apiServer = app.listen(config.apiPort, () => {
   console.log(`Server running on port ${config.apiPort}`);
@@ -8,11 +9,17 @@ const apiServer = app.listen(config.apiPort, () => {
 
 const socketServer = socketIOServer.listen(config.socketPort, () => {
   console.log(`Socket.IO server running on port ${config.socketPort}`);
+  
+  // Start background cleanup service
+  taskCleanupService.start();
 });
 
 // Graceful shutdown handling
 const shutdown = (signal: string) => {
   console.log(`\n[SERVER] Received ${signal}, starting graceful shutdown...`);
+  
+  // Stop cleanup service
+  taskCleanupService.stop();
   
   // Stop all filesystem watchers first
   stopAllFileSystemWatchers();

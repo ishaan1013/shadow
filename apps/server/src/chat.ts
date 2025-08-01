@@ -21,7 +21,11 @@ import {
   startStream,
 } from "./socket";
 import config from "./config";
-import { updateTaskStatus } from "./utils/task-status";
+import {
+  updateTaskStatus,
+  scheduleTaskCleanup,
+  cancelTaskCleanup,
+} from "./utils/task-status";
 import { createToolExecutor } from "./execution";
 
 export class ChatService {
@@ -394,6 +398,65 @@ export class ChatService {
     }));
   }
 
+  /**
+   * Handle follow-up logic for tasks
+   */
+  private async handleFollowUpLogic(taskId: string): Promise<void> {
+    try {
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: {
+          status: true,
+          initStatus: true,
+          scheduledCleanupAt: true,
+        },
+      });
+
+      if (!task) {
+        console.warn(`[CHAT] Task not found for follow-up logic: ${taskId}`);
+        return;
+      }
+
+      // Handle COMPLETED or STOPPED tasks with scheduled cleanup
+      if ((task.status === "COMPLETED" || task.status === "STOPPED") && task.scheduledCleanupAt) {
+        console.log(
+          `[CHAT] Following up on ${task.status.toLowerCase()} task ${taskId}, cancelling cleanup`
+        );
+
+        await cancelTaskCleanup(taskId);
+        await updateTaskStatus(taskId, "RUNNING", "CHAT");
+
+        return;
+      }
+
+      // Handle COMPLETED or STOPPED tasks without scheduled cleanup (need re-initialization)
+      if ((task.status === "COMPLETED" || task.status === "STOPPED") && !task.scheduledCleanupAt) {
+        console.log(
+          `[CHAT] Following up on ${task.status.toLowerCase()} task ${taskId}, requires re-initialization`
+        );
+
+        // Set task back to INITIALIZING and reset init status
+        await updateTaskStatus(taskId, "INITIALIZING", "CHAT");
+        await prisma.task.update({
+          where: { id: taskId },
+          data: { initStatus: "INACTIVE" },
+        });
+
+        // Note: Re-initialization will be triggered by the initialization system
+        // when it detects INITIALIZING status with INACTIVE init status
+        return;
+      }
+
+      // ARCHIVED is permanent - no follow-up handling
+      // For other statuses (RUNNING, INITIALIZING, FAILED), no special handling needed
+    } catch (error) {
+      console.error(
+        `[CHAT] Error in follow-up logic for task ${taskId}:`,
+        error
+      );
+    }
+  }
+
   async processUserMessage({
     taskId,
     userMessage,
@@ -411,6 +474,9 @@ export class ChatService {
     workspacePath?: string;
     queue?: boolean;
   }) {
+    // Handle follow-up logic for COMPLETED tasks
+    await this.handleFollowUpLogic(taskId);
+
     if (queue) {
       if (this.activeStreams.has(taskId)) {
         console.log(
@@ -797,11 +863,14 @@ export class ChatService {
       console.log(`[CHAT] Assistant parts: ${assistantParts.length}`);
       console.log(`[CHAT] Tool calls executed: ${toolCallSequences.size}`);
 
-      // Update task status based on how stream ended
+      // Update task status and schedule cleanup based on how stream ended
       if (wasStoppedEarly) {
         await updateTaskStatus(taskId, "STOPPED", "CHAT");
+        // Schedule cleanup for STOPPED tasks too (same as COMPLETED)
+        await scheduleTaskCleanup(taskId, 10);
       } else {
-        await updateTaskStatus(taskId, "COMPLETED", "CHAT");
+        // Schedule cleanup for remote mode (10-minute delay)
+        await scheduleTaskCleanup(taskId, 10);
 
         // Commit changes if there are any (only for successfully completed responses)
         try {

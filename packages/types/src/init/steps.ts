@@ -1,28 +1,22 @@
-import type { InitStepType } from "@repo/db";
+import type { InitStatus } from "@repo/db";
 
 /**
  * Human-readable display names for initialization steps
  */
-export const STEP_DISPLAY_NAMES: Record<InitStepType, string> = {
-  // Local mode step
+export const STEP_DISPLAY_NAMES: Record<InitStatus, string> = {
+  INACTIVE: "Not Started",
   PREPARE_WORKSPACE: "Preparing Workspace",
-
-  // Firecracker-specific steps
   CREATE_VM: "Creating VM",
   WAIT_VM_READY: "Starting VM",
   VERIFY_VM_WORKSPACE: "Verifying Workspace",
-
-  // Repository indexing step (both modes)
   INDEX_REPOSITORY: "Indexing Repository",
-
-  // Cleanup step (firecracker only)
-  CLEANUP_WORKSPACE: "Cleaning Up"
+  ACTIVE: "Ready"
 };
 
 /**
  * Get all step display names in execution order for a given mode
  */
-export function getStepsForMode(mode: "local" | "firecracker"): InitStepType[] {
+export function getStepsForMode(mode: "local" | "firecracker"): InitStatus[] {
   if (mode === "firecracker") {
     return [
       "CREATE_VM",

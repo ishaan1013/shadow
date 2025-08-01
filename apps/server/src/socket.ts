@@ -1,4 +1,4 @@
-import { prisma } from "@repo/db";
+import { prisma, InitStatus } from "@repo/db";
 import {
   StreamChunk,
   ServerToClientEvents,
@@ -573,11 +573,26 @@ export function handleStreamError(error: unknown, taskId: string) {
   }
 }
 
-export function emitTaskStatusUpdate(taskId: string, status: string) {
+export async function emitTaskStatusUpdate(taskId: string, status: string, initStatus?: InitStatus) {
   if (io) {
+    // If initStatus not provided, fetch current task state
+    let currentInitStatus = initStatus;
+    if (!currentInitStatus) {
+      try {
+        const task = await prisma.task.findUnique({
+          where: { id: taskId },
+          select: { initStatus: true }
+        });
+        currentInitStatus = task?.initStatus;
+      } catch (error) {
+        console.error(`[SOCKET] Error fetching initStatus for task ${taskId}:`, error);
+      }
+    }
+
     const statusUpdateEvent = {
       taskId,
       status,
+      initStatus: currentInitStatus,
       timestamp: new Date().toISOString(),
     };
 

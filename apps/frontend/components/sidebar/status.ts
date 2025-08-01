@@ -5,7 +5,6 @@ import {
   CircleDashed,
   PlayCircle,
   StopCircle,
-  XCircleIcon,
 } from "lucide-react";
 import {
   type TaskWithInitFields,
@@ -21,7 +20,6 @@ export const statusOrder = {
   STOPPED: 3,
   FAILED: 4,
   ARCHIVED: 5,
-  CANCELLED: 6,
 };
 
 // Status icons and colors
@@ -48,7 +46,6 @@ export const statusColorsConfig = {
     className: "text-neutral-500",
     bg: "bg-neutral-500",
   },
-  CANCELLED: { icon: XCircleIcon, className: "text-red-400", bg: "bg-red-500" },
 };
 
 /**

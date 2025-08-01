@@ -1,7 +1,7 @@
 import type {
   FinishReason
 } from "ai";
-import type { InitStepType } from "@repo/db";
+import type { InitStatus } from "@repo/db";
 import { ToolResultTypes } from "../tools/results";
 import { CompletionTokenUsage } from "./messages";
 
@@ -80,7 +80,7 @@ export interface InitializationProgress {
   taskId: string;
 
   // Current step info
-  currentStep?: InitStepType;
+  currentStep?: InitStatus;
   stepName?: string; // Human readable name
   message?: string;
 
@@ -91,6 +91,6 @@ export interface InitializationProgress {
   // Error details
   error?: string;
   
-  // NEW: Progress tracking fields
-  lastCompletedStep?: InitStepType; // For progress tracking
+  // Progress tracking fields
+  initStatus?: InitStatus; // For progress tracking
 }
