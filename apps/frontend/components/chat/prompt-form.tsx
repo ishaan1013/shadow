@@ -36,6 +36,7 @@ import type { FilteredRepository as Repository } from "@/lib/github/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { QueuedMessage } from "./queued-message";
 import { ModelSelector } from "./model-selector";
+import { generateIssuePrompt } from "@/lib/github/issue-prompt";
 
 export function PromptForm({
   onSubmit,
@@ -352,16 +353,15 @@ export function PromptForm({
     }
 
     const completeRepoUrl = `https://github.com/${repo.full_name}`;
+    const issuePrompt = generateIssuePrompt(issue);
 
     const formData = new FormData();
-    // Empty message for issue-based tasks (will be overridden by issue prompt in backend)
-    formData.append("message", "Empty message");
+    formData.append("message", issuePrompt);
     formData.append("model", selectedModel);
     formData.append("repoUrl", completeRepoUrl);
     formData.append("repoFullName", repo.full_name);
     formData.append("baseBranch", branch.name);
     formData.append("baseCommitSha", branch.commitSha);
-    formData.append("githubIssueId", issue.id);
 
     startTransition(async () => {
       let taskId: string | null = null;
