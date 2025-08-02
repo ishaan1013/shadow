@@ -6,7 +6,13 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { 
   Activity,
-  TrendingDown
+  TrendingDown,
+  Zap,
+
+  FileText,
+  Gauge,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import {
   Tooltip,
@@ -28,6 +34,7 @@ export function ContextUsage({
   const [stats, setStats] = useState<ContextUsageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   const fetchStats = async () => {
     try {
