@@ -342,8 +342,8 @@ export class MessageCompressor {
     await prisma.chatMessage.update({
       where: { id: messageId },
       data: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        compressedVersions: updatedVersions as any,
+        // Type assertion to CompressedVersions for type safety
+        compressedVersions: updatedVersions as CompressedVersions,
         activeCompressionLevel: level
       }
     });
