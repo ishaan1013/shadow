@@ -606,3 +606,13 @@ export function emitTerminalOutput(taskId: string, entry: TerminalEntry) {
     emitToTask(taskId, "terminal-output", { taskId, entry });
   }
 }
+
+export function emitCompressionStats(taskId: string, stats: {
+  compressedTokens: number;
+  uncompressedTokens: number;
+  compressionSavings: number;
+}) {
+  if (io) {
+    emitToTask(taskId, "compression-stats", stats);
+  }
+}

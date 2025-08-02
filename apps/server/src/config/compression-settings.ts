@@ -10,27 +10,27 @@ import { ModelCompressionSettings, ModelType } from "@repo/types";
 export const compressionSettings: ModelCompressionSettings = {
   "claude-sonnet-4-20250514": {
     tokenLimit: 200000,
-    compressionThreshold: 0.5,
+    compressionThreshold: 0.01,
     slidingWindowSize: 4,
   },
   "claude-opus-4-20250514": {
     tokenLimit: 200000,
-    compressionThreshold: 0.5,
+    compressionThreshold: 0.01,
     slidingWindowSize: 4,
   },
   "gpt-4o": {
     tokenLimit: 128000,
-    compressionThreshold: 0.5,
+    compressionThreshold: 0.01,
     slidingWindowSize: 4,
   },
   "o3": {
     tokenLimit: 128000,
-    compressionThreshold: 0.5,
+    compressionThreshold: 0.01,
     slidingWindowSize: 4,
   },
   "o4-mini-high": {
     tokenLimit: 128000,
-    compressionThreshold: 0.5,
+    compressionThreshold: 0.01,
     slidingWindowSize: 4,
   },
 };

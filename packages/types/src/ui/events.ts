@@ -58,6 +58,11 @@ export interface ServerToClientEvents {
   "terminal-error": (data: { error: string }) => void;
 
   "task-status-updated": (data: TaskStatusUpdateEvent) => void;
+  "compression-stats": (data: {
+    compressedTokens: number;
+    uncompressedTokens: number;
+    compressionSavings: number;
+  }) => void;
 }
 
 export interface ClientToServerEvents {

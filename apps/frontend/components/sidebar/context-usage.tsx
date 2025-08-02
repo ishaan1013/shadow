@@ -10,13 +10,15 @@ import {
   FileText,
   ChevronDown,
   ChevronRight,
-  Activity
+  Activity,
+  TrendingDown
 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTaskSocket } from "@/hooks/socket/use-task-socket";
 
 interface ContextUsageProps {
   taskId: string;
@@ -33,6 +35,9 @@ export function ContextUsage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  
+  // Get real-time compression stats from socket
+  const { compressionStats } = useTaskSocket(taskId);
 
   const fetchStats = async () => {
     try {
@@ -134,6 +139,55 @@ export function ContextUsage({
           <span>{formatNumber(stats.tokenLimit)} limit</span>
         </div>
       </div>
+
+      {/* Real-time Compression Stats */}
+      {compressionStats && (
+        <div className="space-y-2 p-2 rounded bg-sidebar-accent/30 border border-sidebar-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingDown className="size-3 text-green-400" />
+              <span className="text-xs font-medium text-green-400">Context Compressed</span>
+            </div>
+            <Badge variant="secondary" className="text-xs">
+              -{formatNumber(compressionStats.compressionSavings)} tokens
+            </Badge>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col gap-1 text-center">
+                  <span className="text-muted-foreground">Original</span>
+                  <span className="font-mono text-foreground">
+                    {formatNumber(compressionStats.uncompressedTokens)}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <span>Tokens without compression</span>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col gap-1 text-center">
+                  <span className="text-muted-foreground">Compressed</span>
+                  <span className="font-mono text-green-400">
+                    {formatNumber(compressionStats.compressedTokens)}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <span>Tokens after compression</span>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          
+          <div className="text-xs text-center text-muted-foreground">
+            {((compressionStats.compressionSavings / compressionStats.uncompressedTokens) * 100).toFixed(1)}% reduction
+          </div>
+        </div>
+      )}
 
       {/* Compression Status */}
       {stats.compressionActive && (

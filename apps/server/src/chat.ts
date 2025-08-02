@@ -19,6 +19,7 @@ import {
   endStream,
   handleStreamError,
   startStream,
+  emitCompressionStats,
 } from "./socket";
 import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
@@ -453,7 +454,9 @@ export class ChatService {
     }
 
     // Use context manager to build optimal context with compression - if no compression it does nothing
-    const contextMessages = await this.contextManager.buildOptimalContext(taskId, llmModel);
+    const contextResult = await this.contextManager.buildOptimalContext(taskId, llmModel);
+    const contextMessages = contextResult.messages;
+    const compressionStats = contextResult.compressionStats;
     
     // Add the current user message to the context
     const messages: Message[] = contextMessages.concat([
@@ -472,6 +475,9 @@ export class ChatService {
     console.log(
       `[CHAT] Using model: ${llmModel}, Tools enabled: ${enableTools}`
     );
+
+    // Emit compression statistics to frontend
+    emitCompressionStats(taskId, compressionStats);
 
     // Start streaming
     startStream();

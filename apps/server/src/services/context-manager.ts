@@ -4,7 +4,6 @@ import {
   Message,
   CompressionLevel,
   ContextUsageStats,
-  MessageMetadata,
 } from "@repo/types";
 import { TokenCounterService } from "./token-counter";
 import { MessageCompressor } from "./message-compressor";
@@ -25,7 +24,8 @@ export class ContextManager {
   async buildOptimalContext(
     taskId: string,
     model: ModelType
-  ): Promise<Message[]> {
+  ): Promise<{ messages: Message[], compressionStats: { compressedTokens: number, uncompressedTokens: number, compressionSavings: number } }> {
+    console.log(`[CONTEXT] Building optimal context for task ${taskId} with model ${model}`);
     // Get all messages for the task
     const dbMessages: ChatMessage[] = await prisma.chatMessage.findMany({
       where: { taskId },
@@ -33,7 +33,14 @@ export class ContextManager {
     });
 
     if (dbMessages.length === 0) {
-      return [];
+      return { 
+        messages: [], 
+        compressionStats: { 
+          compressedTokens: 0, 
+          uncompressedTokens: 0, 
+          compressionSavings: 0 
+        } 
+      };
     }
 
     // Get compression settings for model
@@ -44,10 +51,11 @@ export class ContextManager {
 
     // Convert to our internal format and calculate initial token count
     const messages = this.convertDbMessages(dbMessages, model);
-    const totalTokens = this.tokenCounter.countTotalTokens(
-      messages.map((m) => ({ content: m.content, metadata: m.metadata })),
+    const uncompressedTokens = this.tokenCounter.countTotalTokens(
+      messages.map((m) => ({ content: m.content })),
       model
     );
+    const totalTokens = uncompressedTokens;
 
     console.log(
       `[CONTEXT] Initial context: ${messages.length} messages, ${totalTokens} tokens`
@@ -58,7 +66,15 @@ export class ContextManager {
 
     // If under threshold, don'ts compress
     if (totalTokens <= targetTokens) {
-      return messages;
+      console.log(`[CONTEXT] Initial context is under threshold, returning ${messages.length} messages`);
+      return { 
+        messages, 
+        compressionStats: { 
+          compressedTokens: totalTokens, 
+          uncompressedTokens, 
+          compressionSavings: 0 
+        } 
+      };
     }
 
     // Apply sliding window - keep recent messages uncompressed
@@ -83,15 +99,27 @@ export class ContextManager {
     const finalMessages = [...compressedOlderMessages, ...recentMessages];
 
     const finalTokens = this.tokenCounter.countTotalTokens(
-      finalMessages.map((m) => ({ content: m.content, metadata: m.metadata })),
+      finalMessages.map((m) => ({ content: m.content })),
       model
     );
+
+    const compressionSavings = uncompressedTokens - finalTokens;
 
     console.log(
       `[CONTEXT] Final context: ${finalMessages.length} messages, ${finalTokens} tokens`
     );
+    console.log(
+      `[CONTEXT] Compression savings: ${compressionSavings} tokens (${((compressionSavings / uncompressedTokens) * 100).toFixed(1)}% reduction)`
+    );
 
-    return finalMessages;
+    return { 
+      messages: finalMessages, 
+      compressionStats: { 
+        compressedTokens: finalTokens, 
+        uncompressedTokens, 
+        compressionSavings 
+      } 
+    };
   }
 
   // Compress messages iteratively until under target token count
@@ -113,7 +141,6 @@ export class ContextManager {
       const recentTokens = this.tokenCounter.countTotalTokens(
         recentMessages.map((m) => ({
           content: m.content,
-          metadata: m.metadata,
         })),
         model
       );
@@ -122,7 +149,6 @@ export class ContextManager {
       const currentTokens = this.tokenCounter.countTotalTokens(
         currentMessages.map((m) => ({
           content: m.content,
-          metadata: m.metadata,
         })),
         model
       );
@@ -131,29 +157,38 @@ export class ContextManager {
       const totalTokens = currentTokens + recentTokens;
 
       console.log(
-        `[CONTEXT] ${level} compression: ${totalTokens} total tokens`
-      ); // Debug log
+        `[CONTEXT] Evaluating ${level} compression: current=${currentTokens}, recent=${recentTokens}, total=${totalTokens}, target=${targetTokens}`
+      );
 
       // If we're under target, we're done
       if (totalTokens <= targetTokens) {
+        console.log(`[CONTEXT] Target reached with ${level} compression, stopping compression`);
         break;
       }
 
       // Compress messages to this level
+      console.log(`[CONTEXT] Applying ${level} compression to ${currentMessages.length} older messages`);
       currentMessages = await this.compressMessagesToLevel(
         currentMessages,
         level,
         model
       );
+      
+      const newTokens = this.tokenCounter.countTotalTokens(
+        currentMessages.map((m) => ({ content: m.content })),
+        model
+      );
+      console.log(`[CONTEXT] After ${level} compression: ${currentTokens} -> ${newTokens} tokens (${((currentTokens - newTokens) / currentTokens * 100).toFixed(1)}% reduction)`);
     }
 
     // If still over target after all compression levels, remove oldest messages
     let finalMessages = currentMessages;
+    let messagesRemoved = 0;
+    
     while (finalMessages.length > 0) {
       const recentTokens = this.tokenCounter.countTotalTokens(
         recentMessages.map((m) => ({
           content: m.content,
-          metadata: m.metadata,
         })),
         model
       );
@@ -161,7 +196,6 @@ export class ContextManager {
       const currentTokens = this.tokenCounter.countTotalTokens(
         finalMessages.map((m) => ({
           content: m.content,
-          metadata: m.metadata,
         })),
         model
       );
@@ -169,13 +203,15 @@ export class ContextManager {
       const totalTokens = currentTokens + recentTokens;
 
       if (totalTokens <= targetTokens) {
+        console.log(`[CONTEXT] Target reached after removing ${messagesRemoved} oldest messages`);
         break;
       }
 
       // Remove oldest message
       finalMessages = finalMessages.slice(1);
+      messagesRemoved++;
       console.log(
-        `[CONTEXT] Removed oldest message, ${finalMessages.length} messages remaining`
+        `[CONTEXT] Removed oldest message ${messagesRemoved}, ${finalMessages.length} messages remaining, ${totalTokens} -> ${totalTokens - this.tokenCounter.countTotalTokens([{content: currentMessages[messagesRemoved - 1]?.content || ""}], model)} tokens`
       );
     }
 
@@ -190,7 +226,10 @@ export class ContextManager {
     level: CompressionLevel,
     model: ModelType
   ): Promise<Message[]> {
+    console.log(`[CONTEXT] Compressing ${messages.length} messages to ${level} level`);
     const compressedMessages: Message[] = [];
+    let successfulCompressions = 0;
+    let failedCompressions = 0;
 
     for (const message of messages) {
       try {
@@ -208,20 +247,23 @@ export class ContextManager {
             content: compressed.content,
             metadata: compressed.metadata,
           });
+          successfulCompressions++;
         } else {
           // Keep system/tool messages as-is for now
           compressedMessages.push(message);
         }
       } catch (error) {
         console.warn(
-          `[CONTEXT] Failed to compress message ${message.id}:`,
+          `[CONTEXT] Failed to compress message ${message.id} to ${level}:`,
           error
         );
         // Keep original message if compression fails
         compressedMessages.push(message);
+        failedCompressions++;
       }
     }
 
+    console.log(`[CONTEXT] Compression to ${level} complete: ${successfulCompressions} successful, ${failedCompressions} failed`);
     return compressedMessages;
   }
 
@@ -230,15 +272,59 @@ export class ContextManager {
    */
   private convertDbMessages(dbMessages: ChatMessage[], model: ModelType): Message[] {
     return dbMessages
-      .filter((msg) => msg.role === "USER" || msg.role === "ASSISTANT") // Only include user/assistant messages
-      .map((msg) => ({
-        id: msg.id,
-        role: msg.role.toLowerCase() as Message["role"],
-        content: msg.content,
-        llmModel: msg.llmModel || model,
-        createdAt: msg.createdAt.toISOString(),
-        metadata: msg.metadata as MessageMetadata,
-      }));
+      .filter((msg) => msg.role === "USER" || msg.role === "ASSISTANT" || msg.role === "TOOL") // Include tool messages
+      .map((msg) => {
+        let content = msg.content;
+        let role = msg.role.toLowerCase() as Message["role"];
+        
+        // For tool messages, move tool information from metadata into content
+        if (msg.role === "TOOL" && msg.metadata) {
+          const metadata = msg.metadata as Record<string, unknown>;
+          if (metadata.tool && typeof metadata.tool === 'object') {
+            const toolInfo = metadata.tool as Record<string, unknown>;
+            content = `Tool: ${toolInfo.name}\nArgs: ${JSON.stringify(toolInfo.args, null, 2)}\nResult: ${toolInfo.result || msg.content}`;
+            role = "assistant"; // Convert tool messages to assistant messages for LLM context
+          }
+        }
+        
+        // For assistant messages with tool calls in metadata, include that in content
+        if (msg.role === "ASSISTANT" && msg.metadata) {
+          const metadata = msg.metadata as Record<string, unknown>;
+          if (metadata.parts && Array.isArray(metadata.parts)) {
+            const parts = metadata.parts;
+            const textParts = parts.filter((part: Record<string, unknown>) => part.type === "text").map((part: Record<string, unknown>) => part.text);
+            const toolCalls = parts.filter((part: Record<string, unknown>) => part.type === "tool-call");
+            const toolResults = parts.filter((part: Record<string, unknown>) => part.type === "tool-result");
+            
+            let enrichedContent = textParts.join("");
+            
+            // Add tool calls to content
+            for (const toolCall of toolCalls) {
+              const toolCallTyped = toolCall as Record<string, unknown>;
+              enrichedContent += `\n\n[Tool Call: ${toolCallTyped.toolName}]\nArgs: ${JSON.stringify(toolCallTyped.args, null, 2)}`;
+            }
+            
+            // Add tool results to content
+            for (const toolResult of toolResults) {
+              const toolResultTyped = toolResult as Record<string, unknown>;
+              enrichedContent += `\n\n[Tool Result: ${toolResultTyped.toolName}]\n${typeof toolResultTyped.result === 'string' ? toolResultTyped.result : JSON.stringify(toolResultTyped.result, null, 2)}`;
+            }
+            
+            if (enrichedContent.trim()) {
+              content = enrichedContent;
+            }
+          }
+        }
+
+        return {
+          id: msg.id,
+          role: role,
+          content: content,
+          llmModel: msg.llmModel || model,
+          createdAt: msg.createdAt.toISOString(),
+          metadata: undefined, // Clear metadata as important info is now in content
+        };
+      });
   }
 
 
@@ -292,7 +378,7 @@ export class ContextManager {
 
     // Calculate total tokens
     const totalTokens = this.tokenCounter.countTotalTokens(
-      messages.map((m) => ({ content: m.content, metadata: m.metadata })),
+      messages.map((m) => ({ content: m.content })),
       model
     );
 
