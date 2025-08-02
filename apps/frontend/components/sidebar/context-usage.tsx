@@ -7,8 +7,6 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { 
   Activity,
-  FileText,
-  Gauge,
 } from "lucide-react";
 import {
   Tooltip,
@@ -64,7 +62,7 @@ export function ContextUsage({
   const getUsageBadgeVariant = (percentage: number) => {
     if (percentage >= 80) return "destructive";
     if (percentage >= 60) return "secondary";
-    return "default";
+    return "default"; // Generally as long as our usage is under 60% this behaviour won't be triggered
   };
 
   const formatNumber = (num: number) => {
@@ -109,39 +107,6 @@ export function ContextUsage({
           <span>{formatNumber(stats.tokenLimit)} limit</span>
         </div>
       </div>
-
-      {/* Expandable Details */}
-      {showDetails && (
-        <>
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1.5 p-1.5 rounded bg-sidebar-accent/50">
-                  <FileText className="size-3 text-muted-foreground" />
-                  <span className="font-mono">{stats.totalMessages}</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <span>Total messages in conversation</span>
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1.5 p-1.5 rounded bg-sidebar-accent/50">
-                  <Gauge className="size-3 text-muted-foreground" />
-                  <span className="font-mono">{formatNumber(stats.compressionThreshold)}</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <span>Compression threshold ({Math.round((stats.compressionThreshold / stats.tokenLimit) * 100)}% of limit)</span>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-
-        </>
-      )}
     </div>
   );
 }
