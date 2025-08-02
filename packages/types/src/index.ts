@@ -33,3 +33,6 @@ export * from "./tasks";
 
 // === Codebase Understanding Types ===
 export * from "./codebase-understanding/summaries";
+
+// === GitHub Types ===
+export * from "./github";

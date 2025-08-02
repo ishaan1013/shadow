@@ -13,10 +13,13 @@ import { getGitHubAccessToken } from "./utils/github-account";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
 import { filesRouter } from "./routes/files";
+import { generateIssuePrompt } from "./utils/issue-prompt";
+import { GitHubService } from "./github";
 
 const app = express();
 export const chatService = new ChatService();
 const initializationEngine = new TaskInitializationEngine();
+const githubService = new GitHubService();
 
 // Helper function to parse API keys from cookies
 function parseApiKeysFromCookies(cookieHeader?: string): {
@@ -76,6 +79,7 @@ const initiateTaskSchema = z.object({
     errorMap: () => ({ message: "Invalid model type" }),
   }),
   userId: z.string().min(1, "User ID is required"),
+  githubIssueNumber: z.number().optional(),
 });
 
 const socketIOServer = http.createServer(app);
@@ -142,7 +146,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       });
     }
 
-    const { message, model, userId } = validation.data;
+    const { message, model, userId, githubIssueNumber } = validation.data;
 
     // Verify task exists
     const task = await prisma.task.findUnique({
@@ -151,6 +155,30 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 
     if (!task) {
       return res.status(404).json({ error: "Task not found" });
+    }
+
+    // If issue number provided, fetch issue and generate contextualized prompt
+    let finalMessage = message;
+
+    if (githubIssueNumber) {
+      try {
+        const issue = await githubService.getIssue(
+          task.repoFullName,
+          githubIssueNumber,
+          userId
+        );
+        finalMessage = generateIssuePrompt(issue || undefined);
+
+        console.log(
+          `[TASK_INITIATE] ${issue ? "Fetched" : "Could not fetch"} issue #${githubIssueNumber} for contextualized prompt`
+        );
+      } catch (error) {
+        console.warn(
+          `[TASK_INITIATE] Failed to fetch issue #${githubIssueNumber}:`,
+          error
+        );
+        finalMessage = generateIssuePrompt();
+      }
     }
 
     console.log(
@@ -206,9 +234,17 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 
       console.log("userApiKeys", userApiKeys, "model", model);
 
+      // Update task with GitHub issue number if provided
+      if (githubIssueNumber) {
+        await prisma.task.update({
+          where: { id: taskId },
+          data: { githubIssueNumber },
+        });
+      }
+
       await chatService.processUserMessage({
         taskId,
-        userMessage: message,
+        userMessage: finalMessage,
         llmModel: model as ModelType,
         userApiKeys,
         enableTools: true,

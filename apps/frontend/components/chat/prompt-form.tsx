@@ -31,7 +31,10 @@ import {
 import { toast } from "sonner";
 import { GithubConnection } from "./github";
 import { RepoIssues } from "./repo-issues";
-import type { FilteredRepository as Repository } from "@/lib/github/types";
+import type {
+  GitHubIssue,
+  FilteredRepository as Repository,
+} from "@/lib/github/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { QueuedMessage } from "./queued-message";
 import { ModelSelector } from "./model-selector";
@@ -226,7 +229,7 @@ export function PromptForm({
     (e: React.FormEvent) => {
       e.preventDefault();
 
-      if (!repo || !branch || !message.trim() || !selectedModel) {
+      if (!repo || !branch || !message.trim() || !selectedModel || isPending) {
         return;
       }
 
@@ -339,6 +342,43 @@ export function PromptForm({
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [isHome, isMessageOptionsOpen, messageOptions, isStreaming]);
+
+  const handleCreateTaskForIssue = (issue: GitHubIssue) => {
+    if (!repo || !branch || isPending) {
+      return;
+    }
+
+    if (!selectedModel) {
+      toast.error("Please select a model first");
+      return;
+    }
+
+    const completeRepoUrl = `https://github.com/${repo.full_name}`;
+
+    const formData = new FormData();
+    formData.append("message", ""); // Empty message for issue-based tasks
+    formData.append("model", selectedModel);
+    formData.append("repoUrl", completeRepoUrl);
+    formData.append("repoFullName", repo.full_name);
+    formData.append("baseBranch", branch.name);
+    formData.append("baseCommitSha", branch.commitSha);
+    formData.append("githubIssueNumber", issue.id.toString());
+
+    startTransition(async () => {
+      let taskId: string | null = null;
+      try {
+        taskId = await createTask(formData);
+      } catch (error) {
+        toast.error("Failed to create task", {
+          description: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+      if (taskId) {
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        redirect(`/tasks/${taskId}`);
+      }
+    });
+  };
 
   return (
     <>
@@ -497,7 +537,13 @@ export function PromptForm({
       </form>
 
       {/* Github issues: only show on home page when repo is selected */}
-      {isHome && repo && branch && <RepoIssues repository={repo} />}
+      {isHome && repo && branch && (
+        <RepoIssues
+          repository={repo}
+          isPending={isPending}
+          handleSubmit={handleCreateTaskForIssue}
+        />
+      )}
     </>
   );
 }

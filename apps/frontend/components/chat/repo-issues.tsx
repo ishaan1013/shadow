@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { useGitHubIssues } from "@/hooks/use-github-issues";
-import { useGitHubStatus } from "@/hooks/use-github-status";
 import type {
   GitHubIssue,
   FilteredRepository as Repository,
@@ -14,10 +13,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import "./repo-issues.css";
 
-export function RepoIssues({ repository }: { repository: Repository }) {
+export function RepoIssues({
+  repository,
+  isPending,
+  handleSubmit,
+}: {
+  repository: Repository;
+  isPending: boolean;
+  handleSubmit: (issue: GitHubIssue) => void;
+}) {
   const [isIssuesExpanded, setIsIssuesExpanded] = useState(false);
-
-  const { data: githubStatus } = useGitHubStatus();
 
   const {
     data: issues = [],
@@ -27,11 +32,7 @@ export function RepoIssues({ repository }: { repository: Repository }) {
     repoFullName: repository.full_name,
   });
 
-  if (!githubStatus?.isAppInstalled) {
-    return null;
-  }
-
-  if (isLoadingIssues) return null;
+  if (isLoadingIssues || issues.length === 0) return null;
 
   return (
     <IssuesContent
@@ -39,6 +40,8 @@ export function RepoIssues({ repository }: { repository: Repository }) {
       isIssuesExpanded={isIssuesExpanded}
       toggleIssuesExpanded={() => setIsIssuesExpanded((prev) => !prev)}
       handleRefresh={refetchIssues}
+      handleSubmit={handleSubmit}
+      isPending={isPending}
     />
   );
 }
@@ -48,11 +51,15 @@ function IssuesContent({
   isIssuesExpanded,
   toggleIssuesExpanded,
   handleRefresh,
+  handleSubmit,
+  isPending,
 }: {
   issues: GitHubIssue[];
   isIssuesExpanded: boolean;
   toggleIssuesExpanded: () => void;
   handleRefresh: () => void;
+  handleSubmit: (issue: GitHubIssue) => void;
+  isPending: boolean;
 }) {
   const [hasMounted, setHasMounted] = useState(false);
 
@@ -109,6 +116,8 @@ function IssuesContent({
               <Button
                 variant="ghost"
                 key={issue.id}
+                onClick={() => handleSubmit(issue)}
+                disabled={isPending}
                 className={cn(
                   "group/issue-button relative z-0 w-full max-w-full justify-between overflow-hidden font-normal",
                   hasMounted ? "" : "animate-issue-in"

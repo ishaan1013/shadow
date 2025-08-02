@@ -3,6 +3,7 @@ import type { RestEndpointMethodTypes } from "@octokit/plugin-rest-endpoint-meth
 import config from "../config";
 import { execAsync } from "../utils/exec";
 import { githubTokenManager } from "../utils/github-token-manager";
+import type { GitHubIssue } from "@repo/types";
 
 export interface CloneResult {
   success: boolean;
@@ -524,6 +525,72 @@ export class GitHubService {
         }
         throw new Error(
           `Failed to update pull request: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    });
+  }
+
+  /**
+   * Get a single issue by number
+   */
+  async getIssue(
+    repoFullName: string,
+    issueNumber: number,
+    userId: string
+  ): Promise<GitHubIssue | null> {
+    return this.executeWithRetry(userId, async (accessToken) => {
+      const [owner, repo] = repoFullName.split("/");
+      const octokit = this.createOctokit(accessToken);
+
+      if (!owner || !repo) {
+        throw new Error(`Invalid repository full name: ${repoFullName}`);
+      }
+
+      try {
+        const { data } = await octokit.rest.issues.get({
+          owner,
+          repo,
+          issue_number: issueNumber,
+        });
+
+        // Transform to our GitHubIssue interface
+        return {
+          id: data.id,
+          title: data.title,
+          body: data.body || null,
+          state: data.state as "open" | "closed",
+          user: data.user
+            ? {
+                login: data.user.login,
+                avatar_url: data.user.avatar_url,
+              }
+            : null,
+          labels:
+            data.labels?.map((label) => ({
+              id: typeof label === "string" ? 0 : label.id || 0,
+              name: typeof label === "string" ? label : label.name || "",
+              color: typeof label === "string" ? "" : label.color || "",
+            })) || [],
+          assignees:
+            data.assignees?.map((assignee) => ({
+              login: assignee.login,
+              avatar_url: assignee.avatar_url,
+            })) || [],
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          html_url: data.html_url,
+        };
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 404
+        ) {
+          // Issue not found - return null instead of throwing
+          return null;
+        }
+        throw new Error(
+          `Failed to get issue: ${error instanceof Error ? error.message : "Unknown error"}`
         );
       }
     });
