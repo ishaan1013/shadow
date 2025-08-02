@@ -9,17 +9,17 @@ import { ChatService } from "./chat";
 import { TaskInitializationEngine } from "./initialization";
 import { errorHandler } from "./middleware/error-handler";
 import { createSocketServer } from "./socket";
-import { getGitHubAccessToken } from "./utils/github-account";
+import { getGitHubAccessToken } from "./github/auth/account-service";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
 import { filesRouter } from "./routes/files";
-import { generateIssuePrompt } from "./utils/issue-prompt";
-import { GitHubService } from "./github";
+import { generateIssuePrompt } from "./github/services/issue-service";
+import { GitHubApiClient } from "./github/api/github-api-client";
 
 const app = express();
 export const chatService = new ChatService();
 const initializationEngine = new TaskInitializationEngine();
-const githubService = new GitHubService();
+const githubApiClient = new GitHubApiClient();
 
 // Helper function to parse API keys from cookies
 function parseApiKeysFromCookies(cookieHeader?: string): {
@@ -162,7 +162,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 
     if (githubIssueNumber) {
       try {
-        const issue = await githubService.getIssue(
+        const issue = await githubApiClient.getIssue(
           task.repoFullName,
           githubIssueNumber,
           userId

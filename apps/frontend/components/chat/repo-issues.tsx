@@ -2,10 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 import { useGitHubIssues } from "@/hooks/use-github-issues";
-import type {
-  GitHubIssue,
-  FilteredRepository as Repository,
-} from "@/lib/github/types";
+import type { GitHubIssue } from "@repo/types";
+import type { FilteredRepository as Repository } from "@/lib/github/types";
 import { ArrowRight, Circle, Minus, Plus, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GithubIssueIcon } from "../graphics/github/github-issue-icon";

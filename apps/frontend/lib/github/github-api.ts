@@ -6,10 +6,10 @@ import {
   createInstallationOctokit,
   getGitHubAppInstallationUrl,
 } from "@/lib/github/github-app";
+import { GitHubIssue } from "@repo/types";
 import {
   Branch,
   FilteredRepository,
-  GitHubIssue,
   GitHubStatus,
   GroupedRepos,
   UserRepository,

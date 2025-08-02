@@ -31,10 +31,8 @@ import {
 import { toast } from "sonner";
 import { GithubConnection } from "./github";
 import { RepoIssues } from "./repo-issues";
-import type {
-  GitHubIssue,
-  FilteredRepository as Repository,
-} from "@/lib/github/types";
+import type { GitHubIssue } from "@repo/types";
+import type { FilteredRepository as Repository } from "@/lib/github/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { QueuedMessage } from "./queued-message";
 import { ModelSelector } from "./model-selector";
@@ -356,7 +354,8 @@ export function PromptForm({
     const completeRepoUrl = `https://github.com/${repo.full_name}`;
 
     const formData = new FormData();
-    formData.append("message", ""); // Empty message for issue-based tasks
+    // Empty message for issue-based tasks (will be overridden by issue prompt in backend)
+    formData.append("message", "Empty message");
     formData.append("model", selectedModel);
     formData.append("repoUrl", completeRepoUrl);
     formData.append("repoFullName", repo.full_name);

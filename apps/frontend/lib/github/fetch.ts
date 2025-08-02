@@ -1,4 +1,5 @@
-import { Branch, GitHubIssue, GitHubStatus, GroupedRepos } from "./types";
+import { GitHubIssue } from "@repo/types";
+import { Branch, GitHubStatus, GroupedRepos } from "./types";
 
 /*
 Client-side API functions (for use in hooks)

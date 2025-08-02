@@ -1,21 +1,8 @@
 import { prisma } from "@repo/db";
 import { URLSearchParams } from "url";
-import config from "../config";
+import config from "../../config";
 
-export interface TokenRefreshResult {
-  success: boolean;
-  accessToken?: string;
-  error?: string;
-}
-
-export interface GitHubTokenResponse {
-  access_token: string;
-  expires_in: number;
-  refresh_token: string;
-  refresh_token_expires_in: number;
-  scope: string;
-  token_type: string;
-}
+import type { TokenRefreshResult, GitHubTokenResponse } from "../types";
 
 export class GitHubTokenManager {
   /**

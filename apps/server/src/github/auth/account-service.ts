@@ -1,5 +1,5 @@
 import { prisma } from "@repo/db";
-import { githubTokenManager } from "./github-token-manager";
+import { githubTokenManager } from "./token-manager";
 
 export async function getGitHubAccount(userId: string) {
   const account = await prisma.account.findFirst({

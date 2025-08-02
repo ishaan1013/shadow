@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import config from "../../config";
-import { GitHubService } from "../../github";
+import { RepositoryService } from "../../github/api/repository-service";
 import { execAsync } from "../../utils/exec";
 import { WorkspaceManager } from "../interfaces/workspace-manager";
 import { ToolExecutor } from "../interfaces/tool-executor";
@@ -20,10 +20,10 @@ import logger from "@/indexing/logger";
  * LocalWorkspaceManager implements workspace management for local filesystem execution
  */
 export class LocalWorkspaceManager implements WorkspaceManager {
-  private githubService: GitHubService;
+  private repositoryService: RepositoryService;
 
   constructor() {
-    this.githubService = new GitHubService();
+    this.repositoryService = new RepositoryService();
   }
 
   /**
@@ -93,7 +93,7 @@ export class LocalWorkspaceManager implements WorkspaceManager {
       await this.ensureWorkspaceExists(workspacePath);
 
       // Clone the repository
-      const cloneResult = await this.githubService.cloneRepository(
+      const cloneResult = await this.repositoryService.cloneRepository(
         repoFullName,
         baseBranch,
         workspacePath,

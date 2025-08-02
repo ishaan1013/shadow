@@ -1,6 +1,5 @@
 import { getUser } from "@/lib/auth/get-user";
 import { getGitHubIssues } from "@/lib/github/github-api";
-import { GitHubIssue } from "@/lib/github/types";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {

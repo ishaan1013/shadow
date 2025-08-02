@@ -7,7 +7,7 @@ import {
   TaskConfig,
 } from "../interfaces/types";
 import config from "../../config";
-import { getGitHubAccessToken } from "../../utils/github-account";
+import { getGitHubAccessToken } from "../../github/auth/account-service";
 import { RemoteToolExecutor } from "./remote-tool-executor";
 import { RemoteVMRunner } from "./remote-vm-runner";
 
