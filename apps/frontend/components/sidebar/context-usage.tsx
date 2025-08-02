@@ -1,18 +1,14 @@
 "use client";
 
 import { ContextUsageStats } from "@repo/types";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { 
   Activity,
-  TrendingDown,
-  Zap,
-
   FileText,
   Gauge,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 import {
   Tooltip,
@@ -23,46 +19,26 @@ import {
 interface ContextUsageProps {
   taskId: string;
   model?: string;
-  refreshInterval?: number;
 }
 
 export function ContextUsage({ 
   taskId, 
-  model = "gpt-4o",
-  refreshInterval = 10000 
+  model = "gpt-4o" 
 }: ContextUsageProps) {
-  const [stats, setStats] = useState<ContextUsageStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
-  const fetchStats = async () => {
-    try {
+  const { data: stats, isLoading: loading, error } = useQuery({
+    queryKey: ["context-usage", taskId, model],
+    queryFn: async (): Promise<ContextUsageStats> => {
       const response = await fetch(`/api/context/usage/${taskId}?model=${model}`);
       if (!response.ok) {
-        console.warn(`Context stats unavailable: ${response.statusText}`);
-        return;
+        throw new Error(`Context stats unavailable: ${response.statusText}`);
       }
-      const data: ContextUsageStats = await response.json();
-      setStats(data);
-      setError(null);
-    } catch (err) {
-      console.error("Error fetching context stats:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // Initial fetch
-    fetchStats();
-
-    // Set up interval for periodic updates
-    const interval = setInterval(fetchStats, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [taskId, model, refreshInterval]);
+      return response.json();
+    },
+    staleTime: 30000, // Consider data stale after 30 seconds
+    retry: 1, // Only retry once on failure
+  });
 
   if (loading) {
     return (
@@ -73,7 +49,7 @@ export function ContextUsage({
     );
   }
 
-  if (error || !stats) {
+  if (error) {
     return (
       <div className="flex items-center gap-2 p-2 text-sm text-red-400">
         <Activity className="size-4" />
@@ -82,11 +58,9 @@ export function ContextUsage({
     );
   }
 
-  const getUsageColor = (percentage: number) => {
-    if (percentage >= 80) return "text-red-400";
-    if (percentage >= 60) return "text-yellow-400";
-    return "text-green-400";
-  };
+  if (!stats) {
+    return null;
+  }
 
   const getUsageBadgeVariant = (percentage: number) => {
     if (percentage >= 80) return "destructive";
@@ -136,78 +110,6 @@ export function ContextUsage({
           <span>{formatNumber(stats.tokenLimit)} limit</span>
         </div>
       </div>
-
-      {/* Compression Stats */}
-      {stats.currentCompressionStats && (
-        <div className="space-y-2 p-2 rounded bg-sidebar-accent/30 border border-sidebar-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingDown className="size-3 text-green-400" />
-              <span className="text-xs font-medium text-green-400">Context Compressed</span>
-            </div>
-            <Badge variant="secondary" className="text-xs">
-              -{formatNumber(stats.currentCompressionStats.compressionSavings)} tokens
-            </Badge>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex flex-col gap-1 text-center">
-                  <span className="text-muted-foreground">Original</span>
-                  <span className="font-mono text-foreground">
-                    {formatNumber(stats.currentCompressionStats.uncompressedTokens)}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <span>Tokens without compression</span>
-              </TooltipContent>
-            </Tooltip>
-            
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex flex-col gap-1 text-center">
-                  <span className="text-muted-foreground">Compressed</span>
-                  <span className="font-mono text-green-400">
-                    {formatNumber(stats.currentCompressionStats.compressedTokens)}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <span>Tokens after compression</span>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          
-          <div className="text-xs text-center text-muted-foreground">
-            {((stats.currentCompressionStats.compressionSavings / stats.currentCompressionStats.uncompressedTokens) * 100).toFixed(1)}% reduction
-          </div>
-        </div>
-      )}
-
-      {/* Compression Status */}
-      {stats.compressionActive && (
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <Zap className="size-3 text-blue-400" />
-            <span className="text-blue-400">Compression active</span>
-            <Badge variant="outline" className="text-xs">
-              {stats.compressedMessages}/{stats.totalMessages}
-            </Badge>
-          </div>
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showDetails ? (
-              <ChevronDown className="size-3" />
-            ) : (
-              <ChevronRight className="size-3" />
-            )}
-          </button>
-        </div>
-      )}
 
       {/* Expandable Details */}
       {showDetails && (

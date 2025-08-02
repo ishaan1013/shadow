@@ -611,8 +611,13 @@ export function useTaskSocket(taskId: string | undefined) {
         llmModel: model as ModelType,
         queue,
       });
+
+      // Invalidate context usage queries to trigger refresh after user message
+      queryClient.invalidateQueries({ 
+        queryKey: ["context-usage", taskId] 
+      });
     },
-    [socket, taskId]
+    [socket, taskId, queryClient]
   );
 
   const stopStream = useCallback(() => {
