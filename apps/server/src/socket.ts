@@ -34,7 +34,6 @@ let currentStreamContent = "";
 let isStreaming = false;
 let io: Server<ClientToServerEvents, ServerToClientEvents>;
 
-
 async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
   try {
     const task = await prisma.task.findUnique({
@@ -182,17 +181,11 @@ async function verifyTaskAccess(
   taskId: string
 ): Promise<boolean> {
   try {
-    console.log(`[SOCKET] Verifying access for task: ${taskId}`);
     // For now, just check if task exists
     // TODO: Add proper user authentication and authorization
     const task = await prisma.task.findUnique({
       where: { id: taskId },
     });
-    console.log(
-      `[SOCKET] Task found:`,
-      !!task,
-      task ? `(${task.status})` : "(not found)"
-    );
     return !!task;
   } catch (error) {
     console.error(`[SOCKET] Error verifying task access:`, error);
@@ -224,11 +217,6 @@ export function createSocketServer(
     },
   });
 
-  // Debug: Log cookies during HTTP handshake
-  io.engine.on("headers", (_headers, request) => {
-    console.log("[SOCKET] HTTP handshake cookies:", request.headers.cookie);
-  });
-
   // Set up sidecar namespace for filesystem watching (only in remote mode)
   const agentMode = config.agentMode;
   if (agentMode === "remote") {
@@ -238,14 +226,10 @@ export function createSocketServer(
   io.on("connection", (socket: TypedSocket) => {
     const connectionId = socket.id;
 
-    // Correct way to access cookies in Socket.IO
     const cookieHeader = socket.request.headers.cookie;
     const apiKeys = parseApiKeysFromCookies(cookieHeader);
 
     console.log(`[SOCKET] User connected: ${connectionId}`);
-    console.log(`[SOCKET] Cookie header from socket.request:`, cookieHeader);
-    console.log(`[SOCKET] Handshake headers:`, socket.handshake.headers);
-    console.log(`[SOCKET] Request headers:`, socket.request.headers);
     console.log(`[SOCKET] Parsed API keys:`, {
       hasOpenAI: !!apiKeys.openai,
       hasAnthropic: !!apiKeys.anthropic,
