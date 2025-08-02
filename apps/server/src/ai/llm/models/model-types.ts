@@ -15,7 +15,7 @@ export class ModelTypes {
     }
 
     if (userApiKeys.openai) {
-      models.push("gpt-4o", "o3", "o4-mini-high");
+      models.push("gpt-4o", "o3", "gpt-4.1-2025-04-14");
     }
 
     return models;
