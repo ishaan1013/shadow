@@ -136,7 +136,6 @@ model ChatMessage {
   // Compression fields
   compressedVersions     Json?                // Store compressed versions as JSON
   activeCompressionLevel String               @default("NONE")
-  originalTokens         Int?                 // Store original token count for compression stats
 
   @@index([taskId, sequence])
   @@index([taskId, role, sequence])
