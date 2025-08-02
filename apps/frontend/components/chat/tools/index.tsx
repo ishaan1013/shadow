@@ -13,10 +13,6 @@ import { SearchReplaceTool } from "./search-replace";
 import { TodoWriteTool } from "./todo-write";
 import { WebSearchTool } from "./web-search";
 
-// Export ToolType enum
-export { ToolType } from "@repo/types";
-
-// Tool component registry
 const TOOL_COMPONENTS = {
   todo_write: TodoWriteTool,
   semantic_search: SemanticSearchTool,
@@ -33,25 +29,6 @@ const TOOL_COMPONENTS = {
 
 export type ToolName = keyof typeof TOOL_COMPONENTS;
 
-// function StatusIcon({
-//   status,
-//   tool,
-// }: {
-//   status: ToolStatusType;
-//   tool: string;
-// }) {
-//   switch (status) {
-//     case "RUNNING":
-//       return <Loader className="size-3.5 text-blue-500 animate-spin" />;
-//     case "COMPLETED":
-//       return <CheckIcon className="size-3.5 text-green-400 opacity-60" />;
-//     case "FAILED":
-//       return <X className="size-3.5 text-red-400" />;
-//     default:
-//       return <div>Status: {status}</div>;
-//   }
-// }
-
 export function ToolMessage({ message }: { message: Message }) {
   if (!message.metadata?.tool) {
     return <div className="text-muted-foreground">{message.content}</div>;
@@ -64,7 +41,7 @@ export function ToolMessage({ message }: { message: Message }) {
   }
 
   const ToolComponent = TOOL_COMPONENTS[toolMeta.name as ToolName];
-  
+
   if (!ToolComponent) {
     return (
       <div className="text-muted-foreground">

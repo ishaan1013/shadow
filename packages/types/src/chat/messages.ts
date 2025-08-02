@@ -6,7 +6,7 @@ import type {
   FinishReason,
 } from "ai";
 import { ToolExecutionStatusType } from "../tools/execution";
-import { ToolResultTypes } from "../tools/results";
+import { ToolResultTypes } from "../tools/schemas";
 import type { PullRequestSnapshot } from "@repo/db";
 
 // Error part type for AI SDK error chunks

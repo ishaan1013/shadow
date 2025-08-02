@@ -1,1 +1,0 @@
-Search the codebase for relevant code snippets using semantic search. This tool finds code by meaning and context rather than exact text matches. It uses vector embeddings to find semantically similar code sections based on your query.

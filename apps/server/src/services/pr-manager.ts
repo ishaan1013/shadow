@@ -1,5 +1,5 @@
 import { GitManager } from "./git-manager";
-import { LLMService } from "../llm";
+import { LLMService } from "../ai/llm";
 import { PRService } from "../github/pull-requests";
 import type { PRMetadata, CreatePROptions } from "../github/types";
 

@@ -2,8 +2,21 @@ import type {
   FinishReason
 } from "ai";
 import type { InitStatus } from "@repo/db";
-import { ToolResultTypes } from "../tools/results";
+import { ToolResultTypes } from "../tools/schemas";
 import { CompletionTokenUsage } from "./messages";
+
+// Validation error result interface
+export interface ValidationErrorResult {
+  success: false;
+  error: string;
+  suggestedFix?: string;
+  originalResult?: unknown;
+  validationDetails?: {
+    expectedType: string;
+    receivedType: string;
+    fieldPath?: string;
+  };
+}
 
 export interface StreamChunk {
   type:
@@ -45,8 +58,10 @@ export interface StreamChunk {
   // For tool results
   toolResult?: {
     id: string;
-    result: ToolResultTypes['result']
+    result: ToolResultTypes['result'] | ValidationErrorResult;
+    isValid?: boolean;
   };
+
 
   // For initialization progress
   initProgress?: InitializationProgress;

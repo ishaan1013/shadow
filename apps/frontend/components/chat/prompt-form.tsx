@@ -329,7 +329,7 @@ export function PromptForm({
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
           setIsMessageOptionsOpen(true);
-        } else if (event.key === "Escape") {
+        } else if (event.key === "Escape" && event.metaKey) {
           event.preventDefault();
           if (isStreaming) {
             onStopStream?.();

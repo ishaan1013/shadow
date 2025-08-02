@@ -1,6 +1,6 @@
 import type { Message, DirectoryListing } from "@repo/types";
 import { File, Folder, FolderOpen } from "lucide-react";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 
 export function ListDirTool({ message }: { message: Message }) {
@@ -20,7 +20,7 @@ export function ListDirTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<FolderOpen />}
-      type={ToolType.LIST_DIR}
+      type={ToolTypes.LIST_DIR}
       title={path || "./"}
       collapsible
     >

@@ -1,7 +1,7 @@
 import type { Message } from "@repo/types";
 import { Eye } from "lucide-react";
 import { useAgentEnvironment } from "@/components/agent-environment/agent-environment-context";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 
 export function ReadFileTool({ message }: { message: Message }) {
@@ -21,7 +21,7 @@ export function ReadFileTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<Eye />}
-      type={ToolType.READ_FILE}
+      type={ToolTypes.READ_FILE}
       title={filePath}
       suffix={lineRange}
       onClick={() => {
