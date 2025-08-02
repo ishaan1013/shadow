@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import config from "../../config";
-import { RepositoryService } from "../../github/api/repository-service";
+import { RepositoryService } from "../../github/repositories";
 import { execAsync } from "../../utils/exec";
 import { WorkspaceManager } from "../interfaces/workspace-manager";
 import { ToolExecutor } from "../interfaces/tool-executor";
@@ -81,7 +81,13 @@ export class LocalWorkspaceManager implements WorkspaceManager {
   }
 
   async prepareWorkspace(taskConfig: TaskConfig): Promise<WorkspaceInfo> {
-    const { id: taskId, repoFullName, baseBranch, shadowBranch, userId } = taskConfig;
+    const {
+      id: taskId,
+      repoFullName,
+      baseBranch,
+      shadowBranch,
+      userId,
+    } = taskConfig;
     const workspacePath = this.getTaskWorkspaceDir(taskId);
 
     try {
@@ -124,9 +130,18 @@ export class LocalWorkspaceManager implements WorkspaceManager {
 
       // Set up git configuration and create shadow branch
       try {
-        await this.setupGitForTask(taskId, workspacePath, baseBranch, shadowBranch, userId);
+        await this.setupGitForTask(
+          taskId,
+          workspacePath,
+          baseBranch,
+          shadowBranch,
+          userId
+        );
       } catch (error) {
-        console.error(`[LOCAL_WORKSPACE] Failed to setup git for task ${taskId}:`, error);
+        console.error(
+          `[LOCAL_WORKSPACE] Failed to setup git for task ${taskId}:`,
+          error
+        );
         return {
           success: false,
           workspacePath,
@@ -189,7 +204,10 @@ export class LocalWorkspaceManager implements WorkspaceManager {
       });
 
       // Create and checkout shadow branch, get the base commit SHA
-      const baseCommitSha = await gitManager.createShadowBranch(baseBranch, shadowBranch);
+      const baseCommitSha = await gitManager.createShadowBranch(
+        baseBranch,
+        shadowBranch
+      );
 
       // Update task in database with base commit SHA
       await prisma.task.update({
@@ -205,12 +223,17 @@ export class LocalWorkspaceManager implements WorkspaceManager {
         baseCommitSha,
       });
     } catch (error) {
-      console.error(`[LOCAL_WORKSPACE] Git setup failed for task ${taskId}:`, error);
+      console.error(
+        `[LOCAL_WORKSPACE] Git setup failed for task ${taskId}:`,
+        error
+      );
       throw error;
     }
   }
 
-  async cleanupWorkspace(taskId: string): Promise<{ success: boolean; message: string }> {
+  async cleanupWorkspace(
+    taskId: string
+  ): Promise<{ success: boolean; message: string }> {
     const workspacePath = this.getTaskWorkspaceDir(taskId);
 
     try {
@@ -249,8 +272,9 @@ export class LocalWorkspaceManager implements WorkspaceManager {
 
       return {
         success: false,
-        message: `Failed to cleanup workspace for task ${taskId}: ${error instanceof Error ? error.message : "Unknown error"
-          }`,
+        message: `Failed to cleanup workspace for task ${taskId}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       };
     }
   }
@@ -352,11 +376,16 @@ export class LocalWorkspaceManager implements WorkspaceManager {
   /**
    * Get all files from a local workspace directory
    */
-  async getAllFilesFromWorkspace(taskId: string): Promise<Array<{ path: string; content: string; type: string }>> {
+  async getAllFilesFromWorkspace(
+    taskId: string
+  ): Promise<Array<{ path: string; content: string; type: string }>> {
     const workspacePath = this.getTaskWorkspaceDir(taskId);
     const files: Array<{ path: string; content: string; type: string }> = [];
     console.log("getAllFilesFromWorkspace", workspacePath);
-    const readDirectory = async (dirPath: string, relativePath: string = ""): Promise<void> => {
+    const readDirectory = async (
+      dirPath: string,
+      relativePath: string = ""
+    ): Promise<void> => {
       console.log("reading directory", dirPath);
       try {
         const entries = await fs.readdir(dirPath);
@@ -367,17 +396,17 @@ export class LocalWorkspaceManager implements WorkspaceManager {
           const stat = await fs.stat(fullPath);
           if (stat.isDirectory()) {
             // Skip .git directory
-            if (entry === '.git') continue;
+            if (entry === ".git") continue;
             // Recursively read subdirectories
             await readDirectory(fullPath, relativeFilePath);
           } else {
             // Read file content
             try {
-              const content = await fs.readFile(fullPath, 'utf8');
+              const content = await fs.readFile(fullPath, "utf8");
               files.push({
                 path: relativeFilePath,
                 content,
-                type: "file"
+                type: "file",
               });
             } catch (error) {
               logger.error(`Error reading file ${relativeFilePath}: ${error}`);

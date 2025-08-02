@@ -1,8 +1,8 @@
 import { Octokit } from "@octokit/rest";
 import type { RestEndpointMethodTypes } from "@octokit/plugin-rest-endpoint-methods";
 import type { GitHubIssue } from "@repo/types";
-import { githubTokenManager } from "../auth/token-manager";
-import type { RepoInfo } from "../types";
+import { githubTokenManager } from "./auth/token-manager";
+import type { RepoInfo } from "./types";
 
 export class GitHubApiClient {
   constructor() {

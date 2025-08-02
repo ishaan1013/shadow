@@ -1,8 +1,8 @@
-import config from "../../config";
-import { execAsync } from "../../utils/exec";
-import { githubTokenManager } from "../auth/token-manager";
-import { GitHubApiClient } from "./github-api-client";
-import type { CloneResult } from "../types";
+import config from "../config";
+import { execAsync } from "../utils/exec";
+import { githubTokenManager } from "./auth/token-manager";
+import { GitHubApiClient } from "./github-api";
+import type { CloneResult } from "./types";
 
 export class RepositoryService {
   private apiClient: GitHubApiClient;

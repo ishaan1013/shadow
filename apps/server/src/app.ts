@@ -13,8 +13,8 @@ import { getGitHubAccessToken } from "./github/auth/account-service";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
 import { filesRouter } from "./routes/files";
-import { generateIssuePrompt } from "./github/services/issue-service";
-import { GitHubApiClient } from "./github/api/github-api-client";
+import { generateIssuePrompt } from "./github/issues";
+import { GitHubApiClient } from "./github/github-api";
 
 const app = express();
 export const chatService = new ChatService();

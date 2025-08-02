@@ -1,8 +1,7 @@
 import { GitManager } from "./git-manager";
 import { LLMService } from "../llm";
-import { PRService } from "../github/services/pr-service";
+import { PRService } from "../github/pull-requests";
 import type { PRMetadata, CreatePROptions } from "../github/types";
-
 
 export class PRManager {
   private prService: PRService;
@@ -34,18 +33,16 @@ export class PRManager {
       const commitSha = await this.gitManager.getCurrentCommitSha();
 
       // Check if PR already exists
-      const existingPRNumber = await this.prService.getExistingPRNumber(options.taskId);
+      const existingPRNumber = await this.prService.getExistingPRNumber(
+        options.taskId
+      );
 
       if (!existingPRNumber) {
         // Create new PR path
         await this.createNewPR(options, commitSha);
       } else {
         // Update existing PR path
-        await this.updateExistingPR(
-          options,
-          existingPRNumber,
-          commitSha
-        );
+        await this.updateExistingPR(options, existingPRNumber, commitSha);
       }
 
       console.log(
@@ -88,7 +85,9 @@ export class PRManager {
     commitSha: string
   ): Promise<void> {
     // Get current PR description from most recent snapshot
-    const latestSnapshot = await this.prService.getLatestSnapshot(options.taskId);
+    const latestSnapshot = await this.prService.getLatestSnapshot(
+      options.taskId
+    );
 
     if (!latestSnapshot) {
       console.warn(
@@ -104,7 +103,12 @@ export class PRManager {
     );
 
     // Use PR service to update the PR
-    const result = await this.prService.updatePR(options, prNumber, newDescription, commitSha);
+    const result = await this.prService.updatePR(
+      options,
+      prNumber,
+      newDescription,
+      commitSha
+    );
 
     if (!result.success) {
       throw new Error(`Failed to update PR: ${result.error}`);
@@ -122,12 +126,15 @@ export class PRManager {
       const diff = await this.gitManager.getDiff();
       const commitMessages = await this.getRecentCommitMessages();
 
-      const metadata = await this.llmService.generatePRMetadata({
-        taskTitle: options.taskTitle,
-        gitDiff: diff,
-        commitMessages,
-        wasTaskCompleted: options.wasTaskCompleted,
-      }, userApiKeys || {});
+      const metadata = await this.llmService.generatePRMetadata(
+        {
+          taskTitle: options.taskTitle,
+          gitDiff: diff,
+          commitMessages,
+          wasTaskCompleted: options.wasTaskCompleted,
+        },
+        userApiKeys || {}
+      );
 
       return metadata;
     } catch (error) {
@@ -161,12 +168,15 @@ export class PRManager {
     }
 
     try {
-      const result = await this.llmService.generatePRMetadata({
-        taskTitle,
-        gitDiff: newDiff,
-        commitMessages: [],
-        wasTaskCompleted: true,
-      }, userApiKeys || {});
+      const result = await this.llmService.generatePRMetadata(
+        {
+          taskTitle,
+          gitDiff: newDiff,
+          commitMessages: [],
+          wasTaskCompleted: true,
+        },
+        userApiKeys || {}
+      );
 
       return result.description;
     } catch (error) {

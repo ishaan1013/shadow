@@ -1,6 +1,6 @@
 import { prisma } from "@repo/db";
-import { GitHubApiClient } from "../api/github-api-client";
-import type { PRMetadata, CreatePROptions, PROperationResult } from "../types";
+import { GitHubApiClient } from "./github-api";
+import type { PRMetadata, CreatePROptions, PROperationResult } from "./types";
 
 export class PRService {
   private apiClient: GitHubApiClient;
