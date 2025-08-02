@@ -7,7 +7,8 @@ import {
   getModelProvider,
   toCoreMessage,
 } from "@repo/types";
-import { CoreMessage, streamText } from "ai";
+import { CoreMessage, streamText, generateText } from "ai";
+import type { LanguageModelV1FunctionToolCall } from "@ai-sdk/provider";
 import { createTools } from "../../tools";
 import { ModelProvider } from "../models/model-provider";
 import { ChunkHandlers } from "./chunk-handlers";
@@ -66,6 +67,71 @@ export class StreamProcessor {
         maxSteps: MAX_STEPS,
         ...(enableTools && tools && { tools }),
         ...(abortSignal && { abortSignal }),
+        ...(enableTools && tools && {
+          experimental_repairToolCall: async ({
+            system,
+            messages,
+            toolCall,
+            tools,
+            error
+          }: {
+            system: string | undefined;
+            messages: CoreMessage[];
+            toolCall: LanguageModelV1FunctionToolCall;
+            tools: any;
+            error: any;
+          }): Promise<LanguageModelV1FunctionToolCall | null> => {
+            // Only handle parameter validation errors, let other errors fail normally
+            if (error.constructor.name !== 'InvalidToolArgumentsError') {
+              console.log(`[REPAIR] Skipping repair for error type: ${error.constructor.name}`);
+              return null;
+            }
+
+            console.log(`[REPAIR] Attempting to repair tool call ${toolCall.toolName}:`, error.message);
+
+            try {
+              // Re-ask the model with error context
+              const repairResult = await generateText({
+                model: modelInstance,
+                system: system || systemPrompt,
+                messages: [
+                  ...messages,
+                  {
+                    role: 'assistant' as const,
+                    content: `I attempted to call the tool ${toolCall.toolName} with arguments: ${toolCall.args}`
+                  },
+                  {
+                    role: 'user' as const,
+                    content: `Error: ${error.message}\n\nPlease retry this tool call with the correct parameters.`
+                  }
+                ],
+                tools
+              });
+
+              // Extract the first tool call that matches our tool name
+              const repairedToolCall = repairResult.toolCalls?.find(
+                (tc: any) => tc.toolName === toolCall.toolName
+              );
+
+              if (repairedToolCall) {
+                console.log(`[REPAIR] Successfully repaired ${toolCall.toolName}`);
+                return {
+                  toolCallType: 'function' as const,
+                  toolCallId: toolCall.toolCallId, // Keep original ID
+                  toolName: repairedToolCall.toolName,
+                  args: repairedToolCall.args
+                };
+              }
+
+              console.log(`[REPAIR] No matching tool call found in repair response`);
+              return null;
+
+            } catch (repairError) {
+              console.error(`[REPAIR] Failed to repair tool call:`, repairError);
+              return null;
+            }
+          }
+        }),
       };
 
       // Log cache control usage for debugging

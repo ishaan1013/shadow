@@ -97,6 +97,8 @@ export class ChunkHandlers {
       return null;
     }
 
+    // Validate tool execution results (not parameters - those are handled by AI SDK repair)
+    // This catches: malformed tool outputs, implementation bugs, external service failures
     const validation = this.toolValidator.validateToolResult(toolName, chunk.result);
 
     if (validation.isValid) {
