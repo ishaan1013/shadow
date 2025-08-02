@@ -25,7 +25,6 @@ export function ContextUsage({
   taskId, 
   model = "gpt-4o" 
 }: ContextUsageProps) {
-  const [showDetails, setShowDetails] = useState(false);
 
   const { data: stats, isLoading: loading, error } = useQuery({
     queryKey: ["context-usage", taskId, model],
