@@ -5,6 +5,19 @@ import type { InitStatus } from "@repo/db";
 import { ToolResultTypes } from "../tools/schemas";
 import { CompletionTokenUsage } from "./messages";
 
+// Validation error result interface
+export interface ValidationErrorResult {
+  success: false;
+  error: string;
+  suggestedFix?: string;
+  originalResult?: unknown;
+  validationDetails?: {
+    expectedType: string;
+    receivedType: string;
+    fieldPath?: string;
+  };
+}
+
 export interface StreamChunk {
   type:
   | "content"
@@ -14,6 +27,7 @@ export interface StreamChunk {
   | "error"
   | "tool-call"
   | "tool-result"
+  | "tool-validation-error"
   | "init-progress"
   | "fs-change"
   | "todo-update";
@@ -45,7 +59,17 @@ export interface StreamChunk {
   // For tool results
   toolResult?: {
     id: string;
-    result: ToolResultTypes['result']
+    result: ToolResultTypes['result'] | ValidationErrorResult;
+    isValid?: boolean;
+  };
+
+  // For tool validation errors
+  toolValidationError?: {
+    id: string;
+    toolName: string;
+    error: string;
+    suggestedFix?: string;
+    originalResult?: unknown;
   };
 
   // For initialization progress

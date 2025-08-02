@@ -6,8 +6,12 @@ import {
   ModelType,
   StreamChunk,
   ToolResultTypes,
+  ValidationErrorResult,
+  ToolName,
+  ToolResultSchemas,
   getModelProvider,
   toCoreMessage,
+  createValidator,
 } from "@repo/types";
 import { CoreMessage, LanguageModel, generateText, streamText } from "ai";
 import { createTools } from "./tools";
@@ -15,6 +19,129 @@ import { createTools } from "./tools";
 const MAX_STEPS = 50;
 
 export class LLMService {
+  /**
+   * Validates a tool result and creates a graceful error result if validation fails
+   */
+  private validateToolResult(
+    toolName: ToolName,
+    result: unknown
+  ): {
+    isValid: boolean;
+    validatedResult: ToolResultTypes["result"] | ValidationErrorResult;
+    shouldEmitError: boolean;
+    errorDetails?: {
+      error: string;
+      suggestedFix: string;
+      originalResult: unknown;
+    };
+  } {
+    try {
+      // toolName is guaranteed to be valid, validate the result directly
+      const schema = ToolResultSchemas[toolName];
+      const validation = createValidator(schema)(result);
+
+      if (validation.success) {
+        return {
+          isValid: true,
+          validatedResult: validation.data!,
+          shouldEmitError: false,
+        };
+      }
+
+      // Generate helpful error message for the LLM
+      const errorMessage = `Tool call validation failed for ${toolName}: ${validation.error}`;
+      const suggestedFix = this.generateToolValidationSuggestion(
+        toolName,
+        validation.error || ""
+      );
+
+      const errorResult: ValidationErrorResult = {
+        success: false,
+        error: errorMessage,
+        suggestedFix,
+        originalResult: result,
+        validationDetails: {
+          expectedType: "Valid tool result schema",
+          receivedType: typeof result,
+          fieldPath: validation.error || "",
+        },
+      };
+
+      return {
+        isValid: false,
+        validatedResult: errorResult,
+        shouldEmitError: true,
+        errorDetails: {
+          error: errorMessage,
+          suggestedFix,
+          originalResult: result,
+        },
+      };
+    } catch (error) {
+      // Fallback for unexpected validation errors
+      const fallbackMessage = `Unexpected validation error for tool ${toolName}: ${error instanceof Error ? error.message : "Unknown error"}`;
+
+      return {
+        isValid: false,
+        validatedResult: {
+          success: false,
+          error: fallbackMessage,
+          suggestedFix:
+            "Please retry the tool call with valid parameters according to the tool schema.",
+          originalResult: result,
+        } as ValidationErrorResult,
+        shouldEmitError: true,
+        errorDetails: {
+          error: fallbackMessage,
+          suggestedFix:
+            "Please retry the tool call with valid parameters according to the tool schema.",
+          originalResult: result,
+        },
+      };
+    }
+  }
+
+  /**
+   * Generates helpful suggestions for tool validation errors
+   */
+  private generateToolValidationSuggestion(
+    toolName: string,
+    validationError: string
+  ): string {
+    const lowerError = validationError.toLowerCase();
+
+    // Handle unknown tool errors
+    if (lowerError.includes("unknown tool")) {
+      const availableTools = Object.keys(ToolResultSchemas).join(", ");
+      return `The tool "${toolName}" does not exist. Please use one of the available tools: ${availableTools}`;
+    }
+
+    // Handle common validation patterns
+    if (lowerError.includes("required")) {
+      return `The ${toolName} tool is missing required parameters. Please check the tool schema and provide all required fields.`;
+    }
+
+    if (lowerError.includes("invalid_type")) {
+      return `The ${toolName} tool received incorrect parameter types. Please ensure all parameters match the expected types in the tool schema.`;
+    }
+
+    if (lowerError.includes("boolean") && lowerError.includes("undefined")) {
+      return `The ${toolName} tool requires a boolean parameter that was not provided. Please set the missing boolean field to either true or false.`;
+    }
+
+    // Tool-specific suggestions
+    switch (toolName) {
+      case "read_file":
+        return "For read_file, ensure 'should_read_entire_file' is provided as a boolean, and if false, provide both start_line_one_indexed and end_line_one_indexed_inclusive as numbers.";
+      case "todo_write":
+        return "For todo_write, ensure 'merge' is a boolean and 'todos' is an array with valid todo objects containing id, content, and status fields.";
+      case "run_terminal_cmd":
+        return "For run_terminal_cmd, ensure 'is_background' is provided as a boolean and 'command' is a non-empty string.";
+      default:
+        return `Please check the ${toolName} tool schema and ensure all required parameters are provided with correct types.`;
+    }
+  }
+
   private getModel(
     modelId: ModelType,
     userApiKeys: { openai?: string; anthropic?: string }
@@ -117,6 +244,8 @@ export class LLMService {
 
       const result = streamText(streamConfig);
 
+      const toolCallMap = new Map<string, ToolName>(); // toolCallId -> validated toolName
+
       // Use fullStream to get real-time tool calls and results
       for await (const chunk of result.fullStream as AsyncIterable<AIStreamChunk>) {
         switch (chunk.type) {
@@ -130,26 +259,104 @@ export class LLMService {
             break;
           }
 
-          case "tool-call":
-            yield {
-              type: "tool-call",
-              toolCall: {
-                id: chunk.toolCallId,
-                name: chunk.toolName,
-                args: chunk.args,
-              },
-            };
-            break;
+          case "tool-call": {
+            if (chunk.toolName in ToolResultSchemas) {
+              toolCallMap.set(chunk.toolCallId, chunk.toolName as ToolName);
 
-          case "tool-result":
-            yield {
-              type: "tool-result",
-              toolResult: {
-                id: chunk.toolCallId,
-                result: chunk.result as ToolResultTypes["result"],
-              },
-            };
+              yield {
+                type: "tool-call",
+                toolCall: {
+                  id: chunk.toolCallId,
+                  name: chunk.toolName,
+                  args: chunk.args,
+                },
+              };
+            } else {
+              // Invalid tool
+              const availableTools = Object.keys(ToolResultSchemas).join(", ");
+              const errorMessage = `Unknown tool: ${chunk.toolName}. Available tools are: ${availableTools}`;
+              const suggestedFix = `Please use one of the available tools: ${availableTools}`;
+
+              console.warn(`[LLM] Invalid tool call: ${chunk.toolName}`);
+
+              // Emit validation error chunk
+              yield {
+                type: "tool-validation-error",
+                toolValidationError: {
+                  id: chunk.toolCallId,
+                  toolName: chunk.toolName,
+                  error: errorMessage,
+                  suggestedFix,
+                  originalResult: undefined,
+                },
+              };
+
+              // Also emit the tool-call so the conversation continues
+              yield {
+                type: "tool-call",
+                toolCall: {
+                  id: chunk.toolCallId,
+                  name: chunk.toolName,
+                  args: chunk.args,
+                },
+              };
+            }
             break;
+          }
+
+          case "tool-result": {
+            const toolName = toolCallMap.get(chunk.toolCallId);
+
+            if (!toolName) {
+              console.warn(
+                `[LLM] Skipping result for invalid tool call ID: ${chunk.toolCallId}`
+              );
+              break;
+            }
+
+            const validation = this.validateToolResult(toolName, chunk.result);
+
+            if (validation.isValid) {
+              yield {
+                type: "tool-result",
+                toolResult: {
+                  id: chunk.toolCallId,
+                  result: validation.validatedResult,
+                  isValid: true,
+                },
+              };
+            } else {
+              // Invalid result - emit both a validation error and a tool-result with error
+              console.warn(
+                `[LLM] Tool validation failed for ${toolName}:`,
+                validation.errorDetails?.error
+              );
+
+              // Emit validation error chunk for debugging/monitoring
+              yield {
+                type: "tool-validation-error",
+                toolValidationError: {
+                  id: chunk.toolCallId,
+                  toolName,
+                  error: validation.errorDetails!.error,
+                  suggestedFix: validation.errorDetails!.suggestedFix,
+                  originalResult: validation.errorDetails!.originalResult,
+                },
+              };
+
+              // Emit tool-result with validation error as the result
+              // This ensures the LLM receives feedback about the validation failure
+              yield {
+                type: "tool-result",
+                toolResult: {
+                  id: chunk.toolCallId,
+                  result: validation.validatedResult,
+                  isValid: false,
+                },
+              };
+            }
+            break;
+          }
 
           case "finish":
             // Emit final usage and completion
