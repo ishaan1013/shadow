@@ -5,7 +5,7 @@ import cors from "cors";
 import express from "express";
 import http from "http";
 import { z } from "zod";
-import { ChatService } from "./chat";
+import { ChatService } from "./ai/chat";
 import { TaskInitializationEngine } from "./initialization";
 import { errorHandler } from "./middleware/error-handler";
 import { createSocketServer } from "./socket";

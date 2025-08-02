@@ -8,25 +8,25 @@ import {
 } from "@repo/types";
 import { TextPart, ToolCallPart, ToolResultPart } from "ai";
 import { randomUUID } from "crypto";
-import { type ChatMessage } from "../../../packages/db/src/client";
-import { LLMService } from "./llm/";
-import { systemPrompt } from "./prompt/system-prompt";
-import { GitManager } from "./services/git-manager";
-import { PRManager } from "./services/pr-manager";
-import { GitHubService } from "./github";
+import { type ChatMessage } from "../../../../packages/db/src/client";
+import { LLMService } from "./llm";
+import { systemPrompt } from "./system-prompt";
+import { GitManager } from "../services/git-manager";
+import { PRManager } from "../services/pr-manager";
+import { GitHubService } from "../github";
 import {
   emitStreamChunk,
   endStream,
   handleStreamError,
   startStream,
-} from "./socket";
-import config from "./config";
+} from "../socket";
+import config from "../config";
 import {
   updateTaskStatus,
   scheduleTaskCleanup,
   cancelTaskCleanup,
-} from "./utils/task-status";
-import { createToolExecutor } from "./execution";
+} from "../utils/task-status";
+import { createToolExecutor } from "../execution";
 
 export class ChatService {
   private llmService: LLMService;

@@ -1,6 +1,6 @@
 import { GitHubService } from "../github";
 import { GitManager } from "./git-manager";
-import { LLMService } from "../llm/";
+import { LLMService } from "../ai/llm";
 import { prisma } from "@repo/db";
 
 export interface PRMetadata {
@@ -19,7 +19,6 @@ export interface CreatePROptions {
   wasTaskCompleted: boolean;
   messageId: string;
 }
-
 
 export class PRManager {
   constructor(
@@ -64,11 +63,7 @@ export class PRManager {
         await this.createNewPR(options, commitSha);
       } else {
         // Update existing PR path
-        await this.updateExistingPR(
-          options,
-          existingPRNumber,
-          commitSha
-        );
+        await this.updateExistingPR(options, existingPRNumber, commitSha);
       }
 
       console.log(
@@ -208,12 +203,15 @@ export class PRManager {
       const diff = await this.gitManager.getDiff();
       const commitMessages = await this.getRecentCommitMessages();
 
-      const metadata = await this.llmService.generatePRMetadata({
-        taskTitle: options.taskTitle,
-        gitDiff: diff,
-        commitMessages,
-        wasTaskCompleted: options.wasTaskCompleted,
-      }, userApiKeys || {});
+      const metadata = await this.llmService.generatePRMetadata(
+        {
+          taskTitle: options.taskTitle,
+          gitDiff: diff,
+          commitMessages,
+          wasTaskCompleted: options.wasTaskCompleted,
+        },
+        userApiKeys || {}
+      );
 
       return metadata;
     } catch (error) {
@@ -247,12 +245,15 @@ export class PRManager {
     }
 
     try {
-      const result = await this.llmService.generatePRMetadata({
-        taskTitle,
-        gitDiff: newDiff,
-        commitMessages: [],
-        wasTaskCompleted: true,
-      }, userApiKeys || {});
+      const result = await this.llmService.generatePRMetadata(
+        {
+          taskTitle,
+          gitDiff: newDiff,
+          commitMessages: [],
+          wasTaskCompleted: true,
+        },
+        userApiKeys || {}
+      );
 
       return result.description;
     } catch (error) {

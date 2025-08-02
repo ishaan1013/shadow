@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { prisma, TodoStatus } from "@repo/db";
 import { tool } from "ai";
-import { 
+import {
   TodoWriteParamsSchema,
   ReadFileParamsSchema,
   EditFileParamsSchema,
@@ -13,11 +13,11 @@ import {
   FileSearchParamsSchema,
   DeleteFileParamsSchema,
   SemanticSearchParamsSchema,
-  WebSearchParamsSchema
+  WebSearchParamsSchema,
 } from "@repo/types";
-import { createToolExecutor, isLocalMode } from "../execution";
-import { LocalFileSystemWatcher } from "../services/local-filesystem-watcher";
-import { emitTerminalOutput, emitStreamChunk } from "../socket";
+import { createToolExecutor, isLocalMode } from "../../execution";
+import { LocalFileSystemWatcher } from "../../services/local-filesystem-watcher";
+import { emitTerminalOutput, emitStreamChunk } from "../../socket";
 import type { TerminalEntry } from "@repo/types";
 
 // Map to track active filesystem watchers by task ID

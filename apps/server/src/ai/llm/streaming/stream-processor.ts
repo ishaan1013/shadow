@@ -91,7 +91,10 @@ export class StreamProcessor {
           }
 
           case "tool-call": {
-            const streamChunks = this.chunkHandlers.handleToolCall(chunk, toolCallMap);
+            const streamChunks = this.chunkHandlers.handleToolCall(
+              chunk,
+              toolCallMap
+            );
             for (const streamChunk of streamChunks) {
               yield streamChunk;
             }
@@ -99,7 +102,10 @@ export class StreamProcessor {
           }
 
           case "tool-result": {
-            const streamChunk = this.chunkHandlers.handleToolResult(chunk, toolCallMap);
+            const streamChunk = this.chunkHandlers.handleToolResult(
+              chunk,
+              toolCallMap
+            );
             if (streamChunk) {
               yield streamChunk;
             }

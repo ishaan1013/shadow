@@ -1,1 +1,0 @@
-Search the web using the Exa API for real-time information. Use this tool when you need to find current information from the internet, factual data, or research topics that would benefit from web content. Provide a specific query, and optionally a domain to focus the search.
