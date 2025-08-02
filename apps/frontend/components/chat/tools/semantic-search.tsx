@@ -1,6 +1,6 @@
 import type { Message, SemanticSearchToolResult } from "@repo/types";
 import { Code, File, Folder, ScanSearch } from "lucide-react";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 
 export function SemanticSearchTool({ message }: { message: Message }) {
@@ -21,7 +21,7 @@ export function SemanticSearchTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<ScanSearch />}
-      type={ToolType.SEMANTIC_SEARCH}
+      type={ToolTypes.SEMANTIC_SEARCH}
       title={`"${query}"`}
       collapsible
     >

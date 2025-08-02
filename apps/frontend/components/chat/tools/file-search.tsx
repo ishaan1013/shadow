@@ -1,6 +1,6 @@
 import type { Message } from "@repo/types";
 import { FileSearch, File } from "lucide-react";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 import { getToolResult } from "@repo/types";
 
@@ -17,7 +17,7 @@ export function FileSearchTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<FileSearch />}
-      type={ToolType.FILE_SEARCH}
+      type={ToolTypes.FILE_SEARCH}
       title={`"${query}"`}
       collapsible
     >

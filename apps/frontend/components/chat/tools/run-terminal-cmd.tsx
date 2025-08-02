@@ -2,7 +2,7 @@ import type { Message } from "@repo/types";
 import { Terminal } from "lucide-react";
 import { useAgentEnvironment } from "@/components/agent-environment/agent-environment-context";
 import { getToolResult } from "@repo/types";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 
 export function RunTerminalCmdTool({ message }: { message: Message }) {
@@ -25,7 +25,7 @@ export function RunTerminalCmdTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<Terminal />}
-      type={ToolType.RUN_TERMINAL_CMD}
+      type={ToolTypes.RUN_TERMINAL_CMD}
       title={command}
       suffix={suffix}
       onClick={() => expandRightPanel()}

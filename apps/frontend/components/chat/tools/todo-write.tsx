@@ -6,7 +6,7 @@ import {
   Square,
   SquareX,
 } from "lucide-react";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 import { cn } from "@/lib/utils";
 
@@ -115,7 +115,7 @@ export function TodoWriteTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<ListTodo />}
-      type={ToolType.TODO_WRITE}
+      type={ToolTypes.TODO_WRITE}
       title={title}
       prefix={merge ? "Updated todo list" : "Created todo list"}
       collapsible

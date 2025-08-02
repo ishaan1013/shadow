@@ -1,6 +1,6 @@
 import type { Message, WebSearchResult } from "@repo/types";
 import { ExternalLink, Globe } from "lucide-react";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 import { getToolResult } from "@repo/types";
 
@@ -22,7 +22,7 @@ export function WebSearchTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<Globe />}
-      type={ToolType.WEB_SEARCH}
+      type={ToolTypes.WEB_SEARCH}
       title={title}
       collapsible
     >
