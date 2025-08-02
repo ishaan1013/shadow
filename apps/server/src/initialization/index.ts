@@ -192,7 +192,7 @@ export class TaskInitializationEngine {
 
       // Repository indexing step (both modes)
       case "INDEX_REPOSITORY":
-        await this.executeIndexRepository(taskId);
+        // await this.executeIndexRepository(taskId);
         break;
 
       case "INACTIVE":
