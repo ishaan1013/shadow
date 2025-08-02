@@ -13,62 +13,12 @@ import { getGitHubAccessToken } from "./utils/github-account";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
 import { filesRouter } from "./file-routes";
+import { parseApiKeysFromCookies } from "./utils/cookie-parser";
 
 const app = express();
 export const chatService = new ChatService();
 const initializationEngine = new TaskInitializationEngine();
 
-// Helper function to parse API keys from cookies
-function parseApiKeysFromCookies(cookieHeader?: string): {
-  openai?: string;
-  anthropic?: string;
-} {
-  if (!cookieHeader) {
-    console.log("[APP] No cookie header provided to parseApiKeysFromCookies");
-    return {};
-  }
-
-  console.log(
-    `[APP] Parsing cookies from header (length: ${cookieHeader.length})`
-  );
-  console.log(
-    `[APP] Cookie header preview: ${cookieHeader.substring(0, 100)}...`
-  );
-
-  const cookies: Record<string, string> = {};
-  cookieHeader.split(";").forEach((cookie) => {
-    const trimmedCookie = cookie.trim();
-    const equalIndex = trimmedCookie.indexOf("=");
-
-    if (equalIndex > 0) {
-      const name = trimmedCookie.substring(0, equalIndex);
-      const value = trimmedCookie.substring(equalIndex + 1);
-
-      // Log individual cookie parsing for debugging
-      if (name === "openai-key" || name === "anthropic-key") {
-        console.log(
-          `[APP] Parsing cookie "${name}": length=${value.length}, starts with="${value.substring(0, 10)}..."`
-        );
-      }
-
-      // Only decode if the value contains URL-encoded characters
-      // API keys typically don't need decoding, but session tokens might
-      cookies[name] = value.includes("%") ? decodeURIComponent(value) : value;
-    }
-  });
-
-  console.log("[APP] Extracted API keys:", {
-    hasOpenAI: !!cookies["openai-key"],
-    hasAnthropic: !!cookies["anthropic-key"],
-    openaiLength: cookies["openai-key"]?.length || 0,
-    anthropicLength: cookies["anthropic-key"]?.length || 0,
-  });
-
-  return {
-    openai: cookies["openai-key"] || undefined,
-    anthropic: cookies["anthropic-key"] || undefined,
-  };
-}
 
 const initiateTaskSchema = z.object({
   message: z.string().min(1, "Message is required"),
@@ -191,9 +141,8 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 
       // Process the message with the agent using the task workspace
       // Skip saving user message since it's already saved in the server action
-      const userApiKeys = parseApiKeysFromCookies(req.headers.cookie);
 
-      // Validate that user has the required API key for the selected model
+      const userApiKeys = parseApiKeysFromCookies(req.headers.cookie);
       const modelProvider = model.includes("claude") ? "anthropic" : "openai";
       if (!userApiKeys[modelProvider]) {
         const providerName =
@@ -204,7 +153,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
         });
       }
 
-      console.log("userApiKeys", userApiKeys, "model", model);
+      console.log("\n\n[TASK_INITIATE] PROCESSING USER MESSAGE\n\n");
 
       await chatService.processUserMessage({
         taskId,

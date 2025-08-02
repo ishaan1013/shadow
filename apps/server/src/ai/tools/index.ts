@@ -52,7 +52,7 @@ function createAndEmitTerminalEntry(
 function readDescription(toolName: string): string {
   const descriptionPath = join(
     dirname(__filename),
-    "../prompt/tools",
+    "prompts",
     toolName,
     "description.md"
   );
