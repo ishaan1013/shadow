@@ -64,7 +64,7 @@ export class ContextManager {
       `[CONTEXT] Target: ${targetTokens} tokens (${settings.compressionThreshold * 100}% of ${settings.tokenLimit})`
     );
 
-    // If under threshold, don'ts compress
+    // If under threshold, don't compress
     if (totalTokens <= targetTokens) {
       console.log(`[CONTEXT] Initial context is under threshold, returning ${messages.length} messages`);
       return { 
