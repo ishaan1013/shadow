@@ -355,6 +355,8 @@ export function PromptForm({
     const completeRepoUrl = `https://github.com/${repo.full_name}`;
     const issuePrompt = generateIssuePrompt(issue);
 
+    console.log("issuePrompt", issuePrompt);
+
     const formData = new FormData();
     formData.append("message", issuePrompt);
     formData.append("model", selectedModel);

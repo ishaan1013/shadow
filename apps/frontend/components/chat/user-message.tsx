@@ -174,7 +174,7 @@ export function UserMessage({
         </>
       ) : (
         <>
-          <div className="from-card/10 to-card w-full rounded-lg bg-gradient-to-t px-3 py-2 text-sm">
+          <div className="from-card/10 to-card line-clamp-5 w-full whitespace-pre-wrap rounded-lg bg-gradient-to-t px-3 py-2 text-sm">
             {message.content}
           </div>
           <div className="bg-background absolute inset-px -z-10 rounded-[calc(var(--radius)+1px)]" />
