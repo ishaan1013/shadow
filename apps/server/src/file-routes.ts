@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { prisma } from "@repo/db";
 import { FILE_SIZE_LIMITS, FileNode } from "@repo/types";
-import type { ToolExecutor } from "../execution/interfaces/tool-executor";
-import { createToolExecutor } from "../execution";
-import { getFileChanges, hasGitRepository } from "../utils/git-operations";
+import type { ToolExecutor } from "./execution/interfaces/tool-executor";
+import { createToolExecutor } from "./execution";
+import { getFileChanges, hasGitRepository } from "./utils/git-operations";
 
 const router = Router();
 
@@ -17,7 +17,10 @@ const IGNORE_DIRS = [
   "build",
 ];
 
-async function buildFileTree(executor: ToolExecutor, dirPath: string = "."): Promise<FileNode[]> {
+async function buildFileTree(
+  executor: ToolExecutor,
+  dirPath: string = "."
+): Promise<FileNode[]> {
   try {
     const listing = await executor.listDirectory(dirPath);
 
@@ -33,7 +36,9 @@ async function buildFileTree(executor: ToolExecutor, dirPath: string = "."): Pro
       if (IGNORE_DIRS.includes(item.name)) continue;
 
       const itemPath = dirPath === "." ? item.name : `${dirPath}/${item.name}`;
-      const displayPath = itemPath.startsWith("./") ? itemPath.slice(1) : `/${itemPath}`;
+      const displayPath = itemPath.startsWith("./")
+        ? itemPath.slice(1)
+        : `/${itemPath}`;
 
       if (item.type === "directory") {
         const children = await buildFileTree(executor, itemPath);
@@ -68,7 +73,7 @@ async function buildFileTree(executor: ToolExecutor, dirPath: string = "."): Pro
   }
 }
 
-// Get file tree for a task workspace  
+// Get file tree for a task workspace
 router.get("/:taskId/files/tree", async (req, res) => {
   try {
     const { taskId } = req.params;
@@ -79,14 +84,14 @@ router.get("/:taskId/files/tree", async (req, res) => {
       select: {
         id: true,
         status: true,
-        workspacePath: true
+        workspacePath: true,
       },
     });
 
     if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Task not found"
+        error: "Task not found",
       });
     }
 
@@ -96,7 +101,7 @@ router.get("/:taskId/files/tree", async (req, res) => {
         success: true,
         tree: [],
         status: "initializing",
-        message: "Workspace is being prepared. Please try again in a moment."
+        message: "Workspace is being prepared. Please try again in a moment.",
       });
     }
 
@@ -108,13 +113,13 @@ router.get("/:taskId/files/tree", async (req, res) => {
     res.json({
       success: true,
       tree,
-      status: "ready"
+      status: "ready",
     });
   } catch (error) {
     console.error("[FILE_TREE_API_ERROR]", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
@@ -128,7 +133,7 @@ router.get("/:taskId/files/content", async (req, res) => {
     if (!filePath) {
       return res.status(400).json({
         success: false,
-        error: "File path is required"
+        error: "File path is required",
       });
     }
 
@@ -138,14 +143,14 @@ router.get("/:taskId/files/content", async (req, res) => {
       select: {
         id: true,
         status: true,
-        workspacePath: true
+        workspacePath: true,
       },
     });
 
     if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Task not found"
+        error: "Task not found",
       });
     }
 
@@ -153,7 +158,7 @@ router.get("/:taskId/files/content", async (req, res) => {
     if (!task.workspacePath || task.status === "INITIALIZING") {
       return res.status(400).json({
         success: false,
-        error: "Workspace is still initializing"
+        error: "Workspace is still initializing",
       });
     }
 
@@ -167,14 +172,14 @@ router.get("/:taskId/files/content", async (req, res) => {
     if (!statsResult.success) {
       return res.status(400).json({
         success: false,
-        error: statsResult.error || "Failed to get file stats"
+        error: statsResult.error || "Failed to get file stats",
       });
     }
 
     if (!statsResult.stats?.isFile) {
       return res.status(400).json({
         success: false,
-        error: "Path is not a file"
+        error: "Path is not a file",
       });
     }
 
@@ -182,7 +187,7 @@ router.get("/:taskId/files/content", async (req, res) => {
     if (statsResult.stats.size > FILE_SIZE_LIMITS.MAX_FILE_SIZE_BYTES) {
       return res.status(400).json({
         success: false,
-        error: `File too large: ${statsResult.stats.size} bytes (max: ${FILE_SIZE_LIMITS.MAX_FILE_SIZE_BYTES} bytes)`
+        error: `File too large: ${statsResult.stats.size} bytes (max: ${FILE_SIZE_LIMITS.MAX_FILE_SIZE_BYTES} bytes)`,
       });
     }
 
@@ -192,7 +197,7 @@ router.get("/:taskId/files/content", async (req, res) => {
     if (!result.success || !result.content) {
       return res.status(400).json({
         success: false,
-        error: result.error || "Failed to read file"
+        error: result.error || "Failed to read file",
       });
     }
 
@@ -201,41 +206,41 @@ router.get("/:taskId/files/content", async (req, res) => {
       content: result.content,
       path: filePath,
       size: statsResult.stats.size,
-      truncated: false
+      truncated: false,
     });
   } catch (error) {
     console.error("[FILE_CONTENT_API_ERROR]", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
 
 // GET /api/tasks/:taskId/file-changes - Get git-based file changes
-router.get('/:taskId/file-changes', async (req, res) => {
+router.get("/:taskId/file-changes", async (req, res) => {
   try {
     const { taskId } = req.params;
 
     // Validate task exists and get full status
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, workspacePath: true, status: true }
+      select: { id: true, workspacePath: true, status: true },
     });
 
     if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Task not found"
+        error: "Task not found",
       });
     }
 
     // Don't return file changes if task is still initializing
-    if (task.status === 'INITIALIZING') {
+    if (task.status === "INITIALIZING") {
       return res.json({
         success: true,
         fileChanges: [],
-        diffStats: { additions: 0, deletions: 0, totalFiles: 0 }
+        diffStats: { additions: 0, deletions: 0, totalFiles: 0 },
       });
     }
 
@@ -245,7 +250,7 @@ router.get('/:taskId/file-changes', async (req, res) => {
       return res.json({
         success: true,
         fileChanges: [],
-        diffStats: { additions: 0, deletions: 0, totalFiles: 0 }
+        diffStats: { additions: 0, deletions: 0, totalFiles: 0 },
       });
     }
 
@@ -254,14 +259,13 @@ router.get('/:taskId/file-changes', async (req, res) => {
     res.json({
       success: true,
       fileChanges,
-      diffStats
+      diffStats,
     });
-
   } catch (error) {
     console.error("[FILE_CHANGES_API_ERROR]", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });

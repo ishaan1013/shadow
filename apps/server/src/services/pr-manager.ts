@@ -1,6 +1,6 @@
 import { GitHubService } from "../github";
 import { GitManager } from "./git-manager";
-import { LLMService } from "../llm";
+import { LLMService } from "../llm/";
 import { prisma } from "@repo/db";
 
 export interface PRMetadata {

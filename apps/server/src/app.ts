@@ -12,7 +12,7 @@ import { createSocketServer } from "./socket";
 import { getGitHubAccessToken } from "./utils/github-account";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
-import { filesRouter } from "./routes/files";
+import { filesRouter } from "./file-routes";
 
 const app = express();
 export const chatService = new ChatService();

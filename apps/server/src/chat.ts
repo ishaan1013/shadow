@@ -9,7 +9,7 @@ import {
 import { TextPart, ToolCallPart, ToolResultPart } from "ai";
 import { randomUUID } from "crypto";
 import { type ChatMessage } from "../../../packages/db/src/client";
-import { LLMService } from "./llm";
+import { LLMService } from "./llm/";
 import { systemPrompt } from "./prompt/system-prompt";
 import { GitManager } from "./services/git-manager";
 import { PRManager } from "./services/pr-manager";
