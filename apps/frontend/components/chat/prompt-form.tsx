@@ -30,6 +30,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { GithubConnection } from "./github";
+import { RepoIssues } from "./repo-issues";
 import type { FilteredRepository as Repository } from "@/lib/github/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { QueuedMessage } from "./queued-message";
@@ -340,158 +341,163 @@ export function PromptForm({
   }, [isHome, isMessageOptionsOpen, messageOptions, isStreaming]);
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className={cn(
-        "bg-background relative z-0 flex w-full max-w-lg flex-col",
-        !isHome && "sticky bottom-0 pb-6"
-      )}
-    >
-      {!isHome && (
-        <div className="from-background via-background/60 pointer-events-none absolute -left-px -top-[calc(4rem-1px)] -z-10 h-16 w-[calc(100%+2px)] -translate-y-px bg-gradient-to-t to-transparent" />
-      )}
-
-      <QueuedMessage />
-
-      {/* Wrapper div with textarea styling */}
-      {/* Outer div acts as a border, with a border-radius 1px larger than the inner div and 1px padding */}
-      <div
+    <>
+      <form
+        onSubmit={handleSubmit}
         className={cn(
-          "shadow-highlight/10 relative z-0 rounded-[calc(var(--radius)+1px)] p-px shadow-lg transition-all",
-          "focus-within:ring-ring/10 focus-within:border-sidebar-border focus-within:ring-4",
-          "user-message-border hover:shadow-highlight/20 focus-within:shadow-highlight/20",
-          isPending && "opacity-50"
+          "bg-background relative z-0 flex w-full max-w-lg flex-col",
+          !isHome && "sticky bottom-0 pb-6"
         )}
       >
         {!isHome && (
-          <div
-            className={cn(
-              "ease-out-expo select-none overflow-clip transition-all duration-500",
-              isMessageOptionsOpen
-                ? isStreaming
-                  ? "h-[126px]"
-                  : "h-[96px]"
-                : "h-0"
-            )}
-          >
-            <div className="flex flex-col gap-0.5 p-1.5">
-              <div className="text-muted-foreground flex w-full items-center justify-between gap-1 pl-1.5 text-xs font-medium">
-                <span>Select Message Option</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="iconXs"
-                      tabIndex={-1}
-                      className="text-muted-foreground hover:text-foreground hover:bg-sidebar-border p-0"
-                      onClick={() => setIsMessageOptionsOpen(false)}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="end" shortcut="esc">
-                    Cancel
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              {messageOptions.map((option) => {
-                const IconComponent = option.icon;
-                return (
-                  <Button
-                    key={option.id}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    tabIndex={-1}
-                    onClick={() => {
-                      option.action();
-                      setIsMessageOptionsOpen(false);
-                    }}
-                    className="hover:bg-sidebar-border justify-between font-normal"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <IconComponent className="size-4" />
-                      <span>{option.label}</span>
-                    </div>
-                    <span className="text-muted-foreground">
-                      {formatShortcut(option.shortcut)}
-                    </span>
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
+          <div className="from-background via-background/60 pointer-events-none absolute -left-px -top-[calc(4rem-1px)] -z-10 h-16 w-[calc(100%+2px)] -translate-y-px bg-gradient-to-t to-transparent" />
         )}
 
-        <div className="from-card/10 to-card relative flex min-h-24 flex-col rounded-lg bg-gradient-to-t">
-          <div className="bg-background absolute inset-0 -z-20 rounded-[calc(var(--radius)+1px)]" />
-          <Textarea
-            ref={textareaRef}
-            autoFocus
-            value={message}
-            onChange={(e) => {
-              if (!isMessageOptionsOpen) {
-                setMessage(e.target.value);
-              }
-            }}
-            onKeyDown={onKeyDown}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            placeholder="Build a cool new feature..."
-            className="placeholder:text-muted-foreground/50 bg-transparent! max-h-48 flex-1 resize-none border-0 shadow-none focus-visible:ring-0"
-          />
+        <QueuedMessage />
 
-          {/* Buttons inside the container */}
-          <div
-            className="flex items-center justify-between p-2"
-            onClick={() => textareaRef.current?.focus()}
-          >
-            <ModelSelector
-              isHome={isHome}
-              selectedModel={selectedModel}
-              handleSelectModel={handleSelectModel}
+        {/* Wrapper div with textarea styling */}
+        {/* Outer div acts as a border, with a border-radius 1px larger than the inner div and 1px padding */}
+        <div
+          className={cn(
+            "shadow-highlight/10 relative z-0 rounded-[calc(var(--radius)+1px)] p-px shadow-lg transition-all",
+            "focus-within:ring-ring/10 focus-within:border-sidebar-border focus-within:ring-4",
+            "user-message-border hover:shadow-highlight/20 focus-within:shadow-highlight/20",
+            isPending && "opacity-50"
+          )}
+        >
+          {!isHome && (
+            <div
+              className={cn(
+                "ease-out-expo select-none overflow-clip transition-all duration-500",
+                isMessageOptionsOpen
+                  ? isStreaming
+                    ? "h-[126px]"
+                    : "h-[96px]"
+                  : "h-0"
+              )}
+            >
+              <div className="flex flex-col gap-0.5 p-1.5">
+                <div className="text-muted-foreground flex w-full items-center justify-between gap-1 pl-1.5 text-xs font-medium">
+                  <span>Select Message Option</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="iconXs"
+                        tabIndex={-1}
+                        className="text-muted-foreground hover:text-foreground hover:bg-sidebar-border p-0"
+                        onClick={() => setIsMessageOptionsOpen(false)}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="end" shortcut="esc">
+                      Cancel
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                {messageOptions.map((option) => {
+                  const IconComponent = option.icon;
+                  return (
+                    <Button
+                      key={option.id}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      tabIndex={-1}
+                      onClick={() => {
+                        option.action();
+                        setIsMessageOptionsOpen(false);
+                      }}
+                      className="hover:bg-sidebar-border justify-between font-normal"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <IconComponent className="size-4" />
+                        <span>{option.label}</span>
+                      </div>
+                      <span className="text-muted-foreground">
+                        {formatShortcut(option.shortcut)}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="from-card/10 to-card relative flex min-h-24 flex-col rounded-lg bg-gradient-to-t">
+            <div className="bg-background absolute inset-0 -z-20 rounded-[calc(var(--radius)+1px)]" />
+            <Textarea
+              ref={textareaRef}
+              autoFocus
+              value={message}
+              onChange={(e) => {
+                if (!isMessageOptionsOpen) {
+                  setMessage(e.target.value);
+                }
+              }}
+              onKeyDown={onKeyDown}
+              onFocus={onFocus}
+              onBlur={onBlur}
+              placeholder="Build a cool new feature..."
+              className="placeholder:text-muted-foreground/50 bg-transparent! max-h-48 flex-1 resize-none border-0 shadow-none focus-visible:ring-0"
             />
 
-            <div className="flex items-center gap-2">
-              {isHome && (
-                <GithubConnection
-                  isOpen={isGithubConnectionOpen}
-                  setIsOpen={setIsGithubConnectionOpen}
-                  selectedRepo={repo}
-                  selectedBranch={branch}
-                  setSelectedRepo={setRepo}
-                  setSelectedBranch={setBranch}
-                />
-              )}
+            {/* Buttons inside the container */}
+            <div
+              className="flex items-center justify-between p-2"
+              onClick={() => textareaRef.current?.focus()}
+            >
+              <ModelSelector
+                isHome={isHome}
+                selectedModel={selectedModel}
+                handleSelectModel={handleSelectModel}
+              />
+
               <div className="flex items-center gap-2">
-                <Button
-                  type="submit"
-                  size="iconSm"
-                  disabled={
-                    (!isStreaming && !message.trim()) ||
-                    isMessageOptionsOpen ||
-                    isPending ||
-                    !selectedModel ||
-                    (isHome && (!repo || !branch))
-                  }
-                  className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
-                >
-                  {isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : isStreaming && !message.trim() ? (
-                    <div className="p-0.5">
-                      <Square className="fill-primary-foreground size-3" />
-                    </div>
-                  ) : (
-                    <ArrowUp className="size-4" />
-                  )}
-                </Button>
+                {isHome && (
+                  <GithubConnection
+                    isOpen={isGithubConnectionOpen}
+                    setIsOpen={setIsGithubConnectionOpen}
+                    selectedRepo={repo}
+                    selectedBranch={branch}
+                    setSelectedRepo={setRepo}
+                    setSelectedBranch={setBranch}
+                  />
+                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="submit"
+                    size="iconSm"
+                    disabled={
+                      (!isStreaming && !message.trim()) ||
+                      isMessageOptionsOpen ||
+                      isPending ||
+                      !selectedModel ||
+                      (isHome && (!repo || !branch))
+                    }
+                    className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
+                  >
+                    {isPending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : isStreaming && !message.trim() ? (
+                      <div className="p-0.5">
+                        <Square className="fill-primary-foreground size-3" />
+                      </div>
+                    ) : (
+                      <ArrowUp className="size-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </form>
+      </form>
+
+      {/* Github issues: only show on home page when repo is selected */}
+      {isHome && repo && branch && <RepoIssues repository={repo} />}
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { Branch, GitHubStatus, GroupedRepos } from "./types";
+import { Branch, GitHubIssue, GitHubStatus, GroupedRepos } from "./types";
 
 /*
 Client-side API functions (for use in hooks)
@@ -24,6 +24,16 @@ export async function fetchGitHubBranches(
   repoFullName: string
 ): Promise<Branch[]> {
   const response = await fetch(`/api/github/branches?repo=${repoFullName}`);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function fetchGitHubIssues(
+  repoFullName: string
+): Promise<GitHubIssue[]> {
+  const response = await fetch(`/api/github/issues?repo=${repoFullName}`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }

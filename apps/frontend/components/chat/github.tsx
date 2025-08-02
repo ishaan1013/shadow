@@ -58,7 +58,7 @@ export function GithubConnection({
     data: githubStatus,
     isLoading: isLoadingStatus,
     error: statusError,
-  } = useGitHubStatus(isOpen);
+  } = useGitHubStatus();
 
   const {
     data: groupedRepos = { groups: [] },

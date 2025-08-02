@@ -2,13 +2,12 @@ import { fetchGitHubStatus } from "@/lib/github/fetch";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-export function useGitHubStatus(enabled = true) {
+export function useGitHubStatus() {
   const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["github", "status"],
     queryFn: fetchGitHubStatus,
-    enabled,
     throwOnError: false, // Don't throw on error - let component handle error states
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: (failureCount, error) => {
