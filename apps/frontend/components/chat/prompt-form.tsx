@@ -361,7 +361,7 @@ export function PromptForm({
     formData.append("repoFullName", repo.full_name);
     formData.append("baseBranch", branch.name);
     formData.append("baseCommitSha", branch.commitSha);
-    formData.append("githubIssueNumber", issue.id.toString());
+    formData.append("githubIssueId", issue.id);
 
     startTransition(async () => {
       let taskId: string | null = null;

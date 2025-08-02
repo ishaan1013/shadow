@@ -78,8 +78,8 @@ function IssuesContent({
         )}
         style={{ "--issue-index": 0 } as React.CSSProperties}
       >
-        <div className="text-muted-foreground flex items-center gap-2 text-sm">
-          <GithubIssueIcon className="size-4 flex-shrink-0" />
+        <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+          <GithubIssueIcon className="size-3.5 flex-shrink-0 text-green-400" />
           GitHub Issues
         </div>
         <Tooltip>
@@ -90,7 +90,7 @@ function IssuesContent({
               onClick={handleRefresh}
               className="text-muted-foreground hover:text-foreground invisible opacity-0 transition-all group-hover/issues:visible group-hover/issues:opacity-100"
             >
-              <RotateCw className="size-3.5 flex-shrink-0" />
+              {<RotateCw className="size-3.5" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">

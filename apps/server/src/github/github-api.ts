@@ -396,7 +396,7 @@ export class GitHubApiClient {
 
         // Transform to our GitHubIssue interface
         return {
-          id: data.id,
+          id: data.id.toString(),
           title: data.title,
           body: data.body || null,
           state: data.state as "open" | "closed",

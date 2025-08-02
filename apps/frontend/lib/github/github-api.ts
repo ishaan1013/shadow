@@ -359,7 +359,6 @@ export async function getGitHubIssues(
       account.githubInstallationId
     );
 
-    // Fetch issues from GitHub API (up to 100 open issues only)
     const { data: issues } = await octokit.rest.issues.listForRepo({
       owner,
       repo: repoName,
@@ -374,7 +373,7 @@ export async function getGitHubIssues(
 
     // Convert to our simplified GitHubIssue interface
     const simplifiedIssues: GitHubIssue[] = actualIssues.map((issue) => ({
-      id: issue.id,
+      id: issue.id.toString(),
       title: issue.title,
       body: issue.body || null,
       state: issue.state as "open" | "closed",
@@ -404,12 +403,10 @@ export async function getGitHubIssues(
   } catch (error) {
     console.error("Error getting GitHub issues:", error);
 
-    // Check if this is a stale installation and clear it
     if (userId) {
       await handleStaleInstallation(error, userId);
     }
 
-    // Return empty state instead of throwing
     return [];
   }
 }

@@ -79,7 +79,7 @@ const initiateTaskSchema = z.object({
     errorMap: () => ({ message: "Invalid model type" }),
   }),
   userId: z.string().min(1, "User ID is required"),
-  githubIssueNumber: z.number().optional(),
+  githubIssueId: z.string().optional(),
 });
 
 const socketIOServer = http.createServer(app);
@@ -146,7 +146,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       });
     }
 
-    const { message, model, userId, githubIssueNumber } = validation.data;
+    const { message, model, userId, githubIssueId } = validation.data;
 
     // Verify task exists
     const task = await prisma.task.findUnique({
@@ -160,21 +160,21 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
     // If issue number provided, fetch issue and generate contextualized prompt
     let finalMessage = message;
 
-    if (githubIssueNumber) {
+    if (githubIssueId) {
       try {
         const issue = await githubApiClient.getIssue(
           task.repoFullName,
-          githubIssueNumber,
+          parseInt(githubIssueId, 10),
           userId
         );
         finalMessage = generateIssuePrompt(issue || undefined);
 
         console.log(
-          `[TASK_INITIATE] ${issue ? "Fetched" : "Could not fetch"} issue #${githubIssueNumber} for contextualized prompt`
+          `[TASK_INITIATE] ${issue ? "Fetched" : "Could not fetch"} issue #${githubIssueId} for contextualized prompt`
         );
       } catch (error) {
         console.warn(
-          `[TASK_INITIATE] Failed to fetch issue #${githubIssueNumber}:`,
+          `[TASK_INITIATE] Failed to fetch issue #${githubIssueId}:`,
           error
         );
         finalMessage = generateIssuePrompt();
@@ -234,11 +234,11 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 
       console.log("userApiKeys", userApiKeys, "model", model);
 
-      // Update task with GitHub issue number if provided
-      if (githubIssueNumber) {
+      // Update task with GitHub issue ID if provided
+      if (githubIssueId) {
         await prisma.task.update({
           where: { id: taskId },
-          data: { githubIssueNumber },
+          data: { githubIssueId },
         });
       }
 

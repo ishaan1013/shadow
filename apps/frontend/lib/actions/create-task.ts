@@ -24,10 +24,7 @@ const createTaskSchema = z.object({
       "Only GitHub repositories are supported"
     ),
   baseBranch: z.string().min(1, "Base branch is required").default("main"),
-  githubIssueNumber: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : undefined)),
+  githubIssueId: z.string().optional(),
 });
 
 export async function createTask(formData: FormData) {
@@ -47,7 +44,7 @@ export async function createTask(formData: FormData) {
     repoFullName: formData.get("repoFullName") as string,
     repoUrl: formData.get("repoUrl") as string,
     baseBranch: (formData.get("baseBranch") as string) || "main",
-    githubIssueNumber: formData.get("githubIssueNumber") as string | null,
+    githubIssueId: formData.get("githubIssueId") as string | null,
   };
   const validation = createTaskSchema.safeParse(rawData);
   if (!validation.success) {
@@ -63,7 +60,7 @@ export async function createTask(formData: FormData) {
     repoUrl,
     baseBranch,
     repoFullName,
-    githubIssueNumber,
+    githubIssueId,
   } = validation.data;
 
   const taskId = nanoid();
@@ -125,7 +122,7 @@ export async function createTask(formData: FormData) {
               message,
               model,
               userId: session.user.id,
-              ...(githubIssueNumber && { githubIssueNumber }),
+              ...(githubIssueId && { githubIssueId }),
             }),
           }
         );

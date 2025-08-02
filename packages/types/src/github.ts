@@ -1,5 +1,5 @@
 export interface GitHubIssue {
-  id: number;
+  id: string;
   title: string;
   body: string | null;
   state: "open" | "closed";
