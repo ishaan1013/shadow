@@ -52,25 +52,3 @@ export const hasCompressionLevel = (
   return versions[level] !== undefined;
 };
 
-export interface ContextUsageStats {
-  taskId: string;
-  model: string;
-  totalMessages: number;
-  totalTokens: number;
-  tokenLimit: number;
-  compressionThreshold: number;
-  usagePercentage: number;
-  compressionActive: boolean;
-  compressedMessages: number;
-  compressionBreakdown: {
-    none: number;
-    light: number;
-    heavy: number;
-  };
-  // Current context compression stats (if available)
-  currentCompressionStats?: {
-    compressedTokens: number;
-    uncompressedTokens: number;
-    compressionSavings: number;
-  };
-}

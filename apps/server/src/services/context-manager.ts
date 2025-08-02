@@ -3,7 +3,6 @@ import {
   ModelType,
   Message,
   CompressionLevel,
-  ContextUsageStats,
 } from "@repo/types";
 import { TokenCounterService } from "./token-counter";
 import { MessageCompressor } from "./message-compressor";
@@ -339,110 +338,4 @@ export class ContextManager {
     };
   }
 
-  // Get context usage statistics for a task
-  async getContextUsageStats(
-    taskId: string,
-    model: ModelType
-  ): Promise<ContextUsageStats> {
-    // Get all messages for the task
-    const dbMessages: ChatMessage[] = await prisma.chatMessage.findMany({
-      where: { taskId },
-      orderBy: [{ sequence: "asc" }, { createdAt: "asc" }],
-    });
-
-    if (dbMessages.length === 0) {
-      const settings = getCompressionSettings(model);
-      return {
-        taskId,
-        model,
-        totalMessages: 0,
-        totalTokens: 0,
-        tokenLimit: settings.tokenLimit,
-        compressionThreshold: Math.floor(
-          settings.tokenLimit * settings.compressionThreshold
-        ),
-        usagePercentage: 0,
-        compressionActive: false,
-        compressedMessages: 0,
-        compressionBreakdown: {
-          none: 0,
-          light: 0,
-          heavy: 0,
-        },
-      };
-    }
-
-    const settings = getCompressionSettings(model);
-    const messages = this.convertDbMessages(dbMessages, model);
-
-    // Calculate total tokens
-    const totalTokens = this.tokenCounter.countTotalTokens(
-      messages.map((m) => ({ content: m.content })),
-      model
-    );
-
-    // Get current compression stats by building optimal context
-    let currentCompressionStats;
-    try {
-      const contextResult = await this.buildOptimalContext(taskId, model);
-      if (contextResult.compressionStats.compressionSavings > 0) {
-        currentCompressionStats = contextResult.compressionStats;
-      }
-    } catch (error) {
-      console.warn(`[CONTEXT] Failed to get compression stats for usage API:`, error);
-      // Continue without compression stats
-    }
-
-    // Calculate compression breakdown
-    const compressionBreakdown = {
-      none: 0,
-      light: 0,
-      heavy: 0,
-    };
-
-    let compressedMessages = 0;
-
-    for (const dbMsg of dbMessages) {
-      const level =
-        (dbMsg.activeCompressionLevel as CompressionLevel) || "NONE";
-
-      if (level !== "NONE") {
-        compressedMessages++;
-      }
-
-      switch (level) {
-        case "LIGHT":
-          compressionBreakdown.light++;
-          break;
-        case "HEAVY":
-          compressionBreakdown.heavy++;
-          break;
-        default:
-          compressionBreakdown.none++;
-          break;
-      }
-    }
-
-    const compressionThreshold = Math.floor(
-      settings.tokenLimit * settings.compressionThreshold
-    );
-    const usagePercentage = Math.round(
-      (totalTokens / settings.tokenLimit) * 100
-    );
-    const compressionActive = totalTokens > compressionThreshold;
-
-    return {
-      taskId,
-      model,
-      totalMessages: messages.length,
-      totalTokens,
-      tokenLimit: settings.tokenLimit,
-      compressionThreshold,
-      usagePercentage,
-      compressionActive,
-      compressedMessages,
-      compressionBreakdown,
-      currentCompressionStats,
-    };
-  }
 }

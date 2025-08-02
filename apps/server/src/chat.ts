@@ -24,11 +24,13 @@ import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
 import { createToolExecutor } from "./execution";
 import { ContextManager } from "./services/context-manager";
+import { TokenCounterService } from "./services/token-counter";
 
 export class ChatService {
   private llmService: LLMService;
   private githubService: GitHubService;
   private contextManager: ContextManager;
+  private tokenCounter: TokenCounterService;
   private activeStreams: Map<string, AbortController> = new Map();
   private stopRequested: Set<string> = new Set();
   private queuedMessages: Map<
@@ -40,6 +42,7 @@ export class ChatService {
     this.llmService = new LLMService();
     this.githubService = new GitHubService();
     this.contextManager = new ContextManager();
+    this.tokenCounter = new TokenCounterService();
   }
 
   private async getNextSequence(taskId: string): Promise<number> {
@@ -58,17 +61,38 @@ export class ChatService {
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
     const sequence = await this.getNextSequence(taskId);
-    return await prisma.chatMessage.create({
-      data: {
-        taskId,
-        content,
-        role: "USER",
-        sequence,
-        llmModel,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        metadata: (metadata as any) || undefined,
-      },
+    
+    const messageTokens = this.tokenCounter.countTokens(content, llmModel as ModelType);
+    
+    // Create message and update task totalTokens in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const message = await tx.chatMessage.create({
+        data: {
+          taskId,
+          content,
+          role: "USER",
+          sequence,
+          llmModel,
+          totalTokens: messageTokens,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          metadata: (metadata as any) || undefined,
+        },
+      });
+      
+      // Increment task totalTokens
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          totalTokens: {
+            increment: messageTokens
+          }
+        }
+      });
+      
+      return message;
     });
+    
+    return result;
   }
 
   async saveAssistantMessage(
@@ -80,23 +104,42 @@ export class ChatService {
   ): Promise<ChatMessage> {
     // Extract usage info for denormalized storage
     const usage = metadata?.usage;
+    
+    // Use completion tokens (just the assistant's response) from LLM usage, or estimate if not available
+    const messageTokens = usage?.completionTokens || this.tokenCounter.countTokens(content, llmModel as ModelType);
 
-    return await prisma.chatMessage.create({
-      data: {
-        taskId,
-        content,
-        role: "ASSISTANT",
-        llmModel,
-        sequence,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        metadata: (metadata as any) || undefined,
-        // Denormalized usage fields for easier querying
-        promptTokens: usage?.promptTokens,
-        completionTokens: usage?.completionTokens,
-        totalTokens: usage?.totalTokens,
-        finishReason: metadata?.finishReason,
-      },
+    // Create message and update task totalTokens in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const message = await tx.chatMessage.create({
+        data: {
+          taskId,
+          content,
+          role: "ASSISTANT",
+          llmModel,
+          sequence,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          metadata: (metadata as any) || undefined,
+          // Denormalized usage fields for easier querying
+          promptTokens: usage?.promptTokens,
+          completionTokens: usage?.completionTokens,
+          totalTokens: messageTokens,
+          finishReason: metadata?.finishReason,
+        },
+      });
+      
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          totalTokens: {
+            increment: messageTokens
+          }
+        }
+      });
+      
+      return message;
     });
+    
+    return result;
   }
 
   async saveToolMessage(
@@ -108,26 +151,46 @@ export class ChatService {
     llmModel: string,
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
-    return await prisma.chatMessage.create({
-      data: {
-        taskId,
-        content: toolResult,
-        role: "TOOL",
-        sequence,
-        llmModel,
-        metadata: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ...(metadata as any),
-          tool: {
-            name: toolName,
-            args: toolArgs,
-            status: "COMPLETED",
-            result: toolResult,
-          },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any,
-      },
+    const messageTokens = this.tokenCounter.countTokens(toolResult, llmModel as ModelType);
+    
+    // Create message and update task totalTokens in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const message = await tx.chatMessage.create({
+        data: {
+          taskId,
+          content: toolResult,
+          role: "TOOL",
+          sequence,
+          llmModel,
+          totalTokens: messageTokens,
+          metadata: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...(metadata as any),
+            tool: {
+              name: toolName,
+              args: toolArgs,
+              status: "COMPLETED",
+              result: toolResult,
+            },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any,
+        },
+      });
+      
+      // Increment task totalTokens
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          totalTokens: {
+            increment: messageTokens
+          }
+        }
+      });
+      
+      return message;
     });
+    
+    return result;
   }
 
   /**
@@ -780,17 +843,43 @@ export class ChatService {
           parts: assistantParts,
         };
 
-        await prisma.chatMessage.update({
-          where: { id: assistantMessageId },
-          data: {
-            content: fullContent,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            metadata: finalMetadata as any,
-            promptTokens: usageMetadata.promptTokens,
-            completionTokens: usageMetadata.completionTokens,
-            totalTokens: usageMetadata.totalTokens,
-            finishReason: finishReason,
-          },
+        // Update message and adjust task totalTokens for the difference between estimated and actual tokens
+        await prisma.$transaction(async (tx) => {
+          // Get current message to find the difference in tokens
+          const currentMessage = await tx.chatMessage.findUnique({
+            where: { id: assistantMessageId! },
+            select: { totalTokens: true }
+          });
+          
+          const estimatedTokens = currentMessage?.totalTokens || 0;
+          const actualTokens = usageMetadata!.completionTokens;
+          const tokenDifference = actualTokens - estimatedTokens;
+          
+          // Update the message with final data
+          await tx.chatMessage.update({
+            where: { id: assistantMessageId! },
+            data: {
+              content: fullContent,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              metadata: finalMetadata as any,
+              promptTokens: usageMetadata!.promptTokens,
+              completionTokens: usageMetadata!.completionTokens,
+              totalTokens: actualTokens, // Now storing just completion tokens
+              finishReason: finishReason,
+            },
+          });
+          
+          // Adjust task totalTokens by the difference
+          if (tokenDifference !== 0) {
+            await tx.task.update({
+              where: { id: taskId },
+              data: {
+                totalTokens: {
+                  increment: tokenDifference
+                }
+              }
+            });
+          }
         });
       }
 

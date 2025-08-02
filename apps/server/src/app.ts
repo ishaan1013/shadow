@@ -13,7 +13,6 @@ import { getGitHubAccessToken } from "./utils/github-account";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
 import { filesRouter } from "./routes/files";
-import { getContextUsage } from "./routes/context";
 
 const app = express();
 export const chatService = new ChatService();
@@ -48,9 +47,6 @@ app.use("/api/indexing", IndexingRouter);
 
 // Files routes
 app.use("/api/tasks", filesRouter);
-
-// Context usage route
-app.get("/api/context/usage/:taskId", getContextUsage);
 
 // Get task details
 app.get("/api/tasks/:taskId", async (req, res) => {

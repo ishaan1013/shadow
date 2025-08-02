@@ -84,6 +84,7 @@ model Task {
   lastCompletedStep   InitStepType?
   initializationError String?
   workspaceCleanedUp  Boolean           @default(false)
+  totalTokens         Int               @default(0)  // Aggregate token count for the task
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   userId              String
