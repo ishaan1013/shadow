@@ -4,7 +4,7 @@ import { ModelType, getModelProvider } from "@repo/types";
 
 export class TokenCounterService {
   countTokens(text: string, model: ModelType): number {
-    // Cheap token extimation
+    // Cheap token estimation
     const provider = getModelProvider(model);
     
     // Estimate tokens based on character length
