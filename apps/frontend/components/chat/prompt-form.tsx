@@ -386,10 +386,8 @@ export function PromptForm({
       <form
         onSubmit={handleSubmit}
         className={cn(
-          "shadow-highlight/10 relative z-0 rounded-[calc(var(--radius)+1px)] p-px shadow-lg transition-all",
-          "focus-within:ring-ring/5 focus-within:border-sidebar-border focus-within:ring-4",
-          "user-message-border hover:shadow-highlight/20 focus-within:shadow-highlight/20",
-          isPending && "opacity-50"
+          "bg-background relative z-0 flex w-full max-w-lg flex-col",
+          !isHome && "sticky bottom-0 pb-6"
         )}
       >
         {!isHome && (
@@ -403,7 +401,7 @@ export function PromptForm({
         <div
           className={cn(
             "shadow-highlight/10 relative z-0 rounded-[calc(var(--radius)+1px)] p-px shadow-lg transition-all",
-            "focus-within:ring-ring/10 focus-within:border-sidebar-border focus-within:ring-4",
+            "focus-within:ring-ring/5 focus-within:border-sidebar-border focus-within:ring-4",
             "user-message-border hover:shadow-highlight/20 focus-within:shadow-highlight/20",
             isPending && "opacity-50"
           )}

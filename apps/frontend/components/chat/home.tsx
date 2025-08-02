@@ -19,7 +19,7 @@ export function HomePageContent({
   const [isFocused, setIsFocused] = useState(true);
 
   return (
-    <div className="mx-auto mt-24 flex w-full max-w-lg flex-col items-center gap-10 overflow-hidden">
+    <div className="mx-auto mt-20 flex w-full max-w-lg flex-col items-center gap-10 overflow-hidden p-4">
       <div className="font-departureMono flex items-center gap-4 text-3xl font-medium tracking-tighter">
         <LogoHover size="lg" forceAnimate={isFocused} />
         Code with{" "}
