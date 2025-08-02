@@ -2,7 +2,7 @@ import type { Message } from "@repo/types";
 import { Replace } from "lucide-react";
 import { useAgentEnvironment } from "@/components/agent-environment/agent-environment-context";
 import { getToolResult } from "@repo/types";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 
 export function SearchReplaceTool({ message }: { message: Message }) {
@@ -28,7 +28,7 @@ export function SearchReplaceTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<Replace />}
-      type={ToolType.SEARCH_REPLACE}
+      type={ToolTypes.SEARCH_REPLACE}
       title={filePath}
       changes={changes}
       onClick={() => {

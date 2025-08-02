@@ -5,18 +5,20 @@ import cors from "cors";
 import express from "express";
 import http from "http";
 import { z } from "zod";
-import { ChatService } from "./chat";
+import { ChatService } from "./ai/chat";
 import { TaskInitializationEngine } from "./initialization";
 import { errorHandler } from "./middleware/error-handler";
 import { createSocketServer } from "./socket";
 import { getGitHubAccessToken } from "./utils/github-account";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
-import { filesRouter } from "./routes/files";
+import { filesRouter } from "./file-routes";
+import { parseApiKeysFromCookies } from "./utils/cookie-parser";
 
 const app = express();
 export const chatService = new ChatService();
 const initializationEngine = new TaskInitializationEngine();
+
 
 const initiateTaskSchema = z.object({
   message: z.string().min(1, "Message is required"),
@@ -139,10 +141,25 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 
       // Process the message with the agent using the task workspace
       // Skip saving user message since it's already saved in the server action
+
+      const userApiKeys = parseApiKeysFromCookies(req.headers.cookie);
+      const modelProvider = model.includes("claude") ? "anthropic" : "openai";
+      if (!userApiKeys[modelProvider]) {
+        const providerName =
+          modelProvider === "anthropic" ? "Anthropic" : "OpenAI";
+        return res.status(400).json({
+          error: `${providerName} API key required`,
+          details: `Please configure your ${providerName} API key in settings to use ${model}.`,
+        });
+      }
+
+      console.log("\n\n[TASK_INITIATE] PROCESSING USER MESSAGE\n\n");
+
       await chatService.processUserMessage({
         taskId,
         userMessage: message,
         llmModel: model as ModelType,
+        userApiKeys,
         enableTools: true,
         skipUserMessageSave: true,
         workspacePath: updatedTask?.workspacePath || undefined,
@@ -185,9 +202,10 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 });
 
 // Get available models
-app.get("/api/models", async (_req, res) => {
+app.get("/api/models", async (req, res) => {
   try {
-    const availableModels = chatService.getAvailableModels();
+    const userApiKeys = parseApiKeysFromCookies(req.headers.cookie);
+    const availableModels = chatService.getAvailableModels(userApiKeys);
     const modelsWithInfo = availableModels.map((modelId) => ({
       ...ModelInfos[modelId],
       id: modelId,

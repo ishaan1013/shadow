@@ -1,4 +1,4 @@
-import { prisma } from "@repo/db";
+import { prisma, InitStatus } from "@repo/db";
 import {
   StreamChunk,
   ServerToClientEvents,
@@ -14,13 +14,17 @@ import config from "./config";
 import { updateTaskStatus } from "./utils/task-status";
 import { createToolExecutor } from "./execution";
 import { setupSidecarNamespace } from "./services/sidecar-socket-handler";
+import { parseApiKeysFromCookies } from "./utils/cookie-parser";
 
 interface ConnectionState {
   lastSeen: number;
   taskId?: string;
   reconnectCount: number;
-  // Track buffer position for incremental updates
   bufferPosition: number;
+  apiKeys?: {
+    openai?: string;
+    anthropic?: string;
+  };
 }
 
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -177,13 +181,11 @@ async function verifyTaskAccess(
   taskId: string
 ): Promise<boolean> {
   try {
-    console.log(`[SOCKET] Verifying access for task: ${taskId}`);
     // For now, just check if task exists
     // TODO: Add proper user authentication and authorization
     const task = await prisma.task.findUnique({
       where: { id: taskId },
     });
-    console.log(`[SOCKET] Task found:`, !!task, task ? `(${task.status})` : '(not found)');
     return !!task;
   } catch (error) {
     console.error(`[SOCKET] Error verifying task access:`, error);
@@ -206,6 +208,12 @@ export function createSocketServer(
     cors: {
       origin: config.clientUrl,
       methods: ["GET", "POST"],
+      credentials: true,
+    },
+    cookie: {
+      name: "io",
+      httpOnly: true,
+      sameSite: "lax",
     },
   });
 
@@ -217,7 +225,17 @@ export function createSocketServer(
 
   io.on("connection", (socket: TypedSocket) => {
     const connectionId = socket.id;
+
+    const cookieHeader = socket.request.headers.cookie;
+    const apiKeys = parseApiKeysFromCookies(cookieHeader);
+
     console.log(`[SOCKET] User connected: ${connectionId}`);
+    console.log(`[SOCKET] Parsed API keys:`, {
+      hasOpenAI: !!apiKeys.openai,
+      hasAnthropic: !!apiKeys.anthropic,
+      openaiLength: apiKeys.openai?.length || 0,
+      anthropicLength: apiKeys.anthropic?.length || 0,
+    });
 
     // Initialize connection state
     const existingState = connectionStates.get(connectionId);
@@ -226,6 +244,7 @@ export function createSocketServer(
       taskId: existingState?.taskId,
       reconnectCount: existingState ? existingState.reconnectCount + 1 : 0,
       bufferPosition: existingState?.bufferPosition || 0,
+      apiKeys,
     };
     connectionStates.set(connectionId, connectionState);
 
@@ -321,10 +340,29 @@ export function createSocketServer(
           select: { workspacePath: true },
         });
 
+        const connectionState = connectionStates.get(connectionId);
+        const userApiKeys = connectionState?.apiKeys || {};
+
+        // Validate that user has the required API key for the selected model
+        if (data.llmModel) {
+          const modelProvider = data.llmModel.includes("claude")
+            ? "anthropic"
+            : "openai";
+          if (!userApiKeys[modelProvider]) {
+            const providerName =
+              modelProvider === "anthropic" ? "Anthropic" : "OpenAI";
+            socket.emit("message-error", {
+              error: `${providerName} API key required. Please configure your API key in settings to use ${data.llmModel}.`,
+            });
+            return;
+          }
+        }
+
         await chatService.processUserMessage({
           taskId: data.taskId,
           userMessage: data.message,
           llmModel: data.llmModel as ModelType,
+          userApiKeys,
           workspacePath: task?.workspacePath || undefined,
           queue: data.queue || false,
         });
@@ -364,11 +402,30 @@ export function createSocketServer(
           select: { workspacePath: true },
         });
 
+        const connectionState = connectionStates.get(connectionId);
+        const userApiKeys = connectionState?.apiKeys || {};
+
+        // Validate that user has the required API key for the selected model
+        if (data.llmModel) {
+          const modelProvider = data.llmModel.includes("claude")
+            ? "anthropic"
+            : "openai";
+          if (!userApiKeys[modelProvider]) {
+            const providerName =
+              modelProvider === "anthropic" ? "Anthropic" : "OpenAI";
+            socket.emit("message-error", {
+              error: `${providerName} API key required. Please configure your API key in settings to use ${data.llmModel}.`,
+            });
+            return;
+          }
+        }
+
         await chatService.editUserMessage({
           taskId: data.taskId,
           messageId: data.messageId,
           newContent: data.message,
           newModel: data.llmModel,
+          userApiKeys,
           workspacePath: task?.workspacePath || undefined,
         });
       } catch (error) {
@@ -573,11 +630,33 @@ export function handleStreamError(error: unknown, taskId: string) {
   }
 }
 
-export function emitTaskStatusUpdate(taskId: string, status: string) {
+export async function emitTaskStatusUpdate(
+  taskId: string,
+  status: string,
+  initStatus?: InitStatus
+) {
   if (io) {
+    // If initStatus not provided, fetch current task state
+    let currentInitStatus = initStatus;
+    if (!currentInitStatus) {
+      try {
+        const task = await prisma.task.findUnique({
+          where: { id: taskId },
+          select: { initStatus: true },
+        });
+        currentInitStatus = task?.initStatus;
+      } catch (error) {
+        console.error(
+          `[SOCKET] Error fetching initStatus for task ${taskId}:`,
+          error
+        );
+      }
+    }
+
     const statusUpdateEvent = {
       taskId,
       status,
+      initStatus: currentInitStatus,
       timestamp: new Date().toISOString(),
     };
 

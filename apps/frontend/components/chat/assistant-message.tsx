@@ -1,5 +1,10 @@
 import { cn } from "@/lib/utils";
-import type { Message, ErrorPart, ToolResultTypes } from "@repo/types";
+import type {
+  Message,
+  ErrorPart,
+  ToolResultTypes,
+  ValidationErrorResult,
+} from "@repo/types";
 import {
   ChevronDown,
   AlertCircle,
@@ -11,6 +16,7 @@ import { useState, useMemo, useCallback } from "react";
 import { MemoizedMarkdown } from "./memoized-markdown";
 import { ToolMessage } from "./tools";
 import { ToolComponent } from "./tools/collapsible-tool";
+import { ValidationErrorTool } from "./tools/validation-error";
 import { PRCard } from "./pr-card";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../ui/tooltip";
@@ -168,7 +174,12 @@ export function AssistantMessage({
   }
 
   return (
-    <div className="group/assistant-message relative flex flex-col gap-1">
+    <div
+      className={cn(
+        "group/assistant-message relative flex flex-col gap-1",
+        groupedParts[groupedParts.length - 1]?.type !== "text" ? "pb-3" : ""
+      )}
+    >
       {groupedParts.map((group, groupIndex) => {
         if (group.type === "text") {
           return (
@@ -184,6 +195,24 @@ export function AssistantMessage({
         if (group.type === "tool-call") {
           const part = group.part as ToolCallPart;
           const toolResult = toolResultsMap.get(part.toolCallId);
+
+          // Check if result is a validation error
+          const isValidationError =
+            toolResult?.result &&
+            typeof toolResult.result === "object" &&
+            "success" in toolResult.result &&
+            toolResult.result.success === false;
+
+          if (isValidationError) {
+            return (
+              <ValidationErrorTool
+                key={`validation-error-${groupIndex}`}
+                toolName={part.toolName}
+                args={part.args as Record<string, unknown>}
+                error={toolResult.result as ValidationErrorResult}
+              />
+            );
+          }
 
           // Create a proper tool message for rendering
           const toolMessage: Message = {

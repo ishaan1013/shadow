@@ -81,7 +81,8 @@ model Task {
   repoUrl      String
 
   workspacePath       String?
-  lastCompletedStep   InitStepType?
+  initStatus          InitStatus        @default(INACTIVE)
+  scheduledCleanupAt  DateTime?
   initializationError String?
   workspaceCleanedUp  Boolean           @default(false)
   createdAt           DateTime          @default(now())
@@ -209,7 +210,6 @@ enum TaskStatus {
   RUNNING
   COMPLETED
   FAILED
-  CANCELLED
 }
 
 enum PullRequestStatus {
@@ -231,20 +231,14 @@ enum TodoStatus {
   CANCELLED
 }
 
-enum InitStepType {
-  // Local mode step
+enum InitStatus {
+  INACTIVE
   PREPARE_WORKSPACE
-
-  // Remote execution steps
   CREATE_VM
   WAIT_VM_READY
   VERIFY_VM_WORKSPACE
-
-  // Repository indexing step (both modes)
   INDEX_REPOSITORY
-
-  // Cleanup step (remote mode only)
-  CLEANUP_WORKSPACE
+  ACTIVE
 }
 
 enum FileOp {

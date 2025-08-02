@@ -97,12 +97,17 @@ export async function createTask(formData: FormData) {
         // Initiate the task on the backend
         const baseUrl =
           process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        // Forward cookies from the original request
+        const requestHeaders = await headers();
+        const cookieHeader = requestHeaders.get('cookie');
+        
         const response = await fetch(
           `${baseUrl}/api/tasks/${task.id}/initiate`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(cookieHeader && { Cookie: cookieHeader }),
             },
             body: JSON.stringify({
               message,

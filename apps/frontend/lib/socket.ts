@@ -20,4 +20,5 @@ export const socket: TypedSocket = io(socketUrl, {
   reconnectionDelayMax: RECONNECTION_DELAY_MAX,
   timeout: TIMEOUT,
   forceNew: false,
+  withCredentials: true,
 });

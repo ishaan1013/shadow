@@ -4,14 +4,13 @@ import { createHash } from "crypto";
 import { readFileSync, statSync } from "fs";
 import { OpenAI } from "openai";
 import path from "path";
-// (Line removed)
 import { DeepWikiStorage } from "./storage";
 
 // Tree-sitter imports
-import Parser from "tree-sitter";
+import Parser, { Language } from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
-import { safeRequire } from "../languages";
-// import Python from "tree-sitter-python";
+import TS from "tree-sitter-typescript";
+import Python from "tree-sitter-python";
 
 // Configuration - will be set by runDeepWiki function
 let ROOT = "";
@@ -67,21 +66,21 @@ const sha1 = (data: string) => createHash("sha1").update(data).digest("hex");
 
 // Tree-sitter language setup
 const parserJS = new Parser();
-parserJS.setLanguage(JavaScript as any);
-const TS = safeRequire("tree-sitter-typescript");
+parserJS.setLanguage(JavaScript as Language);
 const parserTS = new Parser();
-parserTS.setLanguage(TS?.typescript);
+parserTS.setLanguage(TS.typescript as Language);
 const parserTSX = new Parser();
-parserTSX.setLanguage(TS?.tsx);
-// Python parser disabled for now
+parserTSX.setLanguage(TS.tsx as Language);
+const parserPy = new Parser();
+parserPy.setLanguage(Python as Language);
 
 // Typed language aliases for tree-sitter
-const LangJS = JavaScript as any;
-const LangTS = TS?.typescript;
-const LangTSX = TS?.tsx;
-// const LangPy = Python as any;
+const LangJS = JavaScript;
+const LangTS = TS.typescript;
+const LangTSX = TS.tsx;
+const LangPy = Python;
 
-type LangKey = "js" | "ts" | "tsx";
+type LangKey = "js" | "ts" | "tsx" | "py";
 interface LangSpec {
   parser: Parser;
   queryDefs: Parser.Query;
@@ -95,7 +94,7 @@ const LANGUAGES: Record<LangKey, LangSpec> = {
     parser: parserJS,
     extensions: [".js", ".cjs", ".mjs", ".jsx"],
     queryDefs: new Parser.Query(
-      LangJS,
+      LangJS as Language,
       `
       (function_declaration name: (identifier) @def.name)
       (method_definition name: (property_identifier) @def.name)
@@ -104,14 +103,14 @@ const LANGUAGES: Record<LangKey, LangSpec> = {
     `
     ),
     queryCalls: new Parser.Query(
-      LangJS,
+      LangJS as Language,
       `
       (call_expression function: (identifier) @call.name)
       (call_expression function: (member_expression property: (property_identifier) @call.name))
     `
     ),
     queryImports: new Parser.Query(
-      LangJS,
+      LangJS as Language,
       `
       (import_statement source: (string) @import.source)
     `
@@ -121,14 +120,14 @@ const LANGUAGES: Record<LangKey, LangSpec> = {
     parser: parserTS,
     extensions: [".ts", ".mts", ".cts"],
     queryDefs: new Parser.Query(
-      LangTS,
+      LangTS as Language,
       `
       (function_declaration name: (identifier) @def.name)
     `
     ),
-    queryCalls: new Parser.Query(LangTS, ``),
+    queryCalls: new Parser.Query(LangTS as Language, ``),
     queryImports: new Parser.Query(
-      LangTS,
+      LangTS as Language,
       `
       (import_statement source: (string) @import.source)
     `
@@ -138,43 +137,43 @@ const LANGUAGES: Record<LangKey, LangSpec> = {
     parser: parserTSX,
     extensions: [".tsx"],
     queryDefs: new Parser.Query(
-      LangTSX,
+      LangTSX as Language,
       `
       (function_declaration name: (identifier) @def.name)
     `
     ),
-    queryCalls: new Parser.Query(LangTSX, ``),
+    queryCalls: new Parser.Query(LangTSX as Language, ``),
     queryImports: new Parser.Query(
-      LangTSX,
+      LangTSX as Language,
       `
       (import_statement source: (string) @import.source)
     `
     ),
   },
-  // py: {
-  //   parser: parserPy,
-  //   extensions: [".py"],
-  //   queryDefs: new Parser.Query(
-  //     LangPy,
-  //     `
-  //     (function_definition name: (identifier) @def.name)
-  //     (class_definition name: (identifier) @def.name)
-  //   `
-  //   ),
-  //   queryCalls: new Parser.Query(
-  //     LangPy,
-  //     `
-  //     (call function: (identifier) @call.name)
-  //   `
-  //   ),
-  //   queryImports: new Parser.Query(
-  //     LangPy,
-  //     `
-  //     (import_from_statement module_name: (dotted_name) @import.module)
-  //     (import_statement name: (dotted_name) @import.module)
-  //   `
-  //   ),
-  // },
+  py: {
+    parser: parserPy,
+    extensions: [".py"],
+    queryDefs: new Parser.Query(
+      LangPy as Language,
+      `
+      (function_definition name: (identifier) @def.name)
+      (class_definition name: (identifier) @def.name)
+    `
+    ),
+    queryCalls: new Parser.Query(
+      LangPy as Language,
+      `
+      (call function: (identifier) @call.name)
+    `
+    ),
+    queryImports: new Parser.Query(
+      LangPy as Language,
+      `
+      (import_from_statement module_name: (dotted_name) @import.module)
+      (import_statement name: (dotted_name) @import.module)
+    `
+    ),
+  },
 };
 
 // Caching helpers

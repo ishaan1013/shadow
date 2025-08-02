@@ -1,6 +1,6 @@
 import { GitHubService } from "../github";
 import { GitManager } from "./git-manager";
-import { LLMService } from "../llm";
+import { LLMService } from "../ai/llm";
 import { prisma } from "@repo/db";
 
 export interface PRMetadata {
@@ -19,7 +19,6 @@ export interface CreatePROptions {
   wasTaskCompleted: boolean;
   messageId: string;
 }
-
 
 export class PRManager {
   constructor(
@@ -64,11 +63,7 @@ export class PRManager {
         await this.createNewPR(options, commitSha);
       } else {
         // Update existing PR path
-        await this.updateExistingPR(
-          options,
-          existingPRNumber,
-          commitSha
-        );
+        await this.updateExistingPR(options, existingPRNumber, commitSha);
       }
 
       console.log(
@@ -88,10 +83,11 @@ export class PRManager {
    */
   private async createNewPR(
     options: CreatePROptions,
-    commitSha: string
+    commitSha: string,
+    userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<void> {
     // Generate PR metadata with AI
-    const metadata = await this.generatePRMetadata(options);
+    const metadata = await this.generatePRMetadata(options, userApiKeys);
 
     // Create GitHub PR
     const result = await this.githubService.createPullRequest(
@@ -200,18 +196,22 @@ export class PRManager {
    * Generate PR metadata using LLM based on git changes and task context
    */
   private async generatePRMetadata(
-    options: CreatePROptions
+    options: CreatePROptions,
+    userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<PRMetadata> {
     try {
       const diff = await this.gitManager.getDiff();
       const commitMessages = await this.getRecentCommitMessages();
 
-      const metadata = await this.llmService.generatePRMetadata({
-        taskTitle: options.taskTitle,
-        gitDiff: diff,
-        commitMessages,
-        wasTaskCompleted: options.wasTaskCompleted,
-      });
+      const metadata = await this.llmService.generatePRMetadata(
+        {
+          taskTitle: options.taskTitle,
+          gitDiff: diff,
+          commitMessages,
+          wasTaskCompleted: options.wasTaskCompleted,
+        },
+        userApiKeys || {}
+      );
 
       return metadata;
     } catch (error) {
@@ -234,7 +234,8 @@ export class PRManager {
   private async generateUpdatedDescription(
     oldDescription: string,
     newDiff: string,
-    taskTitle: string
+    taskTitle: string,
+    userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<string> {
     if (!oldDescription) {
       // If no old description, generate fresh one
@@ -244,12 +245,15 @@ export class PRManager {
     }
 
     try {
-      const result = await this.llmService.generatePRMetadata({
-        taskTitle,
-        gitDiff: newDiff,
-        commitMessages: [],
-        wasTaskCompleted: true,
-      });
+      const result = await this.llmService.generatePRMetadata(
+        {
+          taskTitle,
+          gitDiff: newDiff,
+          commitMessages: [],
+          wasTaskCompleted: true,
+        },
+        userApiKeys || {}
+      );
 
       return result.description;
     } catch (error) {

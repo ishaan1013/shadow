@@ -22,7 +22,7 @@
     "react-dom": "^19.0.0",
     "sonner": "^2.0.6",
     "tailwind-merge": "^3.3.1",
-    "zod": "^4.0.10"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@repo/typescript-config": "*",

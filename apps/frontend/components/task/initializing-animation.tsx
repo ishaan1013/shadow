@@ -28,10 +28,15 @@ export default function InitializingAnimation({ taskId }: { taskId: string }) {
 
   const steps = getStepsForMode(mode);
 
-  const lastCompletedStep = task.lastCompletedStep;
-  const currentStepIndex = lastCompletedStep
-    ? steps.findIndex((step) => step === lastCompletedStep) + 1
-    : 0;
+  const initStatus = task.initStatus;
+  let currentStepIndex = 0;
+  
+  if (initStatus === 'ACTIVE') {
+    currentStepIndex = steps.length; // All steps completed
+  } else if (initStatus && initStatus !== 'INACTIVE') {
+    const stepIndex = steps.findIndex((step) => step === initStatus);
+    currentStepIndex = stepIndex >= 0 ? stepIndex + 1 : 0;
+  }
 
   return (
     <div

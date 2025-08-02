@@ -1,6 +1,6 @@
 import { CommandSecurityLevel } from "@repo/command-security";
 import { z } from "zod";
-import { GrepMatch } from "./tools/results";
+import { GrepMatch } from "./tools/schemas";
 
 // === Base Response Interface ===
 export interface SidecarResponse {

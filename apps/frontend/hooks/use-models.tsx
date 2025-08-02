@@ -5,7 +5,9 @@ export function useModels() {
   return useQuery({
     queryKey: ["models"],
     queryFn: async (): Promise<ModelInfo[]> => {
-      const response = await fetch("/api/models");
+      const response = await fetch("/api/models", {
+        credentials: 'include',
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

@@ -16,7 +16,6 @@ const devConfigSchema = sharedConfigSchema.extend({
   WORKSPACE_DIR: z.string().default("/workspace"),
   
   // Optional remote VM testing (for local VM testing)
-  FIRECRACKER_ENABLED: z.boolean().default(false),
   VM_IMAGE_REGISTRY: z.string().optional(),
   VM_IMAGE_TAG: z.string().default("latest"),
   VM_CPU_COUNT: z.coerce.number().default(1),
@@ -69,7 +68,6 @@ const devConfig = {
   workspaceDir: parsed.data.WORKSPACE_DIR,
   
   // Optional remote VM testing
-  firecrackerEnabled: parsed.data.FIRECRACKER_ENABLED,
   vmImageRegistry: parsed.data.VM_IMAGE_REGISTRY,
   vmImageTag: parsed.data.VM_IMAGE_TAG,
   vmCpuCount: parsed.data.VM_CPU_COUNT,
@@ -91,7 +89,6 @@ const devConfig = {
   maxVmUptimeHours: parsed.data.MAX_VM_UPTIME_HOURS,
   
   // Development-specific defaults
-  firecrackerKernelPath: undefined, // Not needed for dev
   kubernetesServiceHost: undefined, // Not needed for dev
   kubernetesServicePort: undefined, // Not needed for dev
   efsVolumeId: undefined, // Not needed for dev

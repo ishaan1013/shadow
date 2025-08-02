@@ -1,14 +1,10 @@
-import { InitStepType, prisma } from "@repo/db";
+import { InitStatus, prisma } from "@repo/db";
 import { getStepsForMode, InitializationProgress } from "@repo/types";
 import { emitStreamChunk } from "../socket";
-import {
-  createWorkspaceManager,
-  getAgentMode,
-} from "../execution";
+import { createWorkspaceManager, getAgentMode } from "../execution";
 import type { WorkspaceManager as AbstractWorkspaceManager } from "../execution";
 import {
-  setTaskInProgress,
-  setTaskCompleted,
+  setInitStatus,
   setTaskFailed,
   clearTaskProgress,
 } from "../utils/task-status";
@@ -20,16 +16,17 @@ const delay = (ms: number) =>
 
 // Step definitions with human-readable names
 const STEP_DEFINITIONS: Record<
-  InitStepType,
+  InitStatus,
   { name: string; description: string }
 > = {
-  // Local mode step
+  INACTIVE: {
+    name: "Not Started",
+    description: "Initialization has not started",
+  },
   PREPARE_WORKSPACE: {
     name: "Preparing Workspace",
     description: "Create local workspace directory and clone repository",
   },
-
-  // Remote execution steps
   CREATE_VM: {
     name: "Creating VM",
     description: "Create remote VM for task execution",
@@ -42,17 +39,13 @@ const STEP_DEFINITIONS: Record<
     name: "Verifying Workspace",
     description: "Verify workspace is ready and contains repository",
   },
-
-  // Repository indexing step (both modes)
   INDEX_REPOSITORY: {
     name: "Indexing Repository",
     description: "Index repository files for semantic search",
   },
-
-  // Cleanup step (remote mode only)
-  CLEANUP_WORKSPACE: {
-    name: "Cleaning Up",
-    description: "Clean up workspace and resources",
+  ACTIVE: {
+    name: "Ready",
+    description: "Task is ready for execution",
   },
 };
 
@@ -68,7 +61,7 @@ export class TaskInitializationEngine {
    */
   async initializeTask(
     taskId: string,
-    steps: InitStepType[] = ["PREPARE_WORKSPACE"],
+    steps: InitStatus[] = ["PREPARE_WORKSPACE"],
     userId: string
   ): Promise<void> {
     console.log(
@@ -95,7 +88,7 @@ export class TaskInitializationEngine {
 
         try {
           // Set step as in progress
-          await setTaskInProgress(taskId, step);
+          await setInitStatus(taskId, step);
 
           // Emit step start
           this.emitProgress(taskId, {
@@ -116,7 +109,7 @@ export class TaskInitializationEngine {
           await this.executeStep(taskId, step, userId);
 
           // Mark step as completed
-          await setTaskCompleted(taskId, step);
+          await setInitStatus(taskId, step);
 
           console.log(
             `[TASK_INIT] ${taskId}: Completed step ${stepNumber}/${steps.length}: ${step}`
@@ -150,11 +143,8 @@ export class TaskInitializationEngine {
         }
       }
 
-      // All steps completed successfully - final completion
-      const finalStep = steps[steps.length - 1];
-      if (finalStep) {
-        await setTaskCompleted(taskId, finalStep);
-      }
+      // All steps completed successfully - set to ACTIVE
+      await setInitStatus(taskId, "ACTIVE");
 
       console.log(
         `[TASK_INIT] ${taskId}: Initialization completed successfully`
@@ -178,7 +168,7 @@ export class TaskInitializationEngine {
    */
   private async executeStep(
     taskId: string,
-    step: InitStepType,
+    step: InitStatus,
     userId: string
   ): Promise<void> {
     switch (step) {
@@ -187,7 +177,7 @@ export class TaskInitializationEngine {
         await this.executePrepareWorkspace(taskId, userId);
         break;
 
-      // Firecracker-specific steps
+      // Remote mode steps
       case "CREATE_VM":
         await this.executeCreateVM(taskId, userId);
         break;
@@ -202,12 +192,12 @@ export class TaskInitializationEngine {
 
       // Repository indexing step (both modes)
       case "INDEX_REPOSITORY":
-        await this.executeIndexRepository(taskId);
+        // await this.executeIndexRepository(taskId);
         break;
 
-      // Cleanup step (remote mode only)
-      case "CLEANUP_WORKSPACE":
-        await this.executeCleanupWorkspace(taskId);
+      case "INACTIVE":
+      case "ACTIVE":
+        // These are state markers, not executable steps
         break;
 
       default:
@@ -283,7 +273,7 @@ export class TaskInitializationEngine {
       );
     }
 
-    console.log(`[TASK_INIT] ${taskId}: Creating Firecracker VM for execution`);
+    console.log(`[TASK_INIT] ${taskId}: Creating remote VM for execution`);
 
     try {
       // Get task info
@@ -301,7 +291,6 @@ export class TaskInitializationEngine {
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      // Use abstract workspace manager to prepare workspace (creates VM in firecracker mode)
       const workspaceInfo =
         await this.abstractWorkspaceManager.prepareWorkspace({
           id: taskId,
@@ -477,7 +466,7 @@ export class TaskInitializationEngine {
       console.log(
         `[TASK_INIT] ${taskId}: Indexing repository ${task.repoFullName}`
       );
-      
+
       await indexRepo(task.repoFullName, taskId, {
         embed: true,
         clearNamespace: true,
@@ -487,35 +476,11 @@ export class TaskInitializationEngine {
         `[TASK_INIT] ${taskId}: Successfully indexed repository ${task.repoFullName}`
       );
     } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed to index repository:`, error);
+      console.error(
+        `[TASK_INIT] ${taskId}: Failed to index repository:`,
+        error
+      );
       throw error;
-    }
-  }
-
-  /**
-   * Cleanup workspace step - Clean up resources (local or VM)
-   */
-  private async executeCleanupWorkspace(taskId: string): Promise<void> {
-    console.log(`[TASK_INIT] ${taskId}: Cleaning up Firecracker VM`);
-
-    try {
-      // Cleanup through abstract workspace manager
-      await this.abstractWorkspaceManager.cleanupWorkspace(taskId);
-
-      // Update TaskSession to mark as inactive
-      await prisma.taskSession.updateMany({
-        where: { taskId, isActive: true },
-        data: {
-          isActive: false,
-          endedAt: new Date(),
-        },
-      });
-
-      console.log(`[TASK_INIT] ${taskId}: Successfully cleaned up VM`);
-    } catch (error) {
-      console.error(`[TASK_INIT] ${taskId}: Failed to cleanup VM:`, error);
-      // Don't throw error for cleanup failures, just log them
-      // We don't want cleanup failures to break the overall flow
     }
   }
 
@@ -535,21 +500,8 @@ export class TaskInitializationEngine {
   /**
    * Get default initialization steps based on agent mode
    */
-  getDefaultStepsForTask(): InitStepType[] {
+  getDefaultStepsForTask(): InitStatus[] {
     const agentMode = getAgentMode();
     return getStepsForMode(agentMode);
-  }
-
-  /**
-   * Get cleanup steps for task completion
-   */
-  getCleanupSteps(): InitStepType[] {
-    const agentMode = getAgentMode();
-
-    if (agentMode === "remote") {
-      return ["CLEANUP_WORKSPACE"];
-    } else {
-      return []; // Local mode cleanup is handled automatically
-    }
   }
 }
