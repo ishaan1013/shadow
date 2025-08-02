@@ -95,6 +95,17 @@ export function UserMessage({
     return () => window.removeEventListener("keydown", globalKeyDown);
   }, [handleStopEditing]);
 
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      const textarea = textareaRef.current;
+      // Set cursor position to end of text
+      const length = textarea.value.length;
+      textarea.setSelectionRange(length, length);
+      // Scroll to bottom of textarea
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+  }, [isEditing]);
+
   return (
     // Outer button acts as a border, with a border-radius 1px larger than the inner div and 1px padding
     <UserMessageWrapper
@@ -174,7 +185,7 @@ export function UserMessage({
         </>
       ) : (
         <>
-          <div className="from-card/10 to-card w-full rounded-lg bg-gradient-to-t px-3 py-2 text-sm">
+          <div className="from-card/10 to-card line-clamp-5 w-full whitespace-pre-wrap rounded-lg bg-gradient-to-t px-3 py-2 text-sm">
             {message.content}
           </div>
           <div className="bg-background absolute inset-px -z-10 rounded-[calc(var(--radius)+1px)]" />

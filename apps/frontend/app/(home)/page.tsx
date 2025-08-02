@@ -65,6 +65,7 @@ export default async function Home() {
         console.log("Could not prefetch API keys:", error?.message || error);
       }),
   ];
+
   await Promise.allSettled(prefetchPromises);
 
   const githubStatus = queryClient.getQueryData<GitHubStatus>([

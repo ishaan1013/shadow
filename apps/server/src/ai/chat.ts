@@ -13,7 +13,7 @@ import { LLMService } from "./llm";
 import { systemPrompt } from "./system-prompt";
 import { GitManager } from "../services/git-manager";
 import { PRManager } from "../services/pr-manager";
-import { GitHubService } from "../github";
+
 import {
   emitStreamChunk,
   endStream,
@@ -31,7 +31,6 @@ import { createToolExecutor } from "../execution";
 
 export class ChatService {
   private llmService: LLMService;
-  private githubService: GitHubService;
   private activeStreams: Map<string, AbortController> = new Map();
   private stopRequested: Set<string> = new Set();
   private queuedMessages: Map<
@@ -46,7 +45,6 @@ export class ChatService {
 
   constructor() {
     this.llmService = new LLMService();
-    this.githubService = new GitHubService();
   }
 
   private async getNextSequence(taskId: string): Promise<number> {
@@ -256,11 +254,7 @@ export class ChatService {
       }
 
       const gitManager = new GitManager(resolvedWorkspacePath);
-      const prManager = new PRManager(
-        this.githubService,
-        gitManager,
-        this.llmService
-      );
+      const prManager = new PRManager(gitManager, this.llmService);
 
       if (!messageId) {
         console.warn(

@@ -1,3 +1,4 @@
+import { GitHubIssue } from "@repo/types";
 import { Branch, GitHubStatus, GroupedRepos } from "./types";
 
 /*
@@ -28,4 +29,14 @@ export async function fetchGitHubBranches(
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   return response.json();
+}
+
+export async function fetchGitHubIssues(
+  repoFullName: string
+): Promise<GitHubIssue[]> {
+  const response = await fetch(`/api/github/issues?repo=${repoFullName}`);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return await response.json();
 }

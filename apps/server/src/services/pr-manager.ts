@@ -1,31 +1,17 @@
-import { GitHubService } from "../github";
 import { GitManager } from "./git-manager";
 import { LLMService } from "../ai/llm";
-import { prisma } from "@repo/db";
-
-export interface PRMetadata {
-  title: string;
-  description: string;
-  isDraft: boolean;
-}
-
-export interface CreatePROptions {
-  taskId: string;
-  repoFullName: string;
-  shadowBranch: string;
-  baseBranch: string;
-  userId: string;
-  taskTitle: string;
-  wasTaskCompleted: boolean;
-  messageId: string;
-}
+import { PRService } from "../github/pull-requests";
+import type { PRMetadata, CreatePROptions } from "../github/types";
 
 export class PRManager {
+  private prService: PRService;
+
   constructor(
-    private githubService: GitHubService,
     private gitManager: GitManager,
     private llmService: LLMService
-  ) {}
+  ) {
+    this.prService = new PRService();
+  }
 
   /**
    * Create or update PR and save snapshot
@@ -43,20 +29,13 @@ export class PRManager {
         return;
       }
 
-      // Get task to check if PR already exists
-      const task = await prisma.task.findUnique({
-        where: { id: options.taskId },
-      });
-
-      if (!task) {
-        console.warn(`[PR_MANAGER] Task not found: ${options.taskId}`);
-        return;
-      }
-
       // Get git metadata
       const commitSha = await this.gitManager.getCurrentCommitSha();
 
-      const existingPRNumber = task.pullRequestNumber;
+      // Check if PR already exists
+      const existingPRNumber = await this.prService.getExistingPRNumber(
+        options.taskId
+      );
 
       if (!existingPRNumber) {
         // Create new PR path
@@ -89,42 +68,12 @@ export class PRManager {
     // Generate PR metadata with AI
     const metadata = await this.generatePRMetadata(options, userApiKeys);
 
-    // Create GitHub PR
-    const result = await this.githubService.createPullRequest(
-      options.repoFullName,
-      {
-        title: metadata.title,
-        body: metadata.description,
-        head: options.shadowBranch,
-        base: options.baseBranch,
-        draft: metadata.isDraft,
-      },
-      options.userId
-    );
+    // Use PR service to create the PR
+    const result = await this.prService.createPR(options, metadata, commitSha);
 
-    // Update task with PR number
-    await prisma.task.update({
-      where: { id: options.taskId },
-      data: { pullRequestNumber: result.number },
-    });
-
-    // Create snapshot record
-    await prisma.pullRequestSnapshot.create({
-      data: {
-        messageId: options.messageId,
-        status: "CREATED",
-        title: metadata.title,
-        description: metadata.description,
-        filesChanged: result.changed_files,
-        linesAdded: result.additions,
-        linesRemoved: result.deletions,
-        commitSha,
-      },
-    });
-
-    console.log(
-      `[PR_MANAGER] Created new PR #${result.number} for task ${options.taskId}`
-    );
+    if (!result.success) {
+      throw new Error(`Failed to create PR: ${result.error}`);
+    }
   }
 
   /**
@@ -136,14 +85,9 @@ export class PRManager {
     commitSha: string
   ): Promise<void> {
     // Get current PR description from most recent snapshot
-    const latestSnapshot = await prisma.pullRequestSnapshot.findFirst({
-      where: {
-        message: {
-          taskId: options.taskId,
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const latestSnapshot = await this.prService.getLatestSnapshot(
+      options.taskId
+    );
 
     if (!latestSnapshot) {
       console.warn(
@@ -158,38 +102,17 @@ export class PRManager {
       options.taskTitle
     );
 
-    // Update GitHub PR
-    await this.githubService.updatePullRequest(
-      options.repoFullName,
+    // Use PR service to update the PR
+    const result = await this.prService.updatePR(
+      options,
       prNumber,
-      { body: newDescription },
-      options.userId
+      newDescription,
+      commitSha
     );
 
-    // Get updated PR stats from GitHub
-    const prStats = await this.githubService.getPullRequest(
-      options.repoFullName,
-      prNumber,
-      options.userId
-    );
-
-    // Create new snapshot record
-    await prisma.pullRequestSnapshot.create({
-      data: {
-        messageId: options.messageId,
-        status: "UPDATED",
-        title: latestSnapshot?.title || options.taskTitle,
-        description: newDescription,
-        filesChanged: prStats.changed_files,
-        linesAdded: prStats.additions,
-        linesRemoved: prStats.deletions,
-        commitSha,
-      },
-    });
-
-    console.log(
-      `[PR_MANAGER] Updated PR #${prNumber} for task ${options.taskId}`
-    );
+    if (!result.success) {
+      throw new Error(`Failed to update PR: ${result.error}`);
+    }
   }
 
   /**

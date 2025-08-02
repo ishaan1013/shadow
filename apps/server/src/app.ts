@@ -9,7 +9,7 @@ import { ChatService } from "./ai/chat";
 import { TaskInitializationEngine } from "./initialization";
 import { errorHandler } from "./middleware/error-handler";
 import { createSocketServer } from "./socket";
-import { getGitHubAccessToken } from "./utils/github-account";
+import { getGitHubAccessToken } from "./github/auth/account-service";
 import { updateTaskStatus } from "./utils/task-status";
 import { createWorkspaceManager } from "./execution";
 import { filesRouter } from "./file-routes";
@@ -18,7 +18,6 @@ import { parseApiKeysFromCookies } from "./utils/cookie-parser";
 const app = express();
 export const chatService = new ChatService();
 const initializationEngine = new TaskInitializationEngine();
-
 
 const initiateTaskSchema = z.object({
   message: z.string().min(1, "Message is required"),

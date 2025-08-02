@@ -6,7 +6,7 @@ import { useModal } from "@/components/layout/modal-context";
 import { Box, User2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect } from "react";
-import { GithubLogo } from "../../logo/github-logo";
+import { GithubLogo } from "../../graphics/github/github-logo";
 import { UserSettings } from "./user-settings";
 import { ModelSettings } from "./model-settings";
 import { GitHubSettings } from "./github-settings";

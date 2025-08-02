@@ -7,7 +7,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { getLanguageFromPath } from "@repo/types";
-import { LogoHover } from "../logo/logo-hover";
+import { LogoHover } from "../graphics/logo/logo-hover";
 import { MarkdownRenderer } from "./markdown-renderer";
 
 // Dynamic import Monaco Editor to avoid SSR issues

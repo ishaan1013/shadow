@@ -92,6 +92,7 @@ model Task {
   baseCommitSha       String
   shadowBranch        String
   pullRequestNumber   Int?
+  githubIssueId       String?
   messages            ChatMessage[]
   user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions            TaskSession[]

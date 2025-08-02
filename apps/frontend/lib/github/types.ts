@@ -40,3 +40,5 @@ export type GitHubStatus = {
   installationUrl?: string;
   message: string;
 };
+
+// GitHubIssue type moved to @repo/types to eliminate duplication

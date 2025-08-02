@@ -6,6 +6,7 @@ import {
   createInstallationOctokit,
   getGitHubAppInstallationUrl,
 } from "@/lib/github/github-app";
+import { GitHubIssue } from "@repo/types";
 import {
   Branch,
   FilteredRepository,
@@ -277,22 +278,18 @@ export async function getGitHubBranches(
   userId: string
 ): Promise<Branch[]> {
   try {
-    // Parse owner and repo name from full_name (e.g., "owner/repo")
     const [owner, repoName] = repoFullName.split("/");
     if (!owner || !repoName) {
       throw new Error("Invalid repository format. Expected 'owner/repo'");
     }
 
-    // Get the GitHub account and create authenticated Octokit instance
     const account = await getGitHubAccount(userId);
 
-    if (!account) {
-      // Return empty state instead of throwing
-      return [];
-    }
-
-    if (!account.githubAppConnected || !account.githubInstallationId) {
-      // Return empty state instead of throwing
+    if (
+      !account ||
+      !account.githubAppConnected ||
+      !account.githubInstallationId
+    ) {
       return [];
     }
 
@@ -330,12 +327,86 @@ export async function getGitHubBranches(
   } catch (error) {
     console.error("Error getting GitHub branches:", error);
 
-    // Check if this is a stale installation and clear it
     if (userId) {
       await handleStaleInstallation(error, userId);
     }
 
-    // Return empty state instead of throwing
+    return [];
+  }
+}
+
+export async function getGitHubIssues(
+  repoFullName: string,
+  userId: string
+): Promise<GitHubIssue[]> {
+  try {
+    const [owner, repoName] = repoFullName.split("/");
+    if (!owner || !repoName) {
+      throw new Error("Invalid repository format. Expected 'owner/repo'");
+    }
+
+    const account = await getGitHubAccount(userId);
+
+    if (
+      !account ||
+      !account.githubAppConnected ||
+      !account.githubInstallationId
+    ) {
+      return [];
+    }
+
+    const octokit = await createInstallationOctokit(
+      account.githubInstallationId
+    );
+
+    const { data: issues } = await octokit.rest.issues.listForRepo({
+      owner,
+      repo: repoName,
+      state: "open",
+      per_page: 100,
+      sort: "updated",
+      direction: "desc",
+    });
+
+    // Filter out pull requests - GitHub API returns both issues and PRs
+    const actualIssues = issues.filter((issue) => !issue.pull_request);
+
+    // Convert to our simplified GitHubIssue interface
+    const simplifiedIssues: GitHubIssue[] = actualIssues.map((issue) => ({
+      id: issue.id.toString(),
+      title: issue.title,
+      body: issue.body || null,
+      state: issue.state as "open" | "closed",
+      user: issue.user
+        ? {
+            login: issue.user.login,
+            avatar_url: issue.user.avatar_url,
+          }
+        : null,
+      labels:
+        issue.labels?.map((label) => ({
+          id: typeof label === "string" ? 0 : label.id || 0,
+          name: typeof label === "string" ? label : label.name || "",
+          color: typeof label === "string" ? "" : label.color || "",
+        })) || [],
+      assignees:
+        issue.assignees?.map((assignee) => ({
+          login: assignee.login,
+          avatar_url: assignee.avatar_url,
+        })) || [],
+      created_at: issue.created_at,
+      updated_at: issue.updated_at,
+      html_url: issue.html_url,
+    }));
+
+    return simplifiedIssues;
+  } catch (error) {
+    console.error("Error getting GitHub issues:", error);
+
+    if (userId) {
+      await handleStaleInstallation(error, userId);
+    }
+
     return [];
   }
 }
