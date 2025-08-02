@@ -7,6 +7,12 @@ import {
 } from "@repo/types";
 import { TokenCounterService } from "./token-counter";
 import { LLMService } from "../llm";
+import {
+  LIGHT_COMPRESSION_PROMPT,
+  LIGHT_COMPRESSION_SYSTEM_PROMPT,
+  HEAVY_COMPRESSION_PROMPT,
+  HEAVY_COMPRESSION_SYSTEM_PROMPT,
+} from "../prompt/compression-prompts";
 
 
 
@@ -218,11 +224,7 @@ export class MessageCompressor {
     const startTime = Date.now();
     
     try {
-      const compressionPrompt = `Please summarize the following message content in exactly 6-8 clear, informative sentences. Preserve all key technical details, important decisions, specific code changes, tool results, and essential context. Be comprehensive but concise:
-
-${content}
-
-Summary (6-8 sentences):`;
+      const compressionPrompt = LIGHT_COMPRESSION_PROMPT.replace('{content}', content);
 
       const messages = [{
         id: "compress-light-" + Date.now(),
@@ -236,7 +238,7 @@ Summary (6-8 sentences):`;
       console.log(`[COMPRESSION] Calling LLM for LIGHT compression with ${model}`);
       
       for await (const chunk of this.llmService.createMessageStream(
-        "You are a helpful assistant that summarizes technical content while preserving important details. Always provide exactly 6-8 sentences.",
+        LIGHT_COMPRESSION_SYSTEM_PROMPT,
         messages,
         model,
         false // No tools for compression
@@ -283,11 +285,7 @@ Summary (6-8 sentences):`;
     const startTime = Date.now();
     
     try {
-      const compressionPrompt = `Please summarize the following message content in exactly 1-3 sentences, preserving only the most essential information, key decisions, and critical outcomes. Be extremely concise:
-
-${content}
-
-Ultra-concise summary (1-3 sentences):`;
+      const compressionPrompt = HEAVY_COMPRESSION_PROMPT.replace('{content}', content);
 
       const messages = [{
         id: "compress-heavy-" + Date.now(),
@@ -301,7 +299,7 @@ Ultra-concise summary (1-3 sentences):`;
       console.log(`[COMPRESSION] Calling LLM for HEAVY compression with ${model}`);
       
       for await (const chunk of this.llmService.createMessageStream(
-        "You are a helpful assistant that creates ultra-concise summaries. Always provide exactly 1-3 sentences focusing on the most critical information only.",
+        HEAVY_COMPRESSION_SYSTEM_PROMPT,
         messages,
         model,
         false // No tools for compression
