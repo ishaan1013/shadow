@@ -95,6 +95,17 @@ export function UserMessage({
     return () => window.removeEventListener("keydown", globalKeyDown);
   }, [handleStopEditing]);
 
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      const textarea = textareaRef.current;
+      // Set cursor position to end of text
+      const length = textarea.value.length;
+      textarea.setSelectionRange(length, length);
+      // Scroll to bottom of textarea
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+  }, [isEditing]);
+
   return (
     // Outer button acts as a border, with a border-radius 1px larger than the inner div and 1px padding
     <UserMessageWrapper
