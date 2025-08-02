@@ -3,16 +3,16 @@
 import { Button } from "@/components/ui/button";
 import { useGitHubIssues } from "@/hooks/use-github-issues";
 import { useGitHubStatus } from "@/hooks/use-github-status";
-import type { FilteredRepository as Repository } from "@/lib/github/types";
-import {
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  CircleCheck,
-  ExternalLink,
-  Loader2,
-} from "lucide-react";
-import { useState } from "react";
+import type {
+  GitHubIssue,
+  FilteredRepository as Repository,
+} from "@/lib/github/types";
+import { ArrowRight, Circle, Minus, Plus, RotateCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { GithubIssueIcon } from "../graphics/github/github-issue-icon";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { cn, formatTimeAgo } from "@/lib/utils";
+import "./repo-issues.css";
 
 export function RepoIssues({ repository }: { repository: Repository }) {
   const [isIssuesExpanded, setIsIssuesExpanded] = useState(false);
@@ -22,7 +22,7 @@ export function RepoIssues({ repository }: { repository: Repository }) {
   const {
     data: issues = [],
     isLoading: isLoadingIssues,
-    error: issuesError,
+    refetch: refetchIssues,
   } = useGitHubIssues({
     repoFullName: repository.full_name,
   });
@@ -31,89 +31,138 @@ export function RepoIssues({ repository }: { repository: Repository }) {
     return null;
   }
 
+  if (isLoadingIssues) return null;
+
   return (
-    <div className="mt-4 w-full max-w-lg">
-      <div className="bg-card/50 border-border rounded-lg border p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-foreground text-sm font-medium">
-            Issues in {repository.full_name}
-          </h3>
-          {isLoadingIssues && (
-            <Loader2 className="text-muted-foreground size-4 animate-spin" />
+    <IssuesContent
+      issues={issues}
+      isIssuesExpanded={isIssuesExpanded}
+      toggleIssuesExpanded={() => setIsIssuesExpanded((prev) => !prev)}
+      handleRefresh={refetchIssues}
+    />
+  );
+}
+
+function IssuesContent({
+  issues,
+  isIssuesExpanded,
+  toggleIssuesExpanded,
+  handleRefresh,
+}: {
+  issues: GitHubIssue[];
+  isIssuesExpanded: boolean;
+  toggleIssuesExpanded: () => void;
+  handleRefresh: () => void;
+}) {
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setHasMounted(true);
+    }, 1100);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  return (
+    <div className="group/issues mt-8 flex w-full flex-col gap-3 overflow-hidden pb-8">
+      <div
+        className={cn(
+          "flex items-center justify-between pl-3 pr-2.5",
+          hasMounted ? "" : "animate-issue-in"
+        )}
+        style={{ "--issue-index": 0 } as React.CSSProperties}
+      >
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <GithubIssueIcon className="size-4 flex-shrink-0" />
+          GitHub Issues
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="iconXs"
+              onClick={handleRefresh}
+              className="text-muted-foreground hover:text-foreground invisible opacity-0 transition-all group-hover/issues:visible group-hover/issues:opacity-100"
+            >
+              <RotateCw className="size-3.5 flex-shrink-0" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p>Refresh Issues</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <div className="relative z-0 flex flex-col gap-1 overflow-hidden">
+        {isIssuesExpanded && (
+          <div className="from-background via-background/70 pointer-events-none absolute bottom-[calc(2.25rem-1px)] left-0 z-10 h-8 w-full  bg-gradient-to-t to-transparent" />
+        )}
+
+        <div
+          className={cn(
+            "github-issues-container flex flex-col gap-0.5 overflow-y-auto",
+            isIssuesExpanded && "pb-3"
+          )}
+        >
+          {(isIssuesExpanded ? issues : issues.slice(0, 5)).map(
+            (issue, index) => (
+              <Button
+                variant="ghost"
+                key={issue.id}
+                className={cn(
+                  "group/issue-button relative z-0 w-full max-w-full justify-between overflow-hidden font-normal",
+                  hasMounted ? "" : "animate-issue-in"
+                )}
+                style={{ "--issue-index": index + 1 } as React.CSSProperties}
+              >
+                <div className="flex flex-1 items-center gap-2 overflow-hidden">
+                  <div className="text-foreground truncate">{issue.title}</div>
+
+                  <Circle className="fill-muted-foreground size-1 opacity-50" />
+
+                  <span className="text-muted-foreground">
+                    {issue.user?.login && issue.user.login.length > 20
+                      ? issue.user.login.substring(0, 17) + "..."
+                      : issue.user?.login}
+                  </span>
+                </div>
+                <div className="text-foreground bg-background group-hover/issue-button:bg-secondary absolute right-3 top-1/2 z-10 hidden -translate-x-2 -translate-y-1/2 items-center gap-1 pl-2 opacity-0 transition-all group-hover/issue-button:translate-x-0 group-hover/issue-button:opacity-100 sm:flex">
+                  Run Task
+                  <ArrowRight className="size-3.5" />
+                </div>
+                <div className="text-muted-foreground translate-x-0 opacity-100 transition-all sm:group-hover/issue-button:translate-x-2 sm:group-hover/issue-button:opacity-0">
+                  {formatTimeAgo(issue.updated_at)}
+                </div>
+              </Button>
+            )
           )}
         </div>
-
-        {issuesError ? (
-          <div className="text-muted-foreground py-2 text-sm">
-            Failed to load issues
-          </div>
-        ) : isLoadingIssues ? (
-          <div className="text-muted-foreground py-2 text-sm">
-            Loading issues...
-          </div>
-        ) : issues.length === 0 ? (
-          <div className="text-muted-foreground py-2 text-sm">
-            No issues found in this repository
-          </div>
-        ) : (
-          <>
-            <div className="space-y-2">
-              {(isIssuesExpanded ? issues : issues.slice(0, 5)).map((issue) => (
-                <div
-                  key={issue.id}
-                  className="hover:bg-accent/50 flex items-start gap-3 rounded-md p-2 transition-colors"
-                >
-                  {issue.state === "open" ? (
-                    <Circle className="mt-0.5 size-4 flex-shrink-0 text-green-500" />
-                  ) : (
-                    <CircleCheck className="mt-0.5 size-4 flex-shrink-0 text-purple-500" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="text-foreground line-clamp-2 text-sm font-medium">
-                        {issue.title}
-                      </h4>
-                      <a
-                        href={issue.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-foreground flex-shrink-0 transition-colors"
-                      >
-                        <ExternalLink className="size-3.5" />
-                      </a>
-                    </div>
-                    <div className="text-muted-foreground mt-1 text-xs">
-                      {issue.user?.login} •{" "}
-                      {new Date(issue.created_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {issues.length > 5 && (
-              <div className="mt-3 flex justify-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsIssuesExpanded(!isIssuesExpanded)}
-                  className="text-muted-foreground hover:text-foreground h-8 text-xs"
-                >
-                  {isIssuesExpanded ? (
-                    <>
-                      <ChevronUp className="mr-1 size-3.5" />
-                      Show less
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="mr-1 size-3.5" />
-                      Show {issues.length - 5} more
-                    </>
-                  )}
-                </Button>
-              </div>
+        {issues.length > 5 && (
+          <Button
+            variant="ghost"
+            onClick={() => toggleIssuesExpanded()}
+            className={cn(
+              "text-muted-foreground hover:text-foreground animate-issue-in w-full max-w-full justify-start font-normal",
+              hasMounted ? "" : "animate-issue-in"
             )}
-          </>
+            style={
+              {
+                "--issue-index": Math.min(issues.length, 5) + 1,
+              } as React.CSSProperties
+            }
+          >
+            {isIssuesExpanded ? (
+              <>
+                <Minus className="size-3.5" />
+                Show less
+              </>
+            ) : (
+              <>
+                <Plus className="size-3.5" />
+                Show {issues.length - 5} more
+              </>
+            )}
+          </Button>
         )}
       </div>
     </div>

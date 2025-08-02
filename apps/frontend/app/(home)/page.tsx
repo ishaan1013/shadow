@@ -4,7 +4,6 @@ import { getUser } from "@/lib/auth/get-user";
 import {
   getGitHubRepositories,
   getGitHubStatus,
-  getGitHubIssues,
 } from "@/lib/github/github-api";
 import { getModels } from "@/lib/actions/get-models";
 import { getGitSelectorCookie } from "@/lib/actions/git-selector-cookie";
@@ -65,19 +64,6 @@ export default async function Home() {
       .catch((error) => {
         console.log("Could not prefetch API keys:", error?.message || error);
       }),
-    ...(user?.id && initialGitCookieState?.repo
-      ? [
-          {
-            queryKey: [
-              "github",
-              "issues",
-              initialGitCookieState.repo.full_name,
-            ],
-            queryFn: () =>
-              getGitHubIssues(initialGitCookieState.repo!.full_name, user.id!),
-          },
-        ]
-      : []),
   ];
 
   await Promise.allSettled(prefetchPromises);

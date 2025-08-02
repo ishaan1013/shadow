@@ -1,0 +1,19 @@
+.animate-issue-in {
+  animation: issue-in 0.5s var(--ease-in-out-quad);
+  animation-fill-mode: forwards;
+  animation-delay: calc(var(--issue-index) * 0.1s);
+
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@keyframes issue-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

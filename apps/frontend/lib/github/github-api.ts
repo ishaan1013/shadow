@@ -359,18 +359,21 @@ export async function getGitHubIssues(
       account.githubInstallationId
     );
 
-    // Fetch issues from GitHub API (up to 100 issues)
+    // Fetch issues from GitHub API (up to 100 open issues only)
     const { data: issues } = await octokit.rest.issues.listForRepo({
       owner,
       repo: repoName,
-      state: "all",
+      state: "open",
       per_page: 100,
       sort: "updated",
       direction: "desc",
     });
 
+    // Filter out pull requests - GitHub API returns both issues and PRs
+    const actualIssues = issues.filter((issue) => !issue.pull_request);
+
     // Convert to our simplified GitHubIssue interface
-    const simplifiedIssues: GitHubIssue[] = issues.map((issue) => ({
+    const simplifiedIssues: GitHubIssue[] = actualIssues.map((issue) => ({
       id: issue.id,
       title: issue.title,
       body: issue.body || null,

@@ -37,5 +37,5 @@ export async function fetchGitHubIssues(
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
-  return response.json();
+  return await response.json();
 }
