@@ -606,4 +606,3 @@ export function emitTerminalOutput(taskId: string, entry: TerminalEntry) {
     emitToTask(taskId, "terminal-output", { taskId, entry });
   }
 }
-
