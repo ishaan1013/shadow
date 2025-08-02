@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ToolType, TOOL_PREFIXES } from "@repo/types";
+import { ToolTypes, TOOL_PREFIXES } from "@repo/types";
 import { useState } from "react";
 
 export function ToolComponent({
@@ -15,7 +15,7 @@ export function ToolComponent({
   children,
 }: {
   icon: React.ReactNode;
-  type: ToolType | "error";
+  type: ToolTypes | "error";
   title: string;
   suffix?: string;
   prefix?: string;

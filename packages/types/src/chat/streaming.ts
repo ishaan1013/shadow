@@ -27,7 +27,6 @@ export interface StreamChunk {
   | "error"
   | "tool-call"
   | "tool-result"
-  | "tool-validation-error"
   | "init-progress"
   | "fs-change"
   | "todo-update";
@@ -63,14 +62,6 @@ export interface StreamChunk {
     isValid?: boolean;
   };
 
-  // For tool validation errors
-  toolValidationError?: {
-    id: string;
-    toolName: string;
-    error: string;
-    suggestedFix?: string;
-    originalResult?: unknown;
-  };
 
   // For initialization progress
   initProgress?: InitializationProgress;

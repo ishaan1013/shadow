@@ -260,44 +260,45 @@ export class LLMService {
           }
 
           case "tool-call": {
-            if (chunk.toolName in ToolResultSchemas) {
-              toolCallMap.set(chunk.toolCallId, chunk.toolName as ToolName);
+            yield {
+              type: "tool-call",
+              toolCall: {
+                id: chunk.toolCallId,
+                name: chunk.toolName,
+                args: chunk.args,
+              },
+            };
 
-              yield {
-                type: "tool-call",
-                toolCall: {
-                  id: chunk.toolCallId,
-                  name: chunk.toolName,
-                  args: chunk.args,
-                },
-              };
+            if (chunk.toolName in ToolResultSchemas) {
+              // Valid tool - store in map for result processing
+              toolCallMap.set(chunk.toolCallId, chunk.toolName as ToolName);
             } else {
-              // Invalid tool
+              // Invalid tool - emit immediate error tool-result
               const availableTools = Object.keys(ToolResultSchemas).join(", ");
               const errorMessage = `Unknown tool: ${chunk.toolName}. Available tools are: ${availableTools}`;
               const suggestedFix = `Please use one of the available tools: ${availableTools}`;
 
               console.warn(`[LLM] Invalid tool call: ${chunk.toolName}`);
 
-              // Emit validation error chunk
-              yield {
-                type: "tool-validation-error",
-                toolValidationError: {
-                  id: chunk.toolCallId,
-                  toolName: chunk.toolName,
-                  error: errorMessage,
-                  suggestedFix,
-                  originalResult: undefined,
+              const errorResult: ValidationErrorResult = {
+                success: false,
+                error: errorMessage,
+                suggestedFix,
+                originalResult: undefined,
+                validationDetails: {
+                  expectedType: "Known tool name",
+                  receivedType: `Unknown tool: ${chunk.toolName}`,
+                  fieldPath: "toolName",
                 },
               };
 
-              // Also emit the tool-call so the conversation continues
+              // Emit immediate error tool-result
               yield {
-                type: "tool-call",
-                toolCall: {
+                type: "tool-result",
+                toolResult: {
                   id: chunk.toolCallId,
-                  name: chunk.toolName,
-                  args: chunk.args,
+                  result: errorResult,
+                  isValid: false,
                 },
               };
             }
@@ -317,6 +318,7 @@ export class LLMService {
             const validation = this.validateToolResult(toolName, chunk.result);
 
             if (validation.isValid) {
+              // Valid result - emit normal tool-result
               yield {
                 type: "tool-result",
                 toolResult: {
@@ -326,26 +328,12 @@ export class LLMService {
                 },
               };
             } else {
-              // Invalid result - emit both a validation error and a tool-result with error
+              // Invalid result - emit tool-result with validation error
               console.warn(
                 `[LLM] Tool validation failed for ${toolName}:`,
                 validation.errorDetails?.error
               );
 
-              // Emit validation error chunk for debugging/monitoring
-              yield {
-                type: "tool-validation-error",
-                toolValidationError: {
-                  id: chunk.toolCallId,
-                  toolName,
-                  error: validation.errorDetails!.error,
-                  suggestedFix: validation.errorDetails!.suggestedFix,
-                  originalResult: validation.errorDetails!.originalResult,
-                },
-              };
-
-              // Emit tool-result with validation error as the result
-              // This ensures the LLM receives feedback about the validation failure
               yield {
                 type: "tool-result",
                 toolResult: {
