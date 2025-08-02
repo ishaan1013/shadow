@@ -8,7 +8,7 @@ import {
   setTaskFailed,
   clearTaskProgress,
 } from "../utils/task-status";
-import indexRepo from "../indexing/indexer.js";
+import indexRepo from "../indexing/indexer";
 
 // Helper for async delays
 const delay = (ms: number) =>

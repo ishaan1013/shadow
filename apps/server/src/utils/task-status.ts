@@ -38,7 +38,7 @@ export async function updateTaskStatus(
 /**
  * Set task initialization status
  */
-export async function setTaskInProgress(
+export async function setInitStatus(
   taskId: string,
   status: InitStatus
 ): Promise<void> {
