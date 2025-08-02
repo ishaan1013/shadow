@@ -67,4 +67,10 @@ export interface ContextUsageStats {
     light: number;
     heavy: number;
   };
+  // Current context compression stats (if available)
+  currentCompressionStats?: {
+    compressedTokens: number;
+    uncompressedTokens: number;
+    compressionSavings: number;
+  };
 }

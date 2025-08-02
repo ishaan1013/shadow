@@ -5,11 +5,6 @@ import { useState, useEffect } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Gauge, 
-  Zap,
-  FileText,
-  ChevronDown,
-  ChevronRight,
   Activity,
   TrendingDown
 } from "lucide-react";
@@ -18,7 +13,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useTaskSocket } from "@/hooks/socket/use-task-socket";
 
 interface ContextUsageProps {
   taskId: string;
@@ -29,15 +23,11 @@ interface ContextUsageProps {
 export function ContextUsage({ 
   taskId, 
   model = "gpt-4o",
-  refreshInterval = 5000 
+  refreshInterval = 10000 
 }: ContextUsageProps) {
   const [stats, setStats] = useState<ContextUsageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showDetails, setShowDetails] = useState(false);
-  
-  // Get real-time compression stats from socket
-  const { compressionStats } = useTaskSocket(taskId);
 
   const fetchStats = async () => {
     try {
@@ -140,8 +130,8 @@ export function ContextUsage({
         </div>
       </div>
 
-      {/* Real-time Compression Stats */}
-      {compressionStats && (
+      {/* Compression Stats */}
+      {stats.currentCompressionStats && (
         <div className="space-y-2 p-2 rounded bg-sidebar-accent/30 border border-sidebar-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -149,7 +139,7 @@ export function ContextUsage({
               <span className="text-xs font-medium text-green-400">Context Compressed</span>
             </div>
             <Badge variant="secondary" className="text-xs">
-              -{formatNumber(compressionStats.compressionSavings)} tokens
+              -{formatNumber(stats.currentCompressionStats.compressionSavings)} tokens
             </Badge>
           </div>
           
@@ -159,7 +149,7 @@ export function ContextUsage({
                 <div className="flex flex-col gap-1 text-center">
                   <span className="text-muted-foreground">Original</span>
                   <span className="font-mono text-foreground">
-                    {formatNumber(compressionStats.uncompressedTokens)}
+                    {formatNumber(stats.currentCompressionStats.uncompressedTokens)}
                   </span>
                 </div>
               </TooltipTrigger>
@@ -173,7 +163,7 @@ export function ContextUsage({
                 <div className="flex flex-col gap-1 text-center">
                   <span className="text-muted-foreground">Compressed</span>
                   <span className="font-mono text-green-400">
-                    {formatNumber(compressionStats.compressedTokens)}
+                    {formatNumber(stats.currentCompressionStats.compressedTokens)}
                   </span>
                 </div>
               </TooltipTrigger>
@@ -184,7 +174,7 @@ export function ContextUsage({
           </div>
           
           <div className="text-xs text-center text-muted-foreground">
-            {((compressionStats.compressionSavings / compressionStats.uncompressedTokens) * 100).toFixed(1)}% reduction
+            {((stats.currentCompressionStats.compressionSavings / stats.currentCompressionStats.uncompressedTokens) * 100).toFixed(1)}% reduction
           </div>
         </div>
       )}

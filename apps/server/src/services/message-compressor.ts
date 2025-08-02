@@ -43,7 +43,6 @@ export class MessageCompressor {
       throw new Error("Cannot compress to NONE level");
     }
 
-    console.log(`[COMPRESSION] Compressing message ${messageId} to ${targetLevel} level`);
 
     const message = await prisma.chatMessage.findUnique({
       where: { id: messageId }
@@ -56,7 +55,6 @@ export class MessageCompressor {
     // Check if this compression level already exists - prevent re-compression
     const existingCompression = await this.getCompressedVersion(messageId, targetLevel, model);
     if (existingCompression) {
-      console.log(`[COMPRESSION] Using existing ${targetLevel} compression for message ${messageId}`);
       return existingCompression;
     }
 
@@ -137,11 +135,8 @@ export class MessageCompressor {
 
     const shortestVersion = suitableVersions[0];
     if (!shortestVersion) {
-      console.log(`[COMPRESSION] No suitable version found for ${level}, returning null`);
       return null;
     }
-    
-    console.log(`[COMPRESSION] Returning shortest suitable version for ${level}: ${shortestVersion.content.length} chars`);
     
     return shortestVersion;
   }
@@ -152,12 +147,9 @@ export class MessageCompressor {
     level: CompressionLevel,
     model: ModelType
   ): Promise<CompressedMessageVersion> {
-    console.log(`[COMPRESSION] Ensuring compression level ${level} for message ${messageId}`);
-    
     // First check if we already have the requested level or better
     const existing = await this.getCompressedVersion(messageId, level, model);
     if (existing) {
-      console.log(`[COMPRESSION] Found existing compression for ${level}: ${existing.content.length} chars`);
       return existing;
     }
 
@@ -178,7 +170,6 @@ export class MessageCompressor {
         
         const versions = (message?.compressedVersions as CompressedVersions) || {};
         if (!versions.LIGHT) {
-          console.log(`[COMPRESSION] Creating LIGHT compression to compare with HEAVY`);
           await this.compressMessage(messageId, "LIGHT", model);
         }
       } catch (error) {
@@ -235,7 +226,6 @@ export class MessageCompressor {
       }];
 
       let summary = "";
-      console.log(`[COMPRESSION] Calling LLM for LIGHT compression with ${model}`);
       
       for await (const chunk of this.llmService.createMessageStream(
         LIGHT_COMPRESSION_SYSTEM_PROMPT,
@@ -296,7 +286,6 @@ export class MessageCompressor {
       }];
 
       let summary = "";
-      console.log(`[COMPRESSION] Calling LLM for HEAVY compression with ${model}`);
       
       for await (const chunk of this.llmService.createMessageStream(
         HEAVY_COMPRESSION_SYSTEM_PROMPT,

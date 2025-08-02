@@ -111,6 +111,7 @@ export class ContextManager {
     console.log(
       `[CONTEXT] Compression savings: ${compressionSavings} tokens (${((compressionSavings / uncompressedTokens) * 100).toFixed(1)}% reduction)`
     );
+    console.log(`===============================================`)
 
     return { 
       messages: finalMessages, 
@@ -210,9 +211,7 @@ export class ContextManager {
       // Remove oldest message
       finalMessages = finalMessages.slice(1);
       messagesRemoved++;
-      console.log(
-        `[CONTEXT] Removed oldest message ${messagesRemoved}, ${finalMessages.length} messages remaining, ${totalTokens} -> ${totalTokens - this.tokenCounter.countTotalTokens([{content: currentMessages[messagesRemoved - 1]?.content || ""}], model)} tokens`
-      );
+
     }
 
     return finalMessages;
@@ -382,6 +381,18 @@ export class ContextManager {
       model
     );
 
+    // Get current compression stats by building optimal context
+    let currentCompressionStats;
+    try {
+      const contextResult = await this.buildOptimalContext(taskId, model);
+      if (contextResult.compressionStats.compressionSavings > 0) {
+        currentCompressionStats = contextResult.compressionStats;
+      }
+    } catch (error) {
+      console.warn(`[CONTEXT] Failed to get compression stats for usage API:`, error);
+      // Continue without compression stats
+    }
+
     // Calculate compression breakdown
     const compressionBreakdown = {
       none: 0,
@@ -431,6 +442,7 @@ export class ContextManager {
       compressionActive,
       compressedMessages,
       compressionBreakdown,
+      currentCompressionStats,
     };
   }
 }

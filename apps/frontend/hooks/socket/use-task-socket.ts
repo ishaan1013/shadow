@@ -252,11 +252,6 @@ export function useTaskSocket(taskId: string | undefined) {
     AssistantMessagePart[]
   >([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [compressionStats, setCompressionStats] = useState<{
-    compressedTokens: number;
-    uncompressedTokens: number;
-    compressionSavings: number;
-  } | null>(null);
 
   // Join/leave task room
   useEffect(() => {
@@ -580,14 +575,6 @@ export function useTaskSocket(taskId: string | undefined) {
       }
     }
 
-    function onCompressionStats(data: {
-      compressedTokens: number;
-      uncompressedTokens: number;
-      compressionSavings: number;
-    }) {
-      console.log(`[TASK_SOCKET] Received compression stats:`, data);
-      setCompressionStats(data);
-    }
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
@@ -598,7 +585,6 @@ export function useTaskSocket(taskId: string | undefined) {
     socket.on("stream-error", onStreamError);
     socket.on("message-error", onMessageError);
     socket.on("task-status-updated", onTaskStatusUpdate);
-    socket.on("compression-stats", onCompressionStats);
 
     return () => {
       socket.off("connect", onConnect);
@@ -610,7 +596,6 @@ export function useTaskSocket(taskId: string | undefined) {
       socket.off("stream-error", onStreamError);
       socket.off("message-error", onMessageError);
       socket.off("task-status-updated", onTaskStatusUpdate);
-      socket.off("compression-stats", onCompressionStats);
     };
   }, [socket, taskId, queryClient]);
 
@@ -651,6 +636,5 @@ export function useTaskSocket(taskId: string | undefined) {
     sendMessage,
     stopStream,
     clearQueuedMessage,
-    compressionStats,
   };
 }
