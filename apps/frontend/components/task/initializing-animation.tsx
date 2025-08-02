@@ -4,7 +4,7 @@ import { useTask } from "@/hooks/use-task";
 import { cn } from "@/lib/utils";
 import { getStepsForMode, STEP_DISPLAY_NAMES } from "@repo/types";
 import { Check } from "lucide-react";
-import { LogoHover } from "../logo/logo-hover";
+import { LogoHover } from "../graphics/logo/logo-hover";
 import { useEffect, useState } from "react";
 
 // height of each step
@@ -30,10 +30,10 @@ export default function InitializingAnimation({ taskId }: { taskId: string }) {
 
   const initStatus = task.initStatus;
   let currentStepIndex = 0;
-  
-  if (initStatus === 'ACTIVE') {
+
+  if (initStatus === "ACTIVE") {
     currentStepIndex = steps.length; // All steps completed
-  } else if (initStatus && initStatus !== 'INACTIVE') {
+  } else if (initStatus && initStatus !== "INACTIVE") {
     const stepIndex = steps.findIndex((step) => step === initStatus);
     currentStepIndex = stepIndex >= 0 ? stepIndex + 1 : 0;
   }

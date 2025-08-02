@@ -2,7 +2,7 @@ import Link from "next/link";
 import { SidebarViews } from "@/components/sidebar";
 import { getUser } from "@/lib/auth/get-user";
 import { getTasks } from "@/lib/db-operations/get-tasks";
-import { LogoHover } from "@/components/logo/logo-hover";
+import { LogoHover } from "@/components/graphics/logo/logo-hover";
 import { getCodebases } from "@/lib/db-operations/get-codebases";
 import { Button } from "@/components/ui/button";
 

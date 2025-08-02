@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LogoHover } from "../logo/logo-hover";
+import { LogoHover } from "../graphics/logo/logo-hover";
 import { PromptForm } from "./prompt-form";
 import type { FilteredRepository } from "@/lib/github/types";
 import type { ModelType } from "@repo/types";

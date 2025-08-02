@@ -31,7 +31,7 @@ import type { FilteredRepository as Repository } from "@/lib/github/types";
 import Image from "next/image";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { GithubLogo } from "../logo/github-logo";
+import { GithubLogo } from "../graphics/github/github-logo";
 
 export function GithubConnection({
   isOpen,
