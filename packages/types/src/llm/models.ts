@@ -9,8 +9,8 @@ export interface LLMConfig {
 // Model Selection
 export const AvailableModels = {
   // Anthropic models
-  CLAUDE_SONNET_4: "claude-opus-4-20250514",
-  CLAUDE_OPUS_4: "claude-sonnet-4-20250514",
+  CLAUDE_SONNET_4: "claude-sonnet-4-20250514",
+  CLAUDE_OPUS_4: "claude-opus-4-20250514",
   CLAUDE_HAIKU_3_5: "claude-3-5-haiku-latest",
   // OpenAI models
   GPT_4O_MINI: "gpt-4o-mini",

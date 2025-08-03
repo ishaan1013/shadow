@@ -59,13 +59,16 @@ export function TaskPageWrapper({
   Resizable panel state
   */
 
-  const { rightPanelRef, lastPanelSizeRef } = useAgentEnvironment();
+  const { rightPanelRef, lastPanelSizeRef, triggerTerminalResize } =
+    useAgentEnvironment();
   const resizablePanelGroupRef = useRef<ImperativePanelGroupHandle>(null);
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
   );
 
   const handleLayout = useCallback((layout: number[]) => {
+    triggerTerminalResize();
+
     // Clear existing timeout
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -88,7 +91,7 @@ export function TaskPageWrapper({
       leftSize: 100,
       rightSize: 0,
     };
-  }, [initialLayout]);
+  }, [initialLayout, triggerTerminalResize]);
 
   /* 
   Keyboard shortcuts

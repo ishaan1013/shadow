@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { useTerminalSocket } from "@/hooks/socket";
 import { useParams } from "next/navigation";
 import type { TerminalEntry } from "@repo/types";
+import { useAgentEnvironment } from "./agent-environment-context";
 
 export default function Terminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -22,6 +23,9 @@ export default function Terminal() {
     isTerminalConnected,
     clearTerminal: _clearTerminal,
   } = useTerminalSocket(taskId);
+
+  // Get terminal resize trigger from context
+  const { terminalResizeTrigger } = useAgentEnvironment();
 
   // Terminal entry formatting with ANSI colors
   const writeToTerminal = (entry: TerminalEntry) => {
@@ -119,6 +123,13 @@ export default function Terminal() {
       fitAddonRef.current = null;
     };
   }, []);
+
+  // Handle panel resize triggers from context
+  useEffect(() => {
+    if (fitAddonRef.current) {
+      fitAddonRef.current.fit();
+    }
+  }, [terminalResizeTrigger]);
 
   // Write terminal entries to xterm when they change
   useEffect(() => {

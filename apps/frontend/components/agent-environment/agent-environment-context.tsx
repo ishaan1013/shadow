@@ -28,6 +28,8 @@ type AgentEnvironmentContextType = {
   rightPanelRef: React.RefObject<ImperativePanelHandle | null>;
   lastPanelSizeRef: React.RefObject<number | null>;
   expandRightPanel: () => void;
+  triggerTerminalResize: () => void;
+  terminalResizeTrigger: number;
 };
 
 const AgentEnvironmentContext = createContext<
@@ -45,6 +47,7 @@ export function AgentEnvironmentProvider({
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
 
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [terminalResizeTrigger, setTerminalResizeTrigger] = useState(0);
 
   function updateSelectedFilePath(path: string | null) {
     if (path && !path.startsWith("/")) {
@@ -91,6 +94,10 @@ export function AgentEnvironmentProvider({
     }
   }, [rightPanelRef]);
 
+  const triggerTerminalResize = useCallback(() => {
+    setTerminalResizeTrigger((prev) => prev + 1);
+  }, []);
+
   const value: AgentEnvironmentContextType = useMemo(
     () => ({
       selectedFilePath,
@@ -101,6 +108,8 @@ export function AgentEnvironmentProvider({
       rightPanelRef,
       lastPanelSizeRef,
       expandRightPanel,
+      triggerTerminalResize,
+      terminalResizeTrigger,
     }),
     [
       selectedFilePath,
@@ -109,6 +118,8 @@ export function AgentEnvironmentProvider({
       fileContentQuery.error?.message,
       rightPanelRef,
       expandRightPanel,
+      triggerTerminalResize,
+      terminalResizeTrigger,
     ]
   );
 

@@ -11,13 +11,7 @@ import { useState } from "react";
 import { Editor } from "./editor";
 import { FileExplorer } from "./file-explorer";
 import { Button } from "../ui/button";
-import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronsRight,
-  ChevronUp,
-  PanelLeft,
-} from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, PanelLeft } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useCodebaseTree } from "@/hooks/use-codebase-tree";
 import { useAgentEnvironment } from "./agent-environment-context";
@@ -39,6 +33,7 @@ export function AgentEnvironment() {
     updateSelectedFilePath,
     isLoadingContent,
     contentError,
+    triggerTerminalResize,
   } = useAgentEnvironment();
 
   // Use the new hooks for data fetching
@@ -132,7 +127,11 @@ export function AgentEnvironment() {
           autoExpandToSelectedPath={true}
         />
         <div className="flex-1 overflow-hidden">
-          <ResizablePanelGroup direction="vertical" className="h-full">
+          <ResizablePanelGroup
+            direction="vertical"
+            className="h-full"
+            onLayout={triggerTerminalResize}
+          >
             <ResizablePanel minSize={20} defaultSize={75}>
               <Editor
                 selectedFilePath={selectedFilePath}
