@@ -300,19 +300,19 @@ export function useTaskSocket(taskId: string | undefined) {
       }
     }
 
-    function onStreamState(state: { 
-      chunks: StreamChunk[]; 
-      isStreaming: boolean; 
-      totalChunks: number; 
+    function onStreamState(state: {
+      chunks: StreamChunk[];
+      isStreaming: boolean;
+      totalChunks: number;
     }) {
       console.log("Received stream state:", state);
       setIsStreaming(state.isStreaming);
-      
+
       // Replay chunks to reconstruct streamingAssistantParts
       if (state.chunks && state.chunks.length > 0) {
         const parts: AssistantMessagePart[] = [];
-        
-        state.chunks.forEach(chunk => {
+
+        state.chunks.forEach((chunk) => {
           if (chunk.type === "content" && chunk.content) {
             const textPart: TextPart = {
               type: "text",
@@ -337,9 +337,11 @@ export function useTaskSocket(taskId: string | undefined) {
             parts.push(toolResultPart);
           }
         });
-        
+
         setStreamingAssistantParts(parts);
-        console.log(`[STREAM_STATE] Reconstructed ${parts.length} parts from ${state.chunks.length} chunks`);
+        console.log(
+          `[STREAM_STATE] Reconstructed ${parts.length} parts from ${state.chunks.length} chunks`
+        );
       }
     }
 
@@ -648,7 +650,6 @@ export function useTaskSocket(taskId: string | undefined) {
       }
     }
 
-
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("chat-history", onChatHistory);
@@ -684,13 +685,8 @@ export function useTaskSocket(taskId: string | undefined) {
         llmModel: model as ModelType,
         queue,
       });
-
-      // Invalidate context usage queries to trigger refresh after user message
-      queryClient.invalidateQueries({ 
-        queryKey: ["context-usage", taskId] 
-      });
     },
-    [socket, taskId, queryClient]
+    [socket, taskId]
   );
 
   const stopStream = useCallback(() => {
