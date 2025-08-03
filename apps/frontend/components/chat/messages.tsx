@@ -3,7 +3,7 @@ import { isAssistantMessage, isToolMessage, isUserMessage } from "@repo/types";
 import { AssistantMessage } from "./assistant-message";
 import { UserMessage } from "./user-message";
 import InitializingAnimation from "../task/initializing-animation";
-import { useMemo, memo } from "react";
+import { useMemo, memo, useRef } from "react";
 
 function groupMessages(messages: Message[]) {
   const messageGroups: Message[][] = [];
@@ -48,10 +48,15 @@ function groupMessages(messages: Message[]) {
 function MessagesComponent({
   taskId,
   messages,
+  disableEditing,
 }: {
   taskId: string;
   messages: Message[];
+  disableEditing: boolean;
 }) {
+  // Used to properly space the initializing animation
+  const userMessageWrapperRef = useRef<HTMLButtonElement>(null);
+
   // Filter out standalone tool messages - they're already rendered within assistant message parts
   const filteredMessages = useMemo(
     () => messages.filter((message) => !isToolMessage(message)),
@@ -67,7 +72,10 @@ function MessagesComponent({
 
   return (
     <div className="relative z-0 mb-24 flex w-full grow flex-col gap-6">
-      <InitializingAnimation taskId={taskId} />
+      <InitializingAnimation
+        taskId={taskId}
+        userMessageWrapperRef={userMessageWrapperRef}
+      />
 
       {messageGroups.map((messageGroup, groupIndex) => (
         <div className="flex flex-col gap-6" key={groupIndex}>
@@ -79,6 +87,8 @@ function MessagesComponent({
                   taskId={taskId}
                   message={message}
                   isFirstMessage={groupIndex === 0}
+                  disableEditing={disableEditing}
+                  userMessageWrapperRef={userMessageWrapperRef}
                 />
               );
             }

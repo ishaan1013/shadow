@@ -27,7 +27,7 @@ npm-debug.log*
 *.pem
 
 # Prompt research stuff (Ishaan)
-prompts/
+prompts-research/
 
 # Python virtual environments
 .venv/

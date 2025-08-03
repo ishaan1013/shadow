@@ -1,6 +1,6 @@
 import type { Message } from "@repo/types";
 import { Trash2 } from "lucide-react";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 
 export function DeleteFileTool({ message }: { message: Message }) {
@@ -13,7 +13,7 @@ export function DeleteFileTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<Trash2 className="text-destructive" />}
-      type={ToolType.DELETE_FILE}
+      type={ToolTypes.DELETE_FILE}
       title={filePath}
     />
   );

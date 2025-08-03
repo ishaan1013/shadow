@@ -45,18 +45,19 @@ function getTaskWorkspacePath(taskId: string): string {
 async function getCommittedChanges(
   workspacePath: string,
   allFiles: Map<string, FileChange>,
-  now: string
+  now: string,
+  baseBranch: string
 ) {
   const startTime = Date.now();
 
-  const diffCommand = "git diff --name-status main...HEAD";
+  const diffCommand = `git diff --name-status ${baseBranch}...HEAD`;
   const { stdout: committedStatusOutput } = await execAsync(diffCommand, {
     cwd: workspacePath,
   });
 
   if (committedStatusOutput.trim()) {
     // Detailed diff stats for committed changes
-    const diffStatsCommand = "git diff --numstat main...HEAD";
+    const diffStatsCommand = `git diff --numstat ${baseBranch}...HEAD`;
     const { stdout: committedStatsOutput } = await execAsync(diffStatsCommand, {
       cwd: workspacePath,
     });
@@ -363,11 +364,12 @@ async function getUncommittedChanges(
 }
 
 /**
- * Get file changes since the task branch was created from main
- * Uses git diff to compare current state vs main branch
+ * Get file changes since the task branch was created from base branch
+ * Uses git diff to compare current state vs base branch
  */
 export async function getFileChanges(
-  taskId: string
+  taskId: string,
+  baseBranch: string = "main"
 ): Promise<{ fileChanges: FileChange[]; diffStats: DiffStats }> {
   const workspacePath = getTaskWorkspacePath(taskId);
 
@@ -386,7 +388,7 @@ export async function getFileChanges(
     const allFiles = new Map<string, FileChange>();
 
     await Promise.all([
-      getCommittedChanges(workspacePath, allFiles, now),
+      getCommittedChanges(workspacePath, allFiles, now, baseBranch),
       getUncommittedChanges(workspacePath, allFiles, now),
     ]);
 
@@ -400,6 +402,8 @@ export async function getFileChanges(
       }),
       { additions: 0, deletions: 0, totalFiles: 0 }
     );
+
+    console.log("[GIT_OPS] File changes:", fileChanges);
 
     return { fileChanges, diffStats };
   } catch (error) {
@@ -459,9 +463,7 @@ export async function hasGitRepository(taskId: string): Promise<boolean> {
       cwd: workspacePath,
     });
 
-    // This check is necessary in case our local workspace directory has an ancestor git repository
-    // That would cause git status to return the parent's changes if the git clone failed, leading to file status bugs
-    return stdout.trim() === `${workspacePath}/.git`;
+    return stdout.trim() === `.git`;
   } catch {
     return false;
   }

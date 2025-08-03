@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Shadow Backend ECS Deployment Script
-# Deploys the Node.js backend server to AWS ECS in the same VPC as Firecracker K8s cluster
+# Deploys the Node.js backend server to AWS ECS in the same VPC as remote execution K8s cluster
 
 set -euo pipefail
 
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Configuration
-CLUSTER_NAME="${EKS_CLUSTER_NAME:-shadow-firecracker}"
+CLUSTER_NAME="${EKS_CLUSTER_NAME:-shadow-remote}"
 ECS_CLUSTER_NAME="${ECS_CLUSTER_NAME:-shadow-ecs-cluster}"
 ECR_REPO_NAME="${ECR_REPO_NAME:-shadow-server}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
@@ -422,7 +422,7 @@ create_task_definition() {
       ],
       "environment": [
         {"name": "NODE_ENV", "value": "production"},
-        {"name": "AGENT_MODE", "value": "firecracker"},
+        {"name": "AGENT_MODE", "value": "remote"},
         {"name": "AWS_REGION", "value": "$AWS_REGION"},
         {"name": "EKS_CLUSTER_NAME", "value": "$CLUSTER_NAME"},
         {"name": "KUBERNETES_NAMESPACE", "value": "shadow-agents"},
@@ -587,7 +587,7 @@ main() {
     log "Next steps:"
     log "1. Update your frontend to use: http://$ALB_DNS"
     log "2. Test WebSocket connections"
-    log "3. Verify Firecracker VM communication"
+    log "3. Verify remote VM communication"
     log ""
     log "Useful commands:"
     log "- Check service: aws ecs describe-services --cluster $ECS_CLUSTER_NAME --services $SERVICE_NAME"

@@ -20,6 +20,7 @@ model User {
   accounts              Account[]
   sessions              Session[]
   CodebaseUnderstanding CodebaseUnderstanding[]
+  userSettings          UserSettings?
 
   @@map("user")
 }
@@ -81,7 +82,8 @@ model Task {
   repoUrl      String
 
   workspacePath       String?
-  lastCompletedStep   InitStepType?
+  initStatus          InitStatus        @default(INACTIVE)
+  scheduledCleanupAt  DateTime?
   initializationError String?
   workspaceCleanedUp  Boolean           @default(false)
   totalTokens         Int               @default(0)  // Aggregate token count for the task
@@ -92,6 +94,7 @@ model Task {
   baseCommitSha       String
   shadowBranch        String
   pullRequestNumber   Int?
+  githubIssueId       String?
   messages            ChatMessage[]
   user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions            TaskSession[]
@@ -215,7 +218,6 @@ enum TaskStatus {
   RUNNING
   COMPLETED
   FAILED
-  CANCELLED
 }
 
 enum PullRequestStatus {
@@ -237,20 +239,25 @@ enum TodoStatus {
   CANCELLED
 }
 
-enum InitStepType {
-  // Local mode step
+enum InitStatus {
+  INACTIVE
   PREPARE_WORKSPACE
-
-  // Firecracker-specific steps
   CREATE_VM
   WAIT_VM_READY
   VERIFY_VM_WORKSPACE
-
-  // Repository indexing step (both modes)
   INDEX_REPOSITORY
+  ACTIVE
+}
 
-  // Cleanup step (firecracker only)
-  CLEANUP_WORKSPACE
+model UserSettings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  autoPullRequest Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
 }
 
 enum FileOp {

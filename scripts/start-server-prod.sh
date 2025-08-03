@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Shadow Production Start Script
-# Builds the application and starts server in Firecracker production mode
+# Builds the application and starts server in remote production mode
 
 set -e  # Exit on any error
 
@@ -20,4 +20,4 @@ set +a  # Disable automatic export
 
 # Step 3: Start server in Remote mode (Local Development)
 echo "🔥 Starting server in Remote mode (Local Development)..."
-AGENT_MODE=firecracker NODE_ENV=production npm run --workspace=apps/server start
+AGENT_MODE=remote NODE_ENV=production npm run --workspace=apps/server start

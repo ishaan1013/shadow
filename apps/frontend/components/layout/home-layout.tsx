@@ -11,7 +11,7 @@ export function HomeLayoutWrapper({ children }: { children: React.ReactNode }) {
   const { open } = useSidebar();
 
   return (
-    <div className="relative flex size-full max-h-svh flex-col">
+    <div className="relative flex size-full max-h-svh flex-col overflow-hidden">
       <div className="bg-background sticky top-0 z-10 flex w-full items-center justify-between p-3">
         {!open ? (
           <Tooltip>

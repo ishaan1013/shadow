@@ -1,37 +1,25 @@
-import { GitHubService } from "../github";
 import { GitManager } from "./git-manager";
-import { LLMService } from "../llm";
-import { prisma } from "@repo/db";
-
-export interface PRMetadata {
-  title: string;
-  description: string;
-  isDraft: boolean;
-}
-
-export interface CreatePROptions {
-  taskId: string;
-  repoFullName: string;
-  shadowBranch: string;
-  baseBranch: string;
-  userId: string;
-  taskTitle: string;
-  wasTaskCompleted: boolean;
-  messageId: string;
-}
-
+import { LLMService } from "../ai/llm";
+import { PRService } from "../github/pull-requests";
+import type { PRMetadata, CreatePROptions } from "../github/types";
 
 export class PRManager {
+  private prService: PRService;
+
   constructor(
-    private githubService: GitHubService,
     private gitManager: GitManager,
     private llmService: LLMService
-  ) {}
+  ) {
+    this.prService = new PRService();
+  }
 
   /**
    * Create or update PR and save snapshot
    */
-  async createPRIfNeeded(options: CreatePROptions): Promise<void> {
+  async createPRIfNeeded(
+    options: CreatePROptions, 
+    userApiKeys?: { openai?: string; anthropic?: string }
+  ): Promise<void> {
     try {
       console.log(`[PR_MANAGER] Processing PR for task ${options.taskId}`);
 
@@ -44,31 +32,20 @@ export class PRManager {
         return;
       }
 
-      // Get task to check if PR already exists
-      const task = await prisma.task.findUnique({
-        where: { id: options.taskId },
-      });
-
-      if (!task) {
-        console.warn(`[PR_MANAGER] Task not found: ${options.taskId}`);
-        return;
-      }
-
       // Get git metadata
       const commitSha = await this.gitManager.getCurrentCommitSha();
 
-      const existingPRNumber = task.pullRequestNumber;
+      // Check if PR already exists
+      const existingPRNumber = await this.prService.getExistingPRNumber(
+        options.taskId
+      );
 
       if (!existingPRNumber) {
         // Create new PR path
-        await this.createNewPR(options, commitSha);
+        await this.createNewPR(options, commitSha, userApiKeys);
       } else {
         // Update existing PR path
-        await this.updateExistingPR(
-          options,
-          existingPRNumber,
-          commitSha
-        );
+        await this.updateExistingPR(options, existingPRNumber, commitSha, userApiKeys);
       }
 
       console.log(
@@ -88,47 +65,18 @@ export class PRManager {
    */
   private async createNewPR(
     options: CreatePROptions,
-    commitSha: string
+    commitSha: string,
+    userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<void> {
     // Generate PR metadata with AI
-    const metadata = await this.generatePRMetadata(options);
+    const metadata = await this.generatePRMetadata(options, userApiKeys);
 
-    // Create GitHub PR
-    const result = await this.githubService.createPullRequest(
-      options.repoFullName,
-      {
-        title: metadata.title,
-        body: metadata.description,
-        head: options.shadowBranch,
-        base: options.baseBranch,
-        draft: metadata.isDraft,
-      },
-      options.userId
-    );
+    // Use PR service to create the PR
+    const result = await this.prService.createPR(options, metadata, commitSha);
 
-    // Update task with PR number
-    await prisma.task.update({
-      where: { id: options.taskId },
-      data: { pullRequestNumber: result.number },
-    });
-
-    // Create snapshot record
-    await prisma.pullRequestSnapshot.create({
-      data: {
-        messageId: options.messageId,
-        status: "CREATED",
-        title: metadata.title,
-        description: metadata.description,
-        filesChanged: result.changed_files,
-        linesAdded: result.additions,
-        linesRemoved: result.deletions,
-        commitSha,
-      },
-    });
-
-    console.log(
-      `[PR_MANAGER] Created new PR #${result.number} for task ${options.taskId}`
-    );
+    if (!result.success) {
+      throw new Error(`Failed to create PR: ${result.error}`);
+    }
   }
 
   /**
@@ -137,17 +85,13 @@ export class PRManager {
   private async updateExistingPR(
     options: CreatePROptions,
     prNumber: number,
-    commitSha: string
+    commitSha: string,
+    userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<void> {
     // Get current PR description from most recent snapshot
-    const latestSnapshot = await prisma.pullRequestSnapshot.findFirst({
-      where: {
-        message: {
-          taskId: options.taskId,
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const latestSnapshot = await this.prService.getLatestSnapshot(
+      options.taskId
+    );
 
     if (!latestSnapshot) {
       console.warn(
@@ -159,59 +103,43 @@ export class PRManager {
     const newDescription = await this.generateUpdatedDescription(
       latestSnapshot?.description || "",
       await this.gitManager.getDiff(),
-      options.taskTitle
+      options.taskTitle,
+      userApiKeys
     );
 
-    // Update GitHub PR
-    await this.githubService.updatePullRequest(
-      options.repoFullName,
+    // Use PR service to update the PR
+    const result = await this.prService.updatePR(
+      options,
       prNumber,
-      { body: newDescription },
-      options.userId
+      newDescription,
+      commitSha
     );
 
-    // Get updated PR stats from GitHub
-    const prStats = await this.githubService.getPullRequest(
-      options.repoFullName,
-      prNumber,
-      options.userId
-    );
-
-    // Create new snapshot record
-    await prisma.pullRequestSnapshot.create({
-      data: {
-        messageId: options.messageId,
-        status: "UPDATED",
-        title: latestSnapshot?.title || options.taskTitle,
-        description: newDescription,
-        filesChanged: prStats.changed_files,
-        linesAdded: prStats.additions,
-        linesRemoved: prStats.deletions,
-        commitSha,
-      },
-    });
-
-    console.log(
-      `[PR_MANAGER] Updated PR #${prNumber} for task ${options.taskId}`
-    );
+    if (!result.success) {
+      throw new Error(`Failed to update PR: ${result.error}`);
+    }
   }
 
   /**
    * Generate PR metadata using LLM based on git changes and task context
    */
   private async generatePRMetadata(
-    options: CreatePROptions
+    options: CreatePROptions,
+    userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<PRMetadata> {
     try {
       const diff = await this.gitManager.getDiff();
       const commitMessages = await this.getRecentCommitMessages();
 
-      const metadata = await this.llmService.generatePRMetadata({
-        taskTitle: options.taskTitle,
-        gitDiff: diff,
-        commitMessages,
-        wasTaskCompleted: options.wasTaskCompleted,
-      });
+      const metadata = await this.llmService.generatePRMetadata(
+        {
+          taskTitle: options.taskTitle,
+          gitDiff: diff,
+          commitMessages,
+          wasTaskCompleted: options.wasTaskCompleted,
+        },
+        userApiKeys || {}
+      );
 
       return metadata;
     } catch (error) {
@@ -223,7 +151,7 @@ export class PRManager {
       return {
         title: options.taskTitle,
         description: "Pull request description generation failed.",
-        isDraft: !options.wasTaskCompleted,
+        isDraft: true,
       };
     }
   }
@@ -234,7 +162,8 @@ export class PRManager {
   private async generateUpdatedDescription(
     oldDescription: string,
     newDiff: string,
-    taskTitle: string
+    taskTitle: string,
+    userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<string> {
     if (!oldDescription) {
       // If no old description, generate fresh one
@@ -244,12 +173,15 @@ export class PRManager {
     }
 
     try {
-      const result = await this.llmService.generatePRMetadata({
-        taskTitle,
-        gitDiff: newDiff,
-        commitMessages: [],
-        wasTaskCompleted: true,
-      });
+      const result = await this.llmService.generatePRMetadata(
+        {
+          taskTitle,
+          gitDiff: newDiff,
+          commitMessages: [],
+          wasTaskCompleted: true,
+        },
+        userApiKeys || {}
+      );
 
       return result.description;
     } catch (error) {

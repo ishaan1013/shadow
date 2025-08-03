@@ -1,48 +1,63 @@
 "use client";
 
-import { useTask } from "@/hooks/use-task";
 import { cn } from "@/lib/utils";
 import { getStepsForMode, STEP_DISPLAY_NAMES } from "@repo/types";
 import { Check } from "lucide-react";
-import { LogoHover } from "../logo/logo-hover";
+import { LogoHover } from "../graphics/logo/logo-hover";
 import { useEffect, useState } from "react";
+import { useTaskStatus } from "@/hooks/use-task-status";
 
 // height of each step
 const LINE_HEIGHT = 20;
 const GAP = 8;
 // extra padding to hide stream if its too fast
-const BOTTOM_PADDING = 150;
+const BOTTOM_PADDING = 200;
 
-export default function InitializingAnimation({ taskId }: { taskId: string }) {
-  const { task } = useTask(taskId);
+export default function InitializingAnimation({
+  taskId,
+  userMessageWrapperRef,
+}: {
+  taskId: string;
+  userMessageWrapperRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const { data } = useTaskStatus(taskId);
+  const { status, initStatus } = data || {};
 
-  if (!task) {
-    return null;
-  }
+  const [topSpacing, setTopSpacing] = useState(0);
+  useEffect(() => {
+    if (userMessageWrapperRef.current) {
+      setTopSpacing(userMessageWrapperRef.current.clientHeight + 32);
+    }
+  }, [userMessageWrapperRef]);
 
   const mode =
     process.env.NEXT_PUBLIC_VERCEL_ENV === "production" ||
     process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
-      ? "firecracker"
+      ? "remote"
       : "local";
 
   const steps = getStepsForMode(mode);
 
-  const lastCompletedStep = task.lastCompletedStep;
-  const currentStepIndex = lastCompletedStep
-    ? steps.findIndex((step) => step === lastCompletedStep) + 1
-    : 0;
+  let currentStepIndex = 0;
+
+  if (initStatus === "ACTIVE") {
+    currentStepIndex = steps.length; // All steps completed
+  } else if (initStatus && initStatus !== "INACTIVE") {
+    const stepIndex = steps.findIndex((step) => step === initStatus);
+    currentStepIndex = stepIndex >= 0 ? stepIndex + 1 : 0;
+  }
 
   return (
     <div
       className={cn(
-        "font-departureMono bg-background top-18 pointer-events-none absolute z-20 flex w-full select-none flex-col gap-1 px-3 tracking-tight transition-all duration-1000 ease-in-out",
-        currentStepIndex === steps.length
+        "font-departureMono bg-background pointer-events-none absolute z-20 flex w-full select-none flex-col gap-1 px-3 tracking-tight transition-[visibility,opacity,transform] duration-1000 ease-in-out",
+        currentStepIndex === steps.length || status !== "INITIALIZING"
           ? "invisible opacity-0"
           : "visible opacity-100"
       )}
       style={{
         paddingBottom: `${BOTTOM_PADDING}px`,
+        top: `${topSpacing}px`,
       }}
     >
       <AnimationHeader />

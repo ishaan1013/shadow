@@ -31,7 +31,7 @@ import type { FilteredRepository as Repository } from "@/lib/github/types";
 import Image from "next/image";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { GithubLogo } from "../logo/github-logo";
+import { GithubLogo } from "../graphics/github/github-logo";
 
 export function GithubConnection({
   isOpen,
@@ -58,7 +58,7 @@ export function GithubConnection({
     data: githubStatus,
     isLoading: isLoadingStatus,
     error: statusError,
-  } = useGitHubStatus(isOpen);
+  } = useGitHubStatus();
 
   const {
     data: groupedRepos = { groups: [] },
@@ -201,7 +201,7 @@ export function GithubConnection({
       return (
         <>
           <Folder className="size-4" />
-          <span>{selectedRepo.full_name}</span>
+          <span className="truncate">{selectedRepo.full_name}</span>
           <GitBranch className="size-4" />
           <span title={selectedBranch.name}>
             {truncateBranchName(selectedBranch.name, maxBranchLength)}
@@ -383,7 +383,7 @@ export function GithubConnection({
             <Button
               size="sm"
               variant="ghost"
-              className="text-muted-foreground hover:bg-accent font-normal"
+              className="text-muted-foreground hover:bg-accent shrink overflow-hidden font-normal"
             >
               {getButtonText()}
             </Button>

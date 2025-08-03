@@ -6,8 +6,8 @@ const nodeEnv = process.env.NODE_ENV || "development";
 let config: DevConfig | ProdConfig;
 
 if (nodeEnv === "production") {
-  // Production environment: Use Firecracker-focused configuration
-  console.log("[CONFIG] Loading production configuration (Firecracker mode)");
+  // Production environment: Use remote execution configuration
+  console.log("[CONFIG] Loading production configuration (Remote mode)");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { default: prodConfig } = require("./prod");
   config = prodConfig;

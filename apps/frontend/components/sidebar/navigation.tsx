@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { statusColorsConfig } from "./status";
 import { useTask } from "@/hooks/use-task";
 import { useMemo } from "react";
-import { LogoHover } from "../logo/logo-hover";
+import { LogoHover } from "../graphics/logo/logo-hover";
 
 export function SidebarNavigation({
   sidebarView,
@@ -121,7 +121,7 @@ export function SidebarNavigation({
 
   return (
     <div className="bg-card flex h-svh flex-col justify-between border-r p-3">
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-6">
         <Link
           href="/"
           className="flex size-7 items-center justify-center"

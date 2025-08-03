@@ -15,7 +15,7 @@ import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useCodebaseTree } from "@/hooks/use-codebase-tree";
 import { useAgentEnvironment } from "./agent-environment-context";
-import { LogoHover } from "../logo/logo-hover";
+import { LogoHover } from "../graphics/logo/logo-hover";
 
 const Terminal = dynamic(() => import("./terminal"), { ssr: false });
 

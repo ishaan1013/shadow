@@ -6,9 +6,9 @@ metadata:
 spec:
   runtimeClassName: kata-qemu
   nodeSelector:
-    firecracker: "true"
+    remote: "true"
   tolerations:
-  - key: firecracker.shadow.ai/dedicated
+  - key: remote.shadow.ai/dedicated
     operator: Equal
     value: "true"
     effect: NoSchedule

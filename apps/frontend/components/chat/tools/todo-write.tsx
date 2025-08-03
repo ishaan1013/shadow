@@ -6,7 +6,7 @@ import {
   Square,
   SquareX,
 } from "lucide-react";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 import { cn } from "@/lib/utils";
 
@@ -40,36 +40,9 @@ function TodoList({ todos }: { todos: TodoItem[] }) {
 
   return (
     <div className="space-y-3">
-      {/* <div className="text-muted-foreground flex items-center gap-4 text-xs">
-        {statusCounts.pending && (
-          <span className="flex items-center gap-1">
-            <Circle className="size-3" />
-            {statusCounts.pending} pending
-          </span>
-        )}
-        {statusCounts.in_progress && (
-          <span className="flex items-center gap-1">
-            <Clock className="size-3 text-blue-500" />
-            {statusCounts.in_progress} in progress
-          </span>
-        )}
-        {statusCounts.completed && (
-          <span className="flex items-center gap-1">
-            <CheckCircle className="size-3 text-green-400" />
-            {statusCounts.completed} completed
-          </span>
-        )}
-        {statusCounts.cancelled && (
-          <span className="flex items-center gap-1">
-            <X className="size-3 text-red-400" />
-            {statusCounts.cancelled} cancelled
-          </span>
-        )}
-      </div> */}
-
-      <div className="flex flex-col gap-2 pb-1.5">
+      <div className="flex flex-col gap-1 pb-1.5">
         {todos.map((todo) => (
-          <div key={todo.id} className="flex items-start gap-1.5">
+          <div key={todo.id} className="flex min-h-5 items-start gap-1.5 pt-1">
             <StatusIcon status={todo.status} />
             <div
               className={cn(
@@ -106,26 +79,35 @@ export function TodoWriteTool({ message }: { message: Message }) {
     parsedResult = null;
   }
 
-  // Calculate title based on operation type
-  const title =
-    merge && parsedResult?.totalTodos
+  const lastTodo = todos[todos.length - 1];
+
+  const prefix = merge
+    ? lastTodo?.status === "in_progress"
+      ? "In progress:"
+      : lastTodo?.status === "completed"
+        ? "Completed:"
+        : "Updated todo list"
+    : "Created todo list";
+
+  const progress = parsedResult?.totalTodos
+    ? merge
       ? `(${parsedResult.completedTodos ?? todos.filter((t) => t.status === "completed").length}/${parsedResult.totalTodos})`
-      : `(${todos.length} item${todos.length === 1 ? "" : "s"})`;
+      : `${parsedResult.totalTodos} item${parsedResult.totalTodos === 1 ? "" : "s"}`
+    : "";
+
+  const title =
+    lastTodo?.status === "in_progress" || lastTodo?.status === "completed"
+      ? `${lastTodo?.content} ${progress}`
+      : progress;
 
   return (
     <ToolComponent
       icon={<ListTodo />}
-      type={ToolType.TODO_WRITE}
+      type={ToolTypes.TODO_WRITE}
       title={title}
-      prefix={merge ? "Updated todo list" : "Created todo list"}
+      prefix={prefix}
       collapsible
     >
-      {/* {status === "FAILED" && (
-          <div className="mb-2 text-xs text-red-600 dark:text-red-400">
-            {parsedResult?.error || "Failed to manage todos"}
-          </div>
-        )} */}
-
       <TodoList todos={todos} />
     </ToolComponent>
   );

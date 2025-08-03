@@ -1,14 +1,15 @@
 import { fetchGitHubStatus } from "@/lib/github/fetch";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
-export function useGitHubStatus(enabled = true) {
+export function useGitHubStatus() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
   const query = useQuery({
     queryKey: ["github", "status"],
     queryFn: fetchGitHubStatus,
-    enabled,
     throwOnError: false, // Don't throw on error - let component handle error states
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: (failureCount, error) => {
@@ -23,8 +24,7 @@ export function useGitHubStatus(enabled = true) {
 
   // Check for installation success in URL params and refresh if needed
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("github_app_installed") === "true") {
+    if (searchParams.get("github_app_installed") === "true") {
       // Clear the URL parameter
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete("github_app_installed");
@@ -34,7 +34,7 @@ export function useGitHubStatus(enabled = true) {
       queryClient.invalidateQueries({ queryKey: ["github", "status"] });
       queryClient.invalidateQueries({ queryKey: ["github", "repositories"] });
     }
-  }, [queryClient]);
+  }, [searchParams, queryClient]);
 
   const refreshStatus = () => {
     queryClient.invalidateQueries({ queryKey: ["github", "status"] });

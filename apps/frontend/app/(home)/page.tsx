@@ -65,6 +65,7 @@ export default async function Home() {
         console.log("Could not prefetch API keys:", error?.message || error);
       }),
   ];
+
   await Promise.allSettled(prefetchPromises);
 
   const githubStatus = queryClient.getQueryData<GitHubStatus>([
@@ -82,14 +83,15 @@ export default async function Home() {
     try {
       // Check if the saved model is valid (exists in AvailableModels)
       const isValidModel = Object.values(AvailableModels).includes(savedModel);
-      
+
       if (isValidModel) {
         // Check if the model's provider has a valid API key
         const provider = getModelProvider(savedModel);
-        const hasValidKey = provider === "openai" 
-          ? !!apiKeys.openai && apiKeys.openai.length > 0
-          : !!apiKeys.anthropic && apiKeys.anthropic.length > 0;
-        
+        const hasValidKey =
+          provider === "openai"
+            ? !!apiKeys.openai && apiKeys.openai.length > 0
+            : !!apiKeys.anthropic && apiKeys.anthropic.length > 0;
+
         if (!hasValidKey) {
           initialSelectedModel = null;
         }
@@ -97,7 +99,7 @@ export default async function Home() {
         // Invalid model, clear it
         initialSelectedModel = null;
       }
-    } catch (error) {
+    } catch (_error) {
       // Error validating model, clear it
       initialSelectedModel = null;
     }

@@ -95,6 +95,16 @@ create_eks_cluster() {
     # Check if cluster already exists
     if aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" --profile ID &> /dev/null; then
         warn "EKS cluster '$CLUSTER_NAME' already exists in region '$AWS_REGION'"
+        
+        # Check if nodegroups exist
+        EXISTING_NODEGROUPS=$(aws eks list-nodegroups --cluster-name "$CLUSTER_NAME" --region "$AWS_REGION" --profile ID --query 'nodegroups' --output text)
+        
+        if [[ -z "$EXISTING_NODEGROUPS" || "$EXISTING_NODEGROUPS" == "None" ]]; then
+            log "No nodegroups found, creating nodegroups for existing cluster..."
+            create_nodegroups_only
+        else
+            log "Nodegroups already exist: $EXISTING_NODEGROUPS"
+        fi
         return 0
     fi
     
@@ -199,6 +209,90 @@ EOF
     log "EKS cluster created successfully"
 }
 
+# Create nodegroups only (for existing cluster)
+create_nodegroups_only() {
+    log "Creating nodegroups for existing cluster..."
+    
+    # Create nodegroups configuration
+    cat > nodegroups-config.yaml << EOF
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: $CLUSTER_NAME
+  region: $AWS_REGION
+
+nodeGroups:
+  - name: remote-nodes
+    instanceType: $NODE_INSTANCE_TYPE
+    minSize: $MIN_NODES
+    maxSize: $MAX_NODES
+    desiredCapacity: $MIN_NODES
+    volumeSize: 100
+    volumeType: gp3
+    amiFamily: AmazonLinux2023
+    
+    # Enable KVM and nested virtualization
+    preBootstrapCommands:
+      - |
+        # Enable KVM module
+        echo "kvm_intel" | sudo tee -a /etc/modules-load.d/kvm.conf
+        echo "kvm" | sudo tee -a /etc/modules-load.d/kvm.conf
+        
+        # Load KVM modules
+        sudo modprobe kvm_intel || sudo modprobe kvm_amd
+        sudo modprobe kvm
+        
+        # Set KVM permissions
+        sudo groupadd -f kvm
+        sudo usermod -a -G kvm ec2-user
+        sudo chmod 666 /dev/kvm
+        
+        # Install additional packages
+        sudo yum update -y
+        sudo yum install -y iptables-services
+        
+    # Node labels for remote execution scheduling
+    labels:
+      remote: "true"
+      kvm: "enabled"
+      node-type: "bare-metal"
+      
+    # Node taints for dedicated remote workloads
+    taints:
+      - key: remote.shadow.ai/dedicated
+        value: "true"
+        effect: NoSchedule
+        
+    # Security group configuration
+    securityGroups:
+      attachIDs: []
+
+  - name: system-nodes
+    instanceType: m5.large
+    minSize: 1
+    maxSize: 2
+    desiredCapacity: 1
+    volumeSize: 50
+    volumeType: gp3
+    amiFamily: AmazonLinux2023
+    
+    # System node labels
+    labels:
+      node-type: "system"
+      workload: "control-plane"
+EOF
+
+    # Create the nodegroups
+    log "Creating nodegroups (this may take 10-15 minutes)..."
+    eksctl create nodegroup -f nodegroups-config.yaml --profile ID
+    
+    # Clean up config file
+    rm nodegroups-config.yaml
+    
+    log "Nodegroups created successfully"
+}
+
 # Install Kata Containers with QEMU runtime
 install_kata_runtime() {
     log "Installing Kata Containers with QEMU runtime..."
@@ -206,7 +300,7 @@ install_kata_runtime() {
     # Install Kata Containers RBAC
     kubectl apply -f https://raw.githubusercontent.com/kata-containers/kata-containers/main/tools/packaging/kata-deploy/kata-rbac/base/kata-rbac.yaml
     
-    # Install kata-deploy with Firecracker support
+    # Install kata-deploy with QEMU support
     kubectl apply -f https://raw.githubusercontent.com/kata-containers/kata-containers/main/tools/packaging/kata-deploy/kata-deploy/base/kata-deploy.yaml
     
     # Add toleration for remote nodes
@@ -228,6 +322,9 @@ install_kata_runtime() {
 # Set up Kubernetes namespace and RBAC
 setup_kubernetes_resources() {
     log "Setting up Kubernetes resources..."
+    
+    # Update kubeconfig to ensure access
+    aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME" --profile ID
     
     # Create namespace
     kubectl apply -f "$PROJECT_ROOT/apps/server/src/execution/k8s/namespace.yaml"
@@ -268,7 +365,7 @@ metadata:
   name: shadow-service-account-token
   namespace: shadow-agents
   annotations:
-    kubernetes.io/service-account.name: shadow-firecracker-server-sa
+    kubernetes.io/service-account.name: shadow-remote-server-sa
 type: kubernetes.io/service-account-token
 EOF
 
@@ -300,7 +397,7 @@ K8S_SERVICE_ACCOUNT_TOKEN=$SERVICE_ACCOUNT_TOKEN
 KUBERNETES_NAMESPACE=shadow-agents
 
 # Agent Configuration
-AGENT_MODE=firecracker
+AGENT_MODE=remote
 NODE_ENV=production
 
 # VM Resource Configuration
@@ -321,7 +418,7 @@ EOF
 
 # Verify deployment
 verify_deployment() {
-    log "Verifying Firecracker deployment..."
+    log "Verifying remote deployment..."
     
     # Check node readiness
     log "Checking node status..."
@@ -333,7 +430,7 @@ verify_deployment() {
     
     # Check RuntimeClass
     log "Checking RuntimeClasses..."
-    kubectl get runtimeclass kata-qemu kata-fc
+    kubectl get runtimeclass kata-qemu
     
     # Test QEMU VM creation with Kata
     log "Testing QEMU VM creation with Kata..."
@@ -385,7 +482,7 @@ EOF
 
 # Main execution
 main() {
-    log "Starting Shadow Firecracker infrastructure deployment..."
+    log "Starting Shadow remote infrastructure deployment..."
     log "Cluster: $CLUSTER_NAME"
     log "Region: $AWS_REGION"
     log "Instance Type: $NODE_INSTANCE_TYPE"
@@ -403,7 +500,7 @@ main() {
     log ""
     log "Next steps:"
     log "1. Source the configuration: source .env.production"
-    log "2. Deploy Shadow application with AGENT_MODE=firecracker"
+    log "2. Deploy Shadow application with AGENT_MODE=remote"
     log "3. Test task execution with Kata QEMU VMs"
     log ""
     log "Cluster access:"
@@ -417,7 +514,7 @@ main() {
 # Handle cleanup on exit
 cleanup() {
     log "Cleaning up temporary files..."
-    rm -f cluster-config.yaml .env.production
+    rm -f cluster-config.yaml nodegroups-config.yaml .env.production
 }
 
 trap cleanup EXIT

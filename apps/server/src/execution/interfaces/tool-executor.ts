@@ -27,12 +27,9 @@ import { CommandResult } from "./types";
  */
 export interface ToolExecutor {
   // File operations
-  readFile(
-    targetFile: string,
-    options?: ReadFileOptions
-  ): Promise<FileResult>;
-
   getFileStats(targetFile: string): Promise<FileStatsResult>;
+
+  readFile(targetFile: string, options?: ReadFileOptions): Promise<FileResult>;
 
   writeFile(
     targetFile: string,
@@ -52,22 +49,19 @@ export interface ToolExecutor {
   listDirectory(relativeWorkspacePath: string): Promise<DirectoryListing>;
 
   // Search operations
-  searchFiles(query: string, options?: SearchOptions): Promise<FileSearchResult>;
-
-  grepSearch(
+  searchFiles(
     query: string,
-    options?: GrepOptions
-  ): Promise<GrepResult>;
+    options?: SearchOptions
+  ): Promise<FileSearchResult>;
+
+  grepSearch(query: string, options?: GrepOptions): Promise<GrepResult>;
 
   semanticSearch(
     query: string,
     repo: string,
     options?: SearchOptions
   ): Promise<SemanticSearchToolResult>;
-  webSearch(
-    query: string,
-    domain?: string
-  ): Promise<WebSearchResult>;
+  webSearch(query: string, domain?: string): Promise<WebSearchResult>;
 
   // Command execution
   executeCommand(

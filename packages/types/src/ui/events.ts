@@ -1,4 +1,4 @@
-import { TaskStatus } from "@repo/db";
+import { TaskStatus, InitStatus } from "@repo/db";
 import type { Message } from "../chat/messages";
 import type { StreamChunk } from "../chat/streaming";
 import type { ModelType } from "../llm/models";
@@ -14,6 +14,7 @@ export interface TerminalEntry {
 export interface TaskStatusUpdateEvent {
   taskId: string;
   status: TaskStatus;
+  initStatus?: InitStatus;
   timestamp: string;
 }
 
@@ -31,9 +32,9 @@ export interface ServerToClientEvents {
   }) => void;
   "chat-history-error": (data: { error: string }) => void;
   "stream-state": (state: {
-    content: string;
+    chunks: StreamChunk[];
     isStreaming: boolean;
-    bufferPosition: number;
+    totalChunks: number;
   }) => void;
   "stream-chunk": (chunk: StreamChunk) => void;
   "stream-complete": () => void;

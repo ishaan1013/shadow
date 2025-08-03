@@ -1,10 +1,10 @@
-import type { InitStepType, TaskStatus } from "@repo/db";
+import type { InitStatus, TaskStatus } from "@repo/db";
 
 /**
  * Task with initialization fields for status helpers
  */
 export interface TaskWithInitFields {
-  lastCompletedStep?: InitStepType | null;
+  initStatus?: InitStatus;
   initializationError?: string | null;
   status?: TaskStatus;
 }
@@ -13,21 +13,21 @@ export interface TaskWithInitFields {
  * Check if task initialization has not started yet
  */
 export function isInitializationNotStarted(task: TaskWithInitFields): boolean {
-  return !task.lastCompletedStep && !task.initializationError;
+  return task.initStatus === 'INACTIVE' && !task.initializationError;
 }
 
 /**
  * Check if task initialization is currently in progress
  */
 export function isInitializationInProgress(task: TaskWithInitFields): boolean {
-  return !!task.lastCompletedStep && !task.initializationError && task.status === 'INITIALIZING';
+  return task.initStatus !== 'INACTIVE' && task.initStatus !== 'ACTIVE' && !task.initializationError && task.status === 'INITIALIZING';
 }
 
 /**
  * Check if task initialization has completed successfully
  */
 export function isInitializationCompleted(task: TaskWithInitFields): boolean {
-  return !!task.lastCompletedStep && !task.initializationError && task.status !== 'INITIALIZING';
+  return task.initStatus === 'ACTIVE' && !task.initializationError;
 }
 
 /**
@@ -42,21 +42,25 @@ export function isInitializationFailed(task: TaskWithInitFields): boolean {
  */
 export function getInitializationProgress(
   task: TaskWithInitFields,
-  stepsList: InitStepType[]
+  stepsList: InitStatus[]
 ): { completed: number; total: number; currentStep?: string } {
   const total = stepsList.length;
 
-  if (!task.lastCompletedStep) {
+  if (!task.initStatus || task.initStatus === 'INACTIVE') {
     return { completed: 0, total };
   }
 
-  const completedIndex = stepsList.indexOf(task.lastCompletedStep);
+  if (task.initStatus === 'ACTIVE') {
+    return { completed: total, total, currentStep: 'ACTIVE' };
+  }
+
+  const completedIndex = stepsList.indexOf(task.initStatus);
   const completed = completedIndex >= 0 ? completedIndex + 1 : 0;
 
   return {
     completed,
     total,
-    currentStep: task.lastCompletedStep,
+    currentStep: task.initStatus,
   };
 }
 

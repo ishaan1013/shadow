@@ -85,17 +85,16 @@ export class GitManager {
    */
   async hasChanges(): Promise<boolean> {
     try {
-      const { stdout } = await this.execGit("diff --name-only");
-      const { stdout: staged } = await this.execGit(
-        "diff --cached --name-only"
-      );
+      const { stdout } = await this.execGit("status --porcelain");
 
       console.log(`[GIT_MANAGER] hasChanges:`, {
-        stdout: stdout.trim(),
-        staged: staged.trim(),
+        statusOutput: stdout.trim(),
       });
 
-      return stdout.trim().length > 0 || staged.trim().length > 0;
+      // Git status --porcelain returns one line per changed file
+      // Format: "XY filename" where X=index status, Y=working tree status
+      // Examples: "?? newfile.md", "M  modified.js", "A  added.txt"
+      return stdout.trim().length > 0;
     } catch (error) {
       console.error(`[GIT_MANAGER] Failed to check for changes:`, error);
       return false;

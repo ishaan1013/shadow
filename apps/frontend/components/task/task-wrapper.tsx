@@ -23,6 +23,7 @@ import { TaskPageContent } from "./task-content";
 import { useParams } from "next/navigation";
 import { useAgentEnvironment } from "../agent-environment/agent-environment-context";
 import { useTaskTitle, useUpdateTaskTitle } from "@/hooks/use-task-title";
+import { useTaskStatus } from "@/hooks/use-task-status";
 
 export function TaskPageWrapper({
   initialLayout,
@@ -33,6 +34,10 @@ export function TaskPageWrapper({
   const { open } = useSidebar();
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data } = useTaskStatus(taskId);
+  const taskStatus = data?.status;
+  const isArchived = taskStatus === "ARCHIVED";
 
   const { data: taskTitle } = useTaskTitle(taskId);
   const [editValue, setEditValue] = useState(taskTitle || "");
@@ -118,8 +123,11 @@ export function TaskPageWrapper({
   const titleRef = useRef<HTMLDivElement>(null);
 
   const handleTitleClick = useCallback(() => {
+    if (isArchived) {
+      return;
+    }
     setIsEditing(true);
-  }, []);
+  }, [isArchived]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -195,10 +203,11 @@ export function TaskPageWrapper({
                   />
                   <div
                     className={cn(
-                      "hover:border-border flex h-7 cursor-text items-center truncate rounded-md border border-transparent px-2",
+                      " flex h-7 cursor-text items-center truncate rounded-md border border-transparent px-2",
                       isEditing
                         ? "pointer-events-none opacity-0"
-                        : "opacity-100"
+                        : "opacity-100",
+                      isArchived ? "" : "hover:border-border"
                     )}
                     onClick={handleTitleClick}
                     ref={titleRef}
@@ -208,7 +217,10 @@ export function TaskPageWrapper({
                         {taskTitleVariables?.title}
                       </span>
                     ) : (
-                      <span className="truncate">{editValue}</span>
+                      <span className="truncate">
+                        {isArchived ? "[ARCHIVED] " : ""}
+                        {editValue}
+                      </span>
                     )}
                   </div>
                 </div>

@@ -1,0 +1,20 @@
+@keyframes logo-slideshow {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.logo-sm[data-animate="true"] {
+  animation: logo-slideshow 1.5s steps(15) infinite;
+}
+
+.logo-md[data-animate="true"] {
+  animation: logo-slideshow 1.5s steps(15) infinite;
+}
+
+.logo-lg[data-animate="true"] {
+  animation: logo-slideshow 2s steps(15) infinite;
+}

@@ -11,16 +11,22 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useEditMessage } from "@/hooks/use-edit-message";
 
+const MAX_CONTENT_HEIGHT = 128;
+
 export function UserMessage({
   taskId,
   message,
   className,
   isFirstMessage,
+  disableEditing,
+  userMessageWrapperRef,
 }: {
   taskId: string;
   message: Message;
   isFirstMessage: boolean;
   className?: string;
+  disableEditing: boolean;
+  userMessageWrapperRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const queryClient = useQueryClient();
   const { data: editMessageId } = useEditMessageId(taskId);
@@ -40,6 +46,20 @@ export function UserMessage({
   const [editValue, setEditValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [selectedModel, setSelectedModel] = useState<ModelType>(initialModel);
+  const messageContentRef = useRef<HTMLDivElement>(null);
+  const [isContentOverflowing, setIsContentOverflowing] = useState(false);
+
+  useEffect(() => {
+    if (messageContentRef.current) {
+      console.log(
+        messageContentRef.current.scrollHeight,
+        messageContentRef.current.clientHeight
+      );
+      setIsContentOverflowing(
+        messageContentRef.current.scrollHeight > MAX_CONTENT_HEIGHT
+      );
+    }
+  }, [message.content]);
 
   const handleSelectModel = useCallback((model: ModelType | null) => {
     if (model) {
@@ -48,7 +68,7 @@ export function UserMessage({
   }, []);
 
   const handleStartEditing = () => {
-    if (!isEditing) {
+    if (!isEditing && !disableEditing) {
       queryClient.setQueryData(["edit-message-id", taskId], message.id);
       setEditValue(message.content);
     }
@@ -66,7 +86,7 @@ export function UserMessage({
         e.preventDefault();
         e.stopPropagation();
 
-        if (!editValue.trim() || editValue.trim() === message.content.trim()) {
+        if (!editValue.trim()) {
           handleStopEditing();
           return;
         }
@@ -95,9 +115,21 @@ export function UserMessage({
     return () => window.removeEventListener("keydown", globalKeyDown);
   }, [handleStopEditing]);
 
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      const textarea = textareaRef.current;
+      // Set cursor position to end of text
+      const length = textarea.value.length;
+      textarea.setSelectionRange(length, length);
+      // Scroll to bottom of textarea
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+  }, [isEditing]);
+
   return (
     // Outer button acts as a border, with a border-radius 1px larger than the inner div and 1px padding
     <UserMessageWrapper
+      userMessageWrapperRef={userMessageWrapperRef}
       isEditing={isEditing}
       handleStartEditing={handleStartEditing}
       isFirstMessage={isFirstMessage}
@@ -137,7 +169,7 @@ export function UserMessage({
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               placeholder="Build a cool new feature..."
-              className="placeholder:text-muted-foreground/50 bg-transparent! max-h-48 flex-1 resize-none border-0 shadow-none focus-visible:ring-0"
+              className="placeholder:text-muted-foreground/50 bg-transparent! max-h-48 flex-1 resize-none border-0 text-sm shadow-none focus-visible:ring-0"
               onKeyDown={onKeyDown}
             />
 
@@ -157,8 +189,7 @@ export function UserMessage({
                   disabled={
                     !editValue.trim() ||
                     editMessageMutation.isPending ||
-                    !selectedModel ||
-                    editValue.trim() === message.content.trim()
+                    !selectedModel
                   }
                   className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
                 >
@@ -174,8 +205,18 @@ export function UserMessage({
         </>
       ) : (
         <>
-          <div className="from-card/10 to-card w-full rounded-lg bg-gradient-to-t px-3 py-2 text-sm">
-            {message.content}
+          <div
+            className="from-card/10 to-card relative z-0 w-full overflow-clip rounded-lg bg-gradient-to-t px-3 py-2 text-sm"
+            style={{
+              maxHeight: `${MAX_CONTENT_HEIGHT}px`,
+            }}
+          >
+            {isContentOverflowing && (
+              <div className="from-background via-background/80 to-card/0 animate-in fade-in absolute bottom-0 left-0 h-1/3 w-full bg-gradient-to-t" />
+            )}
+            <div className="whitespace-pre-wrap" ref={messageContentRef}>
+              {message.content}
+            </div>
           </div>
           <div className="bg-background absolute inset-px -z-10 rounded-[calc(var(--radius)+1px)]" />
         </>
@@ -190,12 +231,14 @@ function UserMessageWrapper({
   isFirstMessage,
   className,
   handleStartEditing,
+  userMessageWrapperRef,
 }: {
   children: React.ReactNode;
   isEditing: boolean;
   isFirstMessage: boolean;
   className?: string;
   handleStartEditing: () => void;
+  userMessageWrapperRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   if (isEditing) {
     return (
@@ -214,6 +257,7 @@ function UserMessageWrapper({
 
   return (
     <button
+      ref={userMessageWrapperRef}
       onClick={handleStartEditing}
       className={cn(
         "sticky top-16 z-10 w-full cursor-pointer rounded-[calc(var(--radius)+1px)] p-px text-left transition-all",

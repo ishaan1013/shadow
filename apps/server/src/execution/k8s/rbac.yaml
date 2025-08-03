@@ -1,30 +1,30 @@
-# Service account for Shadow server to manage Firecracker VM pods
+# Service account for Shadow server to manage remote VM pods
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: shadow-firecracker-server-sa
+  name: shadow-remote-server-sa
   namespace: shadow-agents
   labels:
-    app: shadow-firecracker
+    app: shadow-remote
     component: server
 ---
-# Service account for Firecracker VM pods
+# Service account for remote VM pods
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: shadow-firecracker-vm-sa
+  name: shadow-remote-vm-sa
   namespace: shadow-agents
   labels:
-    app: shadow-firecracker
+    app: shadow-remote
     component: vm
 automountServiceAccountToken: false  # VMs don't need K8s API access
 ---
-# Role for Shadow server to manage Firecracker VM pods and services
+# Role for Shadow server to manage remote VM pods and services
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: shadow-agents
-  name: shadow-firecracker-server-role
+  name: shadow-remote-server-role
 rules:
 # Pod management with privileged access for VMs
 - apiGroups: [""]
@@ -68,22 +68,22 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: shadow-firecracker-server-binding
+  name: shadow-remote-server-binding
   namespace: shadow-agents
 subjects:
 - kind: ServiceAccount
-  name: shadow-firecracker-server-sa
+  name: shadow-remote-server-sa
   namespace: shadow-agents
 roleRef:
   kind: Role
-  name: shadow-firecracker-server-role
+  name: shadow-remote-server-role
   apiGroup: rbac.authorization.k8s.io
 ---
 # Cluster role for Firecracker VM pod security policy
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: shadow-firecracker-vm-psp-role
+  name: shadow-remote-vm-psp-role
 rules:
 - apiGroups: ['node.k8s.io']
   resources: ['runtimeclasses']
@@ -93,13 +93,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: shadow-firecracker-vm-psp-binding
+  name: shadow-remote-vm-psp-binding
   namespace: shadow-agents
 roleRef:
   kind: ClusterRole
-  name: shadow-firecracker-vm-psp-role
+  name: shadow-remote-vm-psp-role
   apiGroup: rbac.authorization.k8s.io
 subjects:
 - kind: ServiceAccount
-  name: shadow-firecracker-vm-sa
+  name: shadow-remote-vm-sa
   namespace: shadow-agents

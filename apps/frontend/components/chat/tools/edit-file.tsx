@@ -2,7 +2,7 @@ import type { Message } from "@repo/types";
 import { Edit3 } from "lucide-react";
 import { useAgentEnvironment } from "@/components/agent-environment/agent-environment-context";
 import { getToolResult } from "@repo/types";
-import { ToolType } from "@repo/types";
+import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 
 export function EditFileTool({ message }: { message: Message }) {
@@ -25,7 +25,7 @@ export function EditFileTool({ message }: { message: Message }) {
   return (
     <ToolComponent
       icon={<Edit3 />}
-      type={ToolType.EDIT_FILE}
+      type={ToolTypes.EDIT_FILE}
       title={filePath}
       changes={changes}
       onClick={() => {

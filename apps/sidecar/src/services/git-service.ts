@@ -29,7 +29,7 @@ export interface CommitOptions {
 }
 
 export class GitService {
-  constructor(private workspaceService: WorkspaceService) { }
+  constructor(private workspaceService: WorkspaceService) {}
 
   /**
    * Clone repository to workspace
@@ -52,11 +52,20 @@ export class GitService {
       let cloneUrl = repoUrl;
       if (githubToken && repoUrl.includes("github.com")) {
         // Convert to authenticated HTTPS URL
-        const urlParts = repoUrl.replace("https://github.com/", "").replace(".git", "");
+        const urlParts = repoUrl
+          .replace("https://github.com/", "")
+          .replace(".git", "");
         cloneUrl = `https://${githubToken}@github.com/${urlParts}.git`;
       }
 
-      await this.execGitSecure(["clone", "--branch", branch, "--single-branch", cloneUrl, "."]);
+      await this.execGitSecure([
+        "clone",
+        "--branch",
+        branch,
+        "--single-branch",
+        cloneUrl,
+        ".",
+      ]);
 
       logger.info("[GIT_SERVICE] Repository cloned successfully", {
         repoUrl: this.sanitizeUrl(repoUrl),
@@ -70,7 +79,8 @@ export class GitService {
         branch,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       logger.error("[GIT_SERVICE] Repository clone failed", {
         repoUrl: this.sanitizeUrl(repoUrl),
         branch,
@@ -106,7 +116,8 @@ export class GitService {
         user,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       logger.error("[GIT_SERVICE] Failed to configure git user", {
         user,
         error: errorMessage,
@@ -124,7 +135,10 @@ export class GitService {
   /**
    * Create and checkout shadow branch, return base commit SHA
    */
-  async createShadowBranch(baseBranch: string, shadowBranch: string): Promise<GitBranchResponse> {
+  async createShadowBranch(
+    baseBranch: string,
+    shadowBranch: string
+  ): Promise<GitBranchResponse> {
     try {
       logger.info("[GIT_SERVICE] Creating shadow branch", {
         baseBranch,
@@ -155,7 +169,8 @@ export class GitService {
         baseCommitSha,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       logger.error("[GIT_SERVICE] Failed to create shadow branch", {
         baseBranch,
         shadowBranch,
@@ -177,12 +192,44 @@ export class GitService {
    */
   async hasChanges(): Promise<GitStatusResponse> {
     try {
-      const diffResult = await this.execGitSecure(["diff", "--name-only"]);
-      const stagedResult = await this.execGitSecure(["diff", "--cached", "--name-only"]);
+      const statusResult = await this.execGitSecure(["status", "--porcelain"]);
 
-      const hasUnstagedChanges = diffResult.stdout.trim().length > 0;
-      const hasStagedChanges = stagedResult.stdout.trim().length > 0;
-      const hasChanges = hasUnstagedChanges || hasStagedChanges;
+      const statusOutput = statusResult.stdout.trim();
+      const hasChanges = statusOutput.length > 0;
+
+      // Parse git status --porcelain output to categorize changes
+      // Format: "XY filename" where X=index status, Y=working tree status
+      let hasUnstagedChanges = false;
+      let hasStagedChanges = false;
+
+      if (hasChanges) {
+        const lines = statusOutput.split("\n");
+        for (const line of lines) {
+          if (line.length >= 2) {
+            const indexStatus = line[0];
+            const workingTreeStatus = line[1];
+
+            // Check for staged changes (index status not space or ?)
+            if (indexStatus !== " " && indexStatus !== "?") {
+              hasStagedChanges = true;
+            }
+
+            // Check for unstaged changes (working tree status not space)
+            if (workingTreeStatus !== " ") {
+              hasUnstagedChanges = true;
+            }
+          }
+        }
+      }
+
+      logger.info("[GIT_SERVICE] Git status check completed", {
+        hasChanges,
+        hasUnstagedChanges,
+        hasStagedChanges,
+        statusOutput:
+          statusOutput.substring(0, 200) +
+          (statusOutput.length > 200 ? "..." : ""),
+      });
 
       return {
         success: true,
@@ -194,7 +241,8 @@ export class GitService {
           : "No uncommitted changes found",
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       logger.error("[GIT_SERVICE] Failed to check git status", {
         error: errorMessage,
       });
@@ -219,7 +267,9 @@ export class GitService {
 
       const unstagedDiff = unstagedResult.stdout;
       const stagedDiff = stagedResult.stdout;
-      const combinedDiff = [unstagedDiff, stagedDiff].filter(diff => diff.trim()).join("\n\n");
+      const combinedDiff = [unstagedDiff, stagedDiff]
+        .filter((diff) => diff.trim())
+        .join("\n\n");
 
       return {
         success: true,
@@ -231,7 +281,8 @@ export class GitService {
           : "No changes to diff",
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       logger.error("[GIT_SERVICE] Failed to get git diff", {
         error: errorMessage,
       });
@@ -244,7 +295,6 @@ export class GitService {
       };
     }
   }
-
 
   /**
    * Stage all changes and commit with the given options
@@ -300,7 +350,10 @@ export class GitService {
       const commitArgs = ["commit", "-m", commitMessage];
       if (options.coAuthor) {
         commitArgs.push("-m", "");
-        commitArgs.push("-m", `Co-authored-by: ${options.coAuthor.name} <${options.coAuthor.email}>`);
+        commitArgs.push(
+          "-m",
+          `Co-authored-by: ${options.coAuthor.name} <${options.coAuthor.email}>`
+        );
       }
 
       await this.execGitSecure(commitArgs);
@@ -317,7 +370,8 @@ export class GitService {
         commitSha: await this.getCurrentCommitSha(),
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       logger.error("[GIT_SERVICE] Commit failed", {
         error: errorMessage,
         options,
@@ -334,7 +388,10 @@ export class GitService {
   /**
    * Push the current branch to remote
    */
-  async pushBranch(branchName: string, setUpstream: boolean = true): Promise<GitPushResponse> {
+  async pushBranch(
+    branchName: string,
+    setUpstream: boolean = true
+  ): Promise<GitPushResponse> {
     try {
       logger.info("[GIT_SERVICE] Pushing branch", {
         branchName,
@@ -369,7 +426,8 @@ export class GitService {
         branchName,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       logger.error("[GIT_SERVICE] Push failed", {
         branchName,
         error: errorMessage,
@@ -401,7 +459,9 @@ export class GitService {
    * Execute git command securely using argument arrays
    * This prevents command injection by avoiding shell interpretation
    */
-  private async execGitSecure(gitArgs: string[]): Promise<{ stdout: string; stderr: string }> {
+  private async execGitSecure(
+    gitArgs: string[]
+  ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const workspacePath = this.workspaceService.getWorkspacePath();
 
@@ -412,8 +472,16 @@ export class GitService {
           return;
         }
         // Check for null bytes and dangerous characters
-        if (arg.includes("\0") || arg.includes(";") || arg.includes("|") || arg.includes("&")) {
-          logSecurityEvent("Dangerous git argument detected", { argument: arg, gitArgs });
+        if (
+          arg.includes("\0") ||
+          arg.includes(";") ||
+          arg.includes("|") ||
+          arg.includes("&")
+        ) {
+          logSecurityEvent("Dangerous git argument detected", {
+            argument: arg,
+            gitArgs,
+          });
           reject(new Error("Dangerous characters detected in git arguments"));
           return;
         }
@@ -446,7 +514,9 @@ export class GitService {
         if (code === 0) {
           resolve({ stdout, stderr });
         } else {
-          const error = new Error(`Git command failed with exit code ${code}: ${stderr || stdout}`);
+          const error = new Error(
+            `Git command failed with exit code ${code}: ${stderr || stdout}`
+          );
           logger.error("[GIT_SERVICE] Git command failed", {
             args: gitArgs,
             exitCode: code,
@@ -466,7 +536,6 @@ export class GitService {
       });
     });
   }
-
 
   /**
    * Sanitize URL for logging (remove tokens)

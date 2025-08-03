@@ -4,10 +4,9 @@ export * from "./chat/streaming";
 export * from "./chat/compression";
 
 // === Tool Result Types ===
-export * from "./tools/results";
 export * from "./tools/execution";
 export * from "./tools/guards";
-export * from "./tools/types";
+export * from "./tools/schemas";
 
 // === LLM Integration Types ===
 export * from "./llm/models";
@@ -34,3 +33,6 @@ export * from "./tasks";
 
 // === Codebase Understanding Types ===
 export * from "./codebase-understanding/summaries";
+
+// === GitHub Types ===
+export * from "./github";

@@ -20,19 +20,13 @@ export const sharedConfigSchema = z.object({
     .optional()
     .transform((val) => val === "true"),
 
-  // LLM API Keys (at least one required)
-  ANTHROPIC_API_KEY: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
+  // LLM API Keys
   EXA_API_KEY: z.string().optional(),
-
-  // Enable semantic search
-  ENABLE_SEMANTIC_SEARCH: z
-    .union([z.boolean(), z.string().transform((val) => val === "true")])
-    .default(false),
 
   // GitHub integration (required for all environments)
   GITHUB_CLIENT_ID: z.string(),
   GITHUB_CLIENT_SECRET: z.string(),
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
 
   // Repository limits
   MAX_REPO_SIZE_MB: z.coerce.number().default(500),
@@ -51,25 +45,6 @@ export const sharedConfigSchema = z.object({
 });
 
 /**
- * Shared validation rule: At least one LLM API key must be provided
- */
-export const sharedValidationRules = (
-  data: z.infer<typeof sharedConfigSchema>
-) => {
-  if (!data.ANTHROPIC_API_KEY && !data.OPENAI_API_KEY) {
-    return {
-      success: false,
-      error: {
-        message:
-          "At least one API key (ANTHROPIC_API_KEY or OPENAI_API_KEY) must be provided",
-        path: ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"],
-      },
-    };
-  }
-  return { success: true };
-};
-
-/**
  * Create config object from parsed shared data
  */
 export const createSharedConfig = (
@@ -84,13 +59,12 @@ export const createSharedConfig = (
   debug: data.DEBUG,
 
   // LLM APIs
-  anthropicApiKey: data.ANTHROPIC_API_KEY,
-  openaiApiKey: data.OPENAI_API_KEY,
   exaApiKey: data.EXA_API_KEY,
 
   // GitHub
   githubClientId: data.GITHUB_CLIENT_ID,
   githubClientSecret: data.GITHUB_CLIENT_SECRET,
+  githubWebhookSecret: data.GITHUB_WEBHOOK_SECRET,
 
   // Repository
   maxRepoSizeMB: data.MAX_REPO_SIZE_MB,

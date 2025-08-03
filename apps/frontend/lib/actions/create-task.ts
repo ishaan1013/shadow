@@ -13,7 +13,7 @@ const createTaskSchema = z.object({
   message: z
     .string()
     .min(1, "Message is required")
-    .max(1000, "Message too long"),
+    .max(100000, "Message too long"),
   model: z.string().min(1, "Model is required"),
   repoFullName: z.string().min(1, "Repository name is required"),
   repoUrl: z
@@ -97,12 +97,17 @@ export async function createTask(formData: FormData) {
         // Initiate the task on the backend
         const baseUrl =
           process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        // Forward cookies from the original request
+        const requestHeaders = await headers();
+        const cookieHeader = requestHeaders.get("cookie");
+
         const response = await fetch(
           `${baseUrl}/api/tasks/${task.id}/initiate`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(cookieHeader && { Cookie: cookieHeader }),
             },
             body: JSON.stringify({
               message,

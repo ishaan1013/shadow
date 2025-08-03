@@ -166,3 +166,16 @@ body,
 .code-editor .line-numbers {
   user-select: none;
 }
+
+.github-issues-container::-webkit-scrollbar {
+  display: none;
+}
+
+.github-issues-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+img {
+  user-select: none;
+}

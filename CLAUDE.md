@@ -346,6 +346,28 @@ docker-compose up -d  # Full stack locally
 - **Firecracker mode requires Amazon Linux 2023 nodes** for Kata Containers compatibility
 - Use `kata-fc` RuntimeClass for Firecracker VM isolation, not direct firecracker runtime
 
+### Working with Tool Calls
+
+**Type-Safe Tool Result Access:**
+```typescript
+// getToolResult() provides automatic type safety
+const result = getToolResult(toolMeta, "file_search"); // Returns FileSearchResult | null
+const files = result?.files || [];
+```
+
+**Key Principles:**
+- **Single Source of Truth**: All tool schemas defined in `packages/types/src/tools/schemas.ts`
+- **Zod + TypeScript**: Parameter/result types auto-generated with `z.infer<>`
+- **Runtime Validation**: Zod schemas validate actual responses from tools
+- **Function Overloads**: `getToolResult()` and `validateToolResult()` provide perfect type safety
+- **No Type Guards Needed**: Direct property access with optional chaining (`result?.property`)
+
+**Adding New Tools:**
+1. Define Zod schemas in `schemas.ts` (parameters + result)
+2. Add to `ToolResultSchemas` map and `ToolResultTypes` union
+3. Update function overloads in `guards.ts`
+4. Import parameter schema in `apps/server/src/tools/index.ts`
+
 ### Maintenance Guidelines
 - Update CLAUDE.md when making architectural changes
 - Keep README.md current with setup instructions

@@ -5,6 +5,7 @@ import { useGitHubStatus } from "@/hooks/use-github-status";
 import { useGitHubRepositories } from "@/hooks/use-github-repositories";
 import { Loader2, Check, X, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import { Fragment } from "react";
 
 export function GitHubSettings() {
   const { data: githubStatus, isLoading: isLoadingGithub } = useGitHubStatus();
@@ -30,7 +31,6 @@ export function GitHubSettings() {
             <Link
               href={`https://github.com/settings/installations/${githubStatus?.installationId}`}
               target="_blank"
-              className="font-normal"
             >
               Manage on GitHub <ArrowUpRight />
             </Link>
@@ -43,10 +43,10 @@ export function GitHubSettings() {
           </div>
         ) : githubRepos?.groups ? (
           <div className="flex w-full flex-col gap-3">
-            <div>Your Repositories</div>
+            <div className="font-medium">Your Repositories</div>
             <div className="flex w-full flex-col gap-2">
               {githubRepos.groups.map((group) => (
-                <>
+                <Fragment key={group.name}>
                   {group.repositories.slice(0, 10).map((repo) => (
                     <Button
                       key={repo.id}
@@ -64,7 +64,7 @@ export function GitHubSettings() {
                       + {group.repositories.length - 10} more
                     </div>
                   )}
-                </>
+                </Fragment>
               ))}
             </div>
           </div>

@@ -3,7 +3,7 @@ import { db } from "@repo/db";
 
 export interface FileChange {
   filePath: string;
-  operation: 'CREATE' | 'UPDATE' | 'DELETE' | 'RENAME';
+  operation: "CREATE" | "UPDATE" | "DELETE" | "RENAME";
   additions: number;
   deletions: number;
   createdAt: string;
@@ -22,22 +22,34 @@ export interface TaskWithDetails {
   diffStats: DiffStats;
 }
 
-async function fetchFileChanges(taskId: string): Promise<{ fileChanges: FileChange[], diffStats: DiffStats }> {
+async function fetchFileChanges(
+  taskId: string
+): Promise<{ fileChanges: FileChange[]; diffStats: DiffStats }> {
   try {
-    // Internal API call to our server
-    const response = await fetch(`http://localhost:4000/api/tasks/${taskId}/file-changes`);
+    const response = await fetch(
+      `http://localhost:4000/api/tasks/${taskId}/file-changes`
+    );
     if (!response.ok) {
-      console.warn(`Failed to fetch file changes for task ${taskId}: ${response.status}`);
-      return { fileChanges: [], diffStats: { additions: 0, deletions: 0, totalFiles: 0 } };
+      console.warn(
+        `Failed to fetch file changes for task ${taskId}: ${response.status}`
+      );
+      return {
+        fileChanges: [],
+        diffStats: { additions: 0, deletions: 0, totalFiles: 0 },
+      };
     }
     const data = await response.json();
+
     return {
       fileChanges: data.fileChanges,
       diffStats: data.diffStats,
-    }
+    };
   } catch (error) {
     console.error(`Error fetching file changes for task ${taskId}:`, error);
-    return { fileChanges: [], diffStats: { additions: 0, deletions: 0, totalFiles: 0 } };
+    return {
+      fileChanges: [],
+      diffStats: { additions: 0, deletions: 0, totalFiles: 0 },
+    };
   }
 }
 

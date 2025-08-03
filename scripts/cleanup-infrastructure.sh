@@ -4,11 +4,11 @@
 # Forcefully removes all Shadow-related AWS resources
 #
 # Usage: ./cleanup-infrastructure.sh [cluster-name]
-# Default cluster name: shadow-firecracker
+# Default cluster name: shadow-remote
 
 set -euo pipefail
 
-CLUSTER_NAME="${1:-shadow-firecracker}"
+CLUSTER_NAME="${1:-shadow-remote}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-ID}"
 
@@ -144,9 +144,38 @@ cleanup_vpc_resources() {
         --output text | xargs -r -n1 aws ec2 delete-route-table --region "$AWS_REGION" --profile "$AWS_PROFILE" --route-table-id || true
 }
 
-# Step 4: Clean up ECS resources (if they exist)
+# Step 4: Clean up Kubernetes resources
+cleanup_kubernetes_resources() {
+    log "Step 4: Cleaning up Kubernetes resources..."
+    
+    # Check if kubectl is available and cluster is accessible
+    if ! command -v kubectl &> /dev/null; then
+        warn "kubectl not found, skipping Kubernetes cleanup"
+        return 0
+    fi
+    
+    # Update kubeconfig to ensure access
+    aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME" --profile "$AWS_PROFILE" 2>/dev/null || true
+    
+    # Clean up Kata Containers resources
+    log "Cleaning up Kata Containers resources..."
+    kubectl delete daemonset kata-deploy -n kube-system --ignore-not-found=true || true
+    kubectl delete -f https://raw.githubusercontent.com/kata-containers/kata-containers/main/tools/packaging/kata-deploy/kata-deploy/base/kata-deploy.yaml --ignore-not-found=true || true
+    kubectl delete -f https://raw.githubusercontent.com/kata-containers/kata-containers/main/tools/packaging/kata-deploy/kata-rbac/base/kata-rbac.yaml --ignore-not-found=true || true
+    
+    # Clean up RuntimeClasses
+    kubectl delete runtimeclass kata-qemu kata-fc --ignore-not-found=true || true
+    
+    # Clean up Shadow namespace and resources
+    log "Cleaning up Shadow namespace and resources..."
+    kubectl delete namespace shadow-agents --ignore-not-found=true || true
+    
+    log "Kubernetes resources cleaned up"
+}
+
+# Step 5: Clean up ECS resources (if they exist)
 cleanup_ecs_resources() {
-    log "Step 4: Cleaning up ECS resources..."
+    log "Step 5: Cleaning up ECS resources..."
     
     ECS_CLUSTER_NAME="shadow-ecs-cluster"
     SERVICE_NAME="shadow-backend-service"
@@ -172,9 +201,9 @@ cleanup_ecs_resources() {
     fi
 }
 
-# Step 5: Clean up ECR repositories
+# Step 6: Clean up ECR repositories
 cleanup_ecr() {
-    log "Step 5: Cleaning up ECR repositories..."
+    log "Step 6: Cleaning up ECR repositories..."
     
     ECR_REPOS=("shadow-server" "shadow-sidecar")
     for REPO in "${ECR_REPOS[@]}"; do
@@ -206,6 +235,9 @@ main() {
         cleanup_cloudformation_stacks
         sleep 30  # Wait for resources to be released
         cleanup_vpcs
+    else
+        # Even if eksctl succeeds, clean up Kubernetes resources first
+        cleanup_kubernetes_resources
     fi
     
     cleanup_ecs_resources
