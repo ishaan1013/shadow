@@ -255,21 +255,6 @@ export function createTools(taskId: string, workspacePath?: string) {
           createAndEmitTerminalEntry(taskId, "stderr", result.stderr);
         }
 
-        // Emit system message for command completion
-        if (result.success) {
-          createAndEmitTerminalEntry(
-            taskId,
-            "system",
-            `Command completed successfully`
-          );
-        } else if (result.error) {
-          createAndEmitTerminalEntry(
-            taskId,
-            "system",
-            `Command failed: ${result.error}`
-          );
-        }
-
         return result;
       },
     }),
