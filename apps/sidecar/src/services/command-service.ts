@@ -1,15 +1,11 @@
-import { spawn } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
 import { config } from "../config";
 import { logger } from "../utils/logger";
 import { WorkspaceService } from "./workspace-service";
 import { CommandResponse } from "@repo/types";
 import {
-  validateCommand,
   parseCommand,
-  logCommandSecurityEvent,
-  CommandSecurityLevel,
-  SecurityLogger,
 } from "@repo/command-security";
 
 export interface CommandStreamEvent {
@@ -20,16 +16,10 @@ export interface CommandStreamEvent {
 }
 
 export class CommandService extends EventEmitter {
-  private runningProcesses: Map<string, any> = new Map();
-  private securityLogger: SecurityLogger;
+  private runningProcesses: Map<string, ChildProcess> = new Map();
 
   constructor(private workspaceService: WorkspaceService) {
     super();
-    // Adapter for Winston logger to SecurityLogger interface
-    this.securityLogger = {
-      warn: (message: string, details?: Record<string, any>) => logger.warn(message, details),
-      info: (message: string, details?: Record<string, any>) => logger.info(message, details),
-    };
   }
 
   /**
@@ -49,40 +39,19 @@ export class CommandService extends EventEmitter {
       timeout: commandTimeout,
     });
 
-    // Parse and validate the command
+    // Trust server-side validation - no double validation needed
+    // Parse command for execution (no security validation here)
     const { command: baseCommand, args } = parseCommand(command);
-    const validation = validateCommand(baseCommand, args, workspaceDir, this.securityLogger);
-
-    if (!validation.isValid) {
-      logCommandSecurityEvent("Command validation failed", {
-        command,
-        error: validation.error,
-        securityLevel: validation.securityLevel,
-      }, this.securityLogger);
-      return {
-        success: false,
-        message: `Security validation failed: ${validation.error}`,
-        error: "VALIDATION_FAILED",
-        command,
-        securityLevel: validation.securityLevel,
-      };
-    }
-
-    // Log if this was a potentially dangerous command (but still execute it)
-    if (validation.securityLevel === CommandSecurityLevel.APPROVAL_REQUIRED) {
-      logger.info("Executing potentially dangerous command", {
-        command,
-        securityLevel: validation.securityLevel,
-      });
-    }
-
-    const sanitizedCommand = validation.sanitizedCommand!;
-    const sanitizedArgs = validation.sanitizedArgs!;
+    
+    logger.info("Executing command in VM", {
+      command: baseCommand,
+      args: args.length > 0 ? args : undefined,
+    });
 
     try {
       if (isBackground) {
         // For background commands, spawn without shell
-        const child = spawn(sanitizedCommand, sanitizedArgs, {
+        const child = spawn(baseCommand, args, {
           cwd: workspaceDir,
           detached: true,
           stdio: "ignore",
@@ -96,26 +65,26 @@ export class CommandService extends EventEmitter {
         // Unref to allow parent to exit
         child.unref();
 
-        logger.info("Background command started", { command: sanitizedCommand, args: sanitizedArgs, processId });
+        logger.info("Background command started", { command: baseCommand, args, processId });
 
         return {
           success: true,
-          message: `Background command started: ${sanitizedCommand}`,
+          message: `Background command started: ${baseCommand}`,
           isBackground: true,
         };
       } else {
         // For foreground commands, use secure spawn with timeout
-        const result = await this.executeSecureCommand(sanitizedCommand, sanitizedArgs, workspaceDir, commandTimeout);
+        const result = await this.executeSecureCommand(baseCommand, args, workspaceDir, commandTimeout);
 
         return {
           success: true,
           stdout: result.stdout.trim(),
           stderr: result.stderr.trim(),
-          message: `Command executed successfully: ${sanitizedCommand}`,
+          message: `Command executed successfully: ${baseCommand}`,
         };
       }
     } catch (error) {
-      logger.error("Command execution failed", { command: sanitizedCommand, args: sanitizedArgs, error });
+      logger.error("Command execution failed", { command: baseCommand, args, error });
 
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
@@ -123,19 +92,19 @@ export class CommandService extends EventEmitter {
       if (errorMessage.includes("TIMEOUT") || errorMessage.includes("ETIMEDOUT")) {
         return {
           success: false,
-          message: `Command timed out after ${commandTimeout}ms: ${sanitizedCommand}`,
+          message: `Command timed out after ${commandTimeout}ms: ${baseCommand}`,
           error: "TIMEOUT",
         };
       }
 
       // Extract stdout/stderr from error if available
-      const execError = error as any;
+      const execError = error as Error & { stdout?: string; stderr?: string };
 
       return {
         success: false,
         stdout: execError.stdout?.trim(),
         stderr: execError.stderr?.trim(),
-        message: `Failed to execute command: ${sanitizedCommand}`,
+        message: `Failed to execute command: ${baseCommand}`,
         error: errorMessage,
       };
     }
@@ -152,35 +121,15 @@ export class CommandService extends EventEmitter {
 
     logger.info("Starting streaming command", { command: command.substring(0, 100) });
 
-    // Parse and validate the command
+    // Trust server-side validation - no double validation needed
     const { command: baseCommand, args } = parseCommand(command);
-    const validation = validateCommand(baseCommand, args, workspaceDir, this.securityLogger);
+    
+    logger.info("Streaming command in VM", {
+      command: baseCommand,
+      args: args.length > 0 ? args : undefined,
+    });
 
-    if (!validation.isValid) {
-      logCommandSecurityEvent("Streaming command validation failed", {
-        command,
-        error: validation.error,
-        securityLevel: validation.securityLevel,
-      }, this.securityLogger);
-      onData({
-        type: "error",
-        message: `Security validation failed: ${validation.error}`,
-      });
-      return;
-    }
-
-    // Log if this was a potentially dangerous command (but still execute it)
-    if (validation.securityLevel === CommandSecurityLevel.APPROVAL_REQUIRED) {
-      logger.info("Streaming potentially dangerous command", {
-        command,
-        securityLevel: validation.securityLevel,
-      });
-    }
-
-    const sanitizedCommand = validation.sanitizedCommand!;
-    const sanitizedArgs = validation.sanitizedArgs!;
-
-    const child = spawn(sanitizedCommand, sanitizedArgs, {
+    const child = spawn(baseCommand, args, {
       cwd: workspaceDir,
       shell: false, // IMPORTANT: No shell to prevent injection
     });
@@ -216,7 +165,7 @@ export class CommandService extends EventEmitter {
 
     // Handle errors
     child.on("error", (error) => {
-      logger.error("Streaming command error", { command: sanitizedCommand, args: sanitizedArgs, error });
+      logger.error("Streaming command error", { command: baseCommand, args, error });
       onData({
         type: "error",
         message: error.message,
@@ -270,9 +219,9 @@ export class CommandService extends EventEmitter {
         if (code === 0) {
           resolve({ stdout, stderr });
         } else {
-          const error = new Error(`Command failed with exit code ${code}: ${stderr || stdout}`);
-          (error as any).stdout = stdout;
-          (error as any).stderr = stderr;
+          const error = new Error(`Command failed with exit code ${code}: ${stderr || stdout}`) as Error & { stdout: string; stderr: string };
+          error.stdout = stdout;
+          error.stderr = stderr;
           reject(error);
         }
       });
