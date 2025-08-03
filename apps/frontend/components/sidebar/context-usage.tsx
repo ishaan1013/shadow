@@ -12,7 +12,7 @@ export function ContextUsage({ taskId }: ContextUsageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex items-center gap-2 p-2 text-sm">
         <Activity className="size-4 animate-pulse" />
         <span>Loading...</span>
       </div>
@@ -30,7 +30,7 @@ export function ContextUsage({ taskId }: ContextUsageProps) {
   };
 
   return (
-    <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
+    <div className="text-muted-foreground flex items-center gap-2 p-2 text-sm">
       <Activity className="size-4" />
       <span>Total tokens: {formatNumber(task.totalTokens)}</span>
     </div>

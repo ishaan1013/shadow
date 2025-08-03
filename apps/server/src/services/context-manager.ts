@@ -22,7 +22,8 @@ export class ContextManager {
   // Main fn for compressing context
   async buildOptimalContext(
     taskId: string,
-    model: ModelType
+    model: ModelType,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<{ messages: Message[], compressionStats: { compressedTokens: number, uncompressedTokens: number, compressionSavings: number } }> {
     console.log(`[CONTEXT] Building optimal context for task ${taskId} with model ${model}`);
     // Get all messages for the task
@@ -91,7 +92,8 @@ export class ContextManager {
       olderMessages,
       model,
       targetTokens,
-      recentMessages
+      recentMessages,
+      userApiKeys
     );
 
     // Combine compressed older messages with recent uncompressed messages
@@ -127,7 +129,8 @@ export class ContextManager {
     messages: Message[], // All but the recent messages
     model: ModelType,
     targetTokens: number,
-    recentMessages: Message[] // Recent messages (uncompressed)
+    recentMessages: Message[], // Recent messages (uncompressed)
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<Message[]> {
     if (messages.length === 0) {
       return messages;
@@ -171,7 +174,8 @@ export class ContextManager {
       currentMessages = await this.compressMessagesToLevel(
         currentMessages,
         level,
-        model
+        model,
+        userApiKeys
       );
       
       const newTokens = this.tokenCounter.countTotalTokens(
@@ -222,7 +226,8 @@ export class ContextManager {
   private async compressMessagesToLevel(
     messages: Message[],
     level: CompressionLevel,
-    model: ModelType
+    model: ModelType,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<Message[]> {
     console.log(`[CONTEXT] Compressing ${messages.length} messages to ${level} level`);
     const compressedMessages: Message[] = [];
@@ -237,7 +242,8 @@ export class ContextManager {
             await this.messageCompressor.ensureCompressionLevel(
               message.id,
               level,
-              model
+              model,
+              userApiKeys
             );
 
           compressedMessages.push({

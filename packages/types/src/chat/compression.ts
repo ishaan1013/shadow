@@ -12,6 +12,7 @@ export interface CompressedMessageVersion {
 export interface CompressedVersions {
   LIGHT?: CompressedMessageVersion;
   HEAVY?: CompressedMessageVersion;
+  [key: string]: CompressedMessageVersion | undefined;
 }
 
 export interface CompressionConfig {

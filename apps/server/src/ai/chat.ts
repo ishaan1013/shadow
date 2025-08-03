@@ -665,7 +665,8 @@ export class ChatService {
     // Use context manager to build optimal context with compression - if no compression it does nothing
     const contextResult = await this.contextManager.buildOptimalContext(
       taskId,
-      llmModel
+      llmModel,
+      userApiKeys
     );
     const contextMessages = contextResult.messages;
 
