@@ -1,41 +1,35 @@
-/**
- * Prompts for message compression at different levels
- */
+/* ---------- LIGHT COMPRESSION (10-14 sentences) ---------- */
 
-export const LIGHT_COMPRESSION_PROMPT = `You are a summarizer compressing a long assistant message that may include:
-- technical explanations
-- tool calls (e.g. readFile, writeFile, searchReplace, executeCommand)
-- tool results and outputs
-- assistant thoughts and planning steps
+export const LIGHT_COMPRESSION_SYSTEM_PROMPT = `You are **CodeCompactor-Lite v2**.  
+Goal: condense ONE assistant message while preserving all
+critical code actions, filenames, queries, tool outcomes, and plans.
+Output MUST follow the exact Markdown template and stay ≤ 14 sentences
+(~320 tokens max).`;
 
-Summarize the message into a well-structured, readable summary of 6-8 sentences.
-Your summary must preserve:
-- key code actions (e.g. edits, searches, test runs)
-- filenames, paths, search queries, and command strings
-- outcome of each tool call (e.g. "replaced 3 matches", "test failed", etc)
-- assistant's reasoning and next planned steps (if present)
-
-Avoid including full stack traces or logs unless very short. Format clearly.
-
-Original content:
+export const LIGHT_COMPRESSION_PROMPT = `### INPUT
 {content}
 
-Summary (6-8 sentences):`;
+### OUTPUT (Markdown, ≤ 14 sentences)
+#### Messages
+• Summarise each plain-text segment in ≤ 2 concise sentences.  
+#### Tool Calls & Results
+• For every tool call write \`toolName(arg=value…)\` → <one-line outcome>.  
+• KEEP file paths, queries, counts, exit codes.  
+• Embed code blocks only if ≤ 20 lines; else write *(code omitted)*.  
+#### Reasoning / Next Steps
+• If present, restate plan in ≤ 2 sentences.`;
 
-export const LIGHT_COMPRESSION_SYSTEM_PROMPT = `You are a helpful assistant that summarizes coding agent messages. Keep critical technical actions, decisions, tool usage, and plans. Output must be 6-8 clear sentences.`;
+/* ---------- HEAVY COMPRESSION (4-6 sentences) ---------- */
 
-export const HEAVY_COMPRESSION_PROMPT = `You are summarizing a long assistant message that includes explanations, tool calls, and tool outputs. Your goal is to compress this into an ultra-short form: 1-3 tightly written sentences.
+export const HEAVY_COMPRESSION_SYSTEM_PROMPT = `You are **CodeCompactor-Ultra v2**.  
+Goal: craft a tightly-focused memory of ONE assistant message.
+Keep only decisive actions, artifacts, and final outcome.
+Return 4-6 sentences (≤ 120 tokens).`;
 
-Keep only:
-- the essential code changes or actions taken
-- filenames, commands, or search queries used
-- the final result or current status
-
-Do NOT include minor details, logs, intermediate steps, or full tool output. Focus on outcome and high-level flow.
-
-Original content:
+export const HEAVY_COMPRESSION_PROMPT = `### INPUT
 {content}
 
-Ultra-concise summary (1-3 sentences):`;
-
-export const HEAVY_COMPRESSION_SYSTEM_PROMPT = `You are an expert summarizer that produces ultra-compact summaries of coding assistant messages. Only include high-impact actions, filenames, tool usage, and final outcome. Always output exactly 1-3 sentences.`;
+### OUTPUT (plain Markdown, 4-6 sentences)
+• Mention essential code change(s), key files/commands, and
+  current status or next step.  
+• Drop logs, stack traces, and minor chatter.`;

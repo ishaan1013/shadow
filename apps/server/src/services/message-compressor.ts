@@ -1,20 +1,19 @@
+import { generateText } from "ai";
 import { prisma } from "@repo/db";
-import { 
-  CompressionLevel, 
-  CompressedVersions, 
+import {
+  CompressionLevel,
+  CompressedVersions,
   CompressedMessageVersion,
-  ModelType 
+  ModelType,
 } from "@repo/types";
 import { TokenCounterService } from "./token-counter";
-import { LLMService } from "../llm";
 import {
   LIGHT_COMPRESSION_PROMPT,
   LIGHT_COMPRESSION_SYSTEM_PROMPT,
   HEAVY_COMPRESSION_PROMPT,
   HEAVY_COMPRESSION_SYSTEM_PROMPT,
-} from "../prompt/compression-prompts";
-
-
+} from "../ai/compression-prompts";
+import { ModelProvider } from "../ai/llm/models/model-provider";
 
 // Does the actual compression of messages
 /**
@@ -22,30 +21,30 @@ import {
  * - NONE: No compression
  * - LIGHT: Remove verbose metadata, compress code blocks
  * - HEAVY: Full LLM-powered summarization, fallback to light if heavy fails
- * 
+ *
  */
 export class MessageCompressor {
-  private tokenCounter: TokenCounterService; // Token counter service (just estimates tokens)
-  private llmService: LLMService; // LLM service (handles LLM calls)
+  private tokenCounter: TokenCounterService;
+  private modelProvider: ModelProvider;
 
   constructor() {
     this.tokenCounter = new TokenCounterService();
-    this.llmService = new LLMService();
+    this.modelProvider = new ModelProvider();
   }
 
   // Compress a message to a specific level and store in database
   async compressMessage(
-    messageId: string, 
+    messageId: string,
     targetLevel: CompressionLevel,
-    model: ModelType
+    model: ModelType,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<CompressedMessageVersion> {
     if (targetLevel === "NONE") {
       throw new Error("Cannot compress to NONE level");
     }
 
-
     const message = await prisma.chatMessage.findUnique({
-      where: { id: messageId }
+      where: { id: messageId },
     }); // Get message from database
 
     if (!message) {
@@ -53,7 +52,11 @@ export class MessageCompressor {
     }
 
     // Check if this compression level already exists - prevent re-compression
-    const existingCompression = await this.getCompressedVersion(messageId, targetLevel, model);
+    const existingCompression = await this.getCompressedVersion(
+      messageId,
+      targetLevel,
+      model
+    );
     if (existingCompression) {
       return existingCompression;
     }
@@ -62,45 +65,59 @@ export class MessageCompressor {
     const compressedContent = await this.performCompression(
       message.content,
       targetLevel,
-      model
+      model,
+      userApiKeys
     );
 
     // Count tokens in compressed content
-    const compressedTokens = this.tokenCounter.countTokens(compressedContent, model);
+    const compressedTokens = this.tokenCounter.countTokens(
+      compressedContent,
+      model
+    );
 
     // Create compressed version
     const compressedVersion: CompressedMessageVersion = {
       content: compressedContent,
       tokens: compressedTokens,
       metadata: undefined, // Metadata is now cleared in convertDbMessages
-      compressedAt: new Date().toISOString()
+      compressedAt: new Date().toISOString(),
     };
 
     // Update database with compressed version
-    await this.storeCompressedVersion(messageId, targetLevel, compressedVersion);
+    await this.storeCompressedVersion(
+      messageId,
+      targetLevel,
+      compressedVersion
+    );
 
     return compressedVersion;
   }
 
-
   async getCompressedVersion(
-    messageId: string, 
+    messageId: string,
     level: CompressionLevel,
     model: ModelType
   ): Promise<CompressedMessageVersion | null> {
     const message = await prisma.chatMessage.findUnique({
       where: { id: messageId },
-      select: { content: true, totalTokens: true, createdAt: true, compressedVersions: true }
+      select: {
+        content: true,
+        totalTokens: true,
+        createdAt: true,
+        compressedVersions: true,
+      },
     });
-    
+
     if (!message) return null;
 
     // Get original message version
     const originalVersion: CompressedMessageVersion = {
       content: message.content,
-      tokens: message.totalTokens || this.tokenCounter.countTokens(message.content, model),
+      tokens:
+        message.totalTokens ||
+        this.tokenCounter.countTokens(message.content, model),
       metadata: undefined, // Metadata is now cleared in convertDbMessages
-      compressedAt: message.createdAt.toISOString()
+      compressedAt: message.createdAt.toISOString(),
     };
 
     // If requesting NONE level, return original
@@ -111,7 +128,7 @@ export class MessageCompressor {
     // Get all available compressed versions
     const versions = (message.compressedVersions as CompressedVersions) || {};
     const availableVersions: CompressedMessageVersion[] = [originalVersion];
-    
+
     // Add compressed versions if they exist
     if (versions.LIGHT) {
       availableVersions.push(versions.LIGHT);
@@ -122,30 +139,41 @@ export class MessageCompressor {
 
     // Find the shortest version that meets or exceeds the requested compression level
     // Priority order: HEAVY (most compressed) > LIGHT > NONE (original)
-    const levelPriority = { "HEAVY": 2, "LIGHT": 1, "NONE": 0 };
+    const levelPriority = { HEAVY: 2, LIGHT: 1, NONE: 0 };
     const requestedPriority = levelPriority[level];
 
     // Filter versions that meet the requested compression level and sort by shortest content
-    const suitableVersions = availableVersions.filter((version, index) => {
-      if (index === 0) return true; // Original is always suitable
-      if (versions.HEAVY === version && requestedPriority >= levelPriority.HEAVY) return true;
-      if (versions.LIGHT === version && requestedPriority >= levelPriority.LIGHT) return true;
-      return false;
-    }).sort((a, b) => a.content.length - b.content.length);
+    const suitableVersions = availableVersions
+      .filter((version, index) => {
+        if (index === 0) return true; // Original is always suitable
+        if (
+          versions.HEAVY === version &&
+          requestedPriority >= levelPriority.HEAVY
+        )
+          return true;
+        if (
+          versions.LIGHT === version &&
+          requestedPriority >= levelPriority.LIGHT
+        )
+          return true;
+        return false;
+      })
+      .sort((a, b) => a.content.length - b.content.length);
 
     const shortestVersion = suitableVersions[0];
     if (!shortestVersion) {
       return null;
     }
-    
+
     return shortestVersion;
   }
 
   // Ensure a message has the required compression level, always returning the best (shortest) available
   async ensureCompressionLevel(
-    messageId: string, 
+    messageId: string,
     level: CompressionLevel,
-    model: ModelType
+    model: ModelType,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<CompressedMessageVersion> {
     // First check if we already have the requested level or better
     const existing = await this.getCompressedVersion(messageId, level, model);
@@ -159,30 +187,42 @@ export class MessageCompressor {
 
     // If we need HEAVY compression but don't have it, create it
     if (level === "HEAVY") {
-      const heavyVersion = await this.compressMessage(messageId, "HEAVY", model);
-      
+      const heavyVersion = await this.compressMessage(
+        messageId,
+        "HEAVY",
+        model,
+        userApiKeys
+      );
+
       // Also try to create LIGHT if we don't have it, in case LIGHT is shorter than HEAVY
       try {
         const message = await prisma.chatMessage.findUnique({
           where: { id: messageId },
-          select: { compressedVersions: true }
+          select: { compressedVersions: true },
         });
-        
-        const versions = (message?.compressedVersions as CompressedVersions) || {};
+
+        const versions =
+          (message?.compressedVersions as CompressedVersions) || {};
         if (!versions.LIGHT) {
-          await this.compressMessage(messageId, "LIGHT", model);
+          await this.compressMessage(messageId, "LIGHT", model, userApiKeys);
         }
       } catch (error) {
-        console.warn(`[COMPRESSION] Failed to create LIGHT compression for comparison:`, error);
+        console.warn(
+          `[COMPRESSION] Failed to create LIGHT compression for comparison:`,
+          error
+        );
       }
-      
+
       // Return the shortest available version
-      return await this.getCompressedVersion(messageId, level, model) || heavyVersion;
+      return (
+        (await this.getCompressedVersion(messageId, level, model)) ||
+        heavyVersion
+      );
     }
 
     // If we need LIGHT compression but don't have it, create it
     if (level === "LIGHT") {
-      return await this.compressMessage(messageId, "LIGHT", model);
+      return await this.compressMessage(messageId, "LIGHT", model, userApiKeys);
     }
 
     throw new Error(`Unknown compression level: ${level}`);
@@ -192,129 +232,138 @@ export class MessageCompressor {
   private async performCompression(
     content: string,
     level: CompressionLevel,
-    model: ModelType
+    model: ModelType,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<string> {
     switch (level) {
       case "LIGHT":
-        return await this.lightCompression(content, model);
-      
-      
-      case "HEAVY":
-        return await this.heavyCompression(content, model);
+        return await this.lightCompression(content, model, userApiKeys);
 
+      case "HEAVY":
+        return await this.heavyCompression(content, model, userApiKeys);
 
       default:
         return content;
     }
   }
 
-  // Light compression: GPT-powered summarization to 6-8 sentences
+  // Light compression
   // More aggressive than regex-based approach but preserves important context
-  private async lightCompression(content: string, model: ModelType): Promise<string> {
-    console.log(`[COMPRESSION] Starting LIGHT compression on content (${content.length} chars) using model ${model}`);
+  private async lightCompression(
+    content: string,
+    model: ModelType,
+    userApiKeys: { openai?: string; anthropic?: string }
+  ): Promise<string> {
+    console.log(
+      `[COMPRESSION] Starting LIGHT compression on content (${content.length} chars) using model ${model}`
+    );
     const startTime = Date.now();
-    
+
     try {
-      const compressionPrompt = LIGHT_COMPRESSION_PROMPT.replace('{content}', content);
+      const compressionPrompt = LIGHT_COMPRESSION_PROMPT.replace(
+        "{content}",
+        content
+      );
 
-      const messages = [{
-        id: "compress-light-" + Date.now(),
-        role: "user" as const,
-        content: compressionPrompt,
-        llmModel: model,
-        createdAt: new Date().toISOString()
-      }];
-
-      let summary = "";
-      
-      for await (const chunk of this.llmService.createMessageStream(
-        LIGHT_COMPRESSION_SYSTEM_PROMPT,
-        messages,
-        model,
-        false // No tools for compression
-      )) {
-        if (chunk.type === "content" && chunk.content) {
-          summary += chunk.content;
-        }
-      }
+      const { text: summary } = await generateText({
+        model: this.modelProvider.getModel(model, userApiKeys),
+        system: LIGHT_COMPRESSION_SYSTEM_PROMPT,
+        prompt: compressionPrompt,
+        temperature: 0.3,
+        maxTokens: 1000,
+      });
 
       const endTime = Date.now();
       const duration = endTime - startTime;
       const finalSummary = summary.trim();
-      
+
       if (finalSummary) {
         // Check if compression actually made it smaller, otherwise use original
         if (finalSummary.length < content.length) {
-          const compressionRatio = ((content.length - finalSummary.length) / content.length * 100).toFixed(1);
-          console.log(`[COMPRESSION] LIGHT compression successful: ${content.length} -> ${finalSummary.length} chars (${compressionRatio}% reduction) in ${duration}ms`);
+          const compressionRatio = (
+            ((content.length - finalSummary.length) / content.length) *
+            100
+          ).toFixed(1);
+          console.log(
+            `[COMPRESSION] LIGHT compression successful: ${content.length} -> ${finalSummary.length} chars (${compressionRatio}% reduction) in ${duration}ms`
+          );
           return finalSummary;
         } else {
-          console.log(`[COMPRESSION] LIGHT compression resulted in larger content (${content.length} -> ${finalSummary.length} chars), returning original`);
+          console.log(
+            `[COMPRESSION] LIGHT compression resulted in larger content (${content.length} -> ${finalSummary.length} chars), returning original`
+          );
           return content;
         }
       } else {
-        console.log(`[COMPRESSION] LIGHT compression produced empty result, returning original content`);
+        console.log(
+          `[COMPRESSION] LIGHT compression produced empty result, returning original content`
+        );
         return content;
       }
     } catch (error) {
       const endTime = Date.now();
       const duration = endTime - startTime;
-      console.warn(`[COMPRESSION] LIGHT compression failed after ${duration}ms, returning original content:`, error);
+      console.warn(
+        `[COMPRESSION] LIGHT compression failed after ${duration}ms, returning original content:`,
+        error
+      );
       return content;
     }
   }
 
-
-  // Heavy compression: Ultra-concise LLM-powered summarization to 1-3 sentences
+  // Heavy compression
   // Most aggressive compression, preserving only the absolute essentials
   private async heavyCompression(
-    content: string, 
-    model: ModelType
+    content: string,
+    model: ModelType,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<string> {
-    console.log(`[COMPRESSION] Starting HEAVY compression on content (${content.length} chars) using model ${model}`);
+    console.log(
+      `[COMPRESSION] Starting HEAVY compression on content (${content.length} chars) using model ${model}`
+    );
     const startTime = Date.now();
-    
+
     try {
-      const compressionPrompt = HEAVY_COMPRESSION_PROMPT.replace('{content}', content);
+      const compressionPrompt = HEAVY_COMPRESSION_PROMPT.replace(
+        "{content}",
+        content
+      );
 
-      const messages = [{
-        id: "compress-heavy-" + Date.now(),
-        role: "user" as const,
-        content: compressionPrompt,
-        llmModel: model,
-        createdAt: new Date().toISOString()
-      }];
-
-      let summary = "";
-      
-      for await (const chunk of this.llmService.createMessageStream(
-        HEAVY_COMPRESSION_SYSTEM_PROMPT,
-        messages,
-        model,
-        false // No tools for compression
-      )) {
-        if (chunk.type === "content" && chunk.content) {
-          summary += chunk.content;
-        }
-      }
+      const { text: summary } = await generateText({
+        model: this.modelProvider.getModel(model, userApiKeys),
+        system: HEAVY_COMPRESSION_SYSTEM_PROMPT,
+        prompt: compressionPrompt,
+        temperature: 0.3,
+        maxTokens: 500,
+      });
 
       const endTime = Date.now();
       const duration = endTime - startTime;
       const finalSummary = summary.trim();
-      
+
       if (finalSummary) {
-        const compressionRatio = ((content.length - finalSummary.length) / content.length * 100).toFixed(1);
-        console.log(`[COMPRESSION] HEAVY compression successful: ${content.length} -> ${finalSummary.length} chars (${compressionRatio}% reduction) in ${duration}ms`);
+        const compressionRatio = (
+          ((content.length - finalSummary.length) / content.length) *
+          100
+        ).toFixed(1);
+        console.log(
+          `[COMPRESSION] HEAVY compression successful: ${content.length} -> ${finalSummary.length} chars (${compressionRatio}% reduction) in ${duration}ms`
+        );
         return finalSummary;
       } else {
-        console.log(`[COMPRESSION] HEAVY compression produced empty result, falling back to LIGHT compression`);
-        return await this.lightCompression(content, model);
+        console.log(
+          `[COMPRESSION] HEAVY compression produced empty result, falling back to LIGHT compression`
+        );
+        return await this.lightCompression(content, model, userApiKeys);
       }
     } catch (error) {
       const endTime = Date.now();
       const duration = endTime - startTime;
-      console.warn(`[COMPRESSION] HEAVY compression failed after ${duration}ms, falling back to LIGHT:`, error);
-      return await this.lightCompression(content, model);
+      console.warn(
+        `[COMPRESSION] HEAVY compression failed after ${duration}ms, falling back to LIGHT:`,
+        error
+      );
+      return await this.lightCompression(content, model, userApiKeys);
     }
   }
 
@@ -327,25 +376,25 @@ export class MessageCompressor {
     // Get existing compressed versions
     const message = await prisma.chatMessage.findUnique({
       where: { id: messageId },
-      select: { compressedVersions: true }
+      select: { compressedVersions: true },
     });
 
-    const existingVersions = (message?.compressedVersions as CompressedVersions) || {};
-    
+    const existingVersions =
+      (message?.compressedVersions as CompressedVersions) || {};
+
     // Add new compression level
     const updatedVersions: CompressedVersions = {
       ...existingVersions,
-      [level]: compressedVersion
+      [level]: compressedVersion,
     };
 
     // Update database
     await prisma.chatMessage.update({
       where: { id: messageId },
       data: {
-        // Type assertion to CompressedVersions for type safety
-        compressedVersions: updatedVersions as CompressedVersions,
-        activeCompressionLevel: level
-      }
+        compressedVersions: updatedVersions as object,
+        activeCompressionLevel: level,
+      },
     });
   }
 }
