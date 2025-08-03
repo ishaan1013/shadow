@@ -204,28 +204,8 @@ export function FileExplorer({
   if (isCollapsed !== undefined && onToggleCollapse) {
     if (!isCollapsed) {
       return (
-        <div className="bg-sidebar border-sidebar-border flex w-52 shrink-0 select-none flex-col border-r">
-          <div className="border-sidebar-border h-13 flex items-center justify-between border-b px-2">
-            <h3 className="font-departureMono tracking-tight">Shadow Realm</h3>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hover:bg-sidebar-accent size-7 cursor-pointer"
-                  onClick={onToggleCollapse}
-                >
-                  <ChevronsLeft className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
-                Close File Explorer
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <div className="group/files flex flex-1 flex-col gap-0.5 overflow-auto p-1">
-            {files.map((file) => renderNode(file))}
-          </div>
+        <div className="bg-sidebar group/files border-border flex w-52 shrink-0 select-none flex-col gap-0.5 overflow-auto border-r p-1">
+          {files.map((file) => renderNode(file))}
         </div>
       );
     }
