@@ -86,7 +86,7 @@ model Task {
   scheduledCleanupAt  DateTime?
   initializationError String?
   workspaceCleanedUp  Boolean           @default(false)
-  totalTokens         Int               @default(0)  // Aggregate token count for the task
+  totalTokens         Int               @default(0) // Aggregate token count for the task
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   userId              String
@@ -121,25 +121,25 @@ model Todo {
 }
 
 model ChatMessage {
-  id                     String               @id @default(cuid())
-  content                String
-  role                   MessageRole
-  llmModel               String
-  metadata               Json?
-  sequence               Int
-  promptTokens           Int?
-  completionTokens       Int?
-  totalTokens            Int?
-  finishReason           String?
-  createdAt              DateTime             @default(now())
-  editedAt               DateTime?
-  taskId                 String
-  task                   Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  pullRequestSnapshot    PullRequestSnapshot?
-  
+  id                  String               @id @default(cuid())
+  content             String
+  role                MessageRole
+  llmModel            String
+  metadata            Json?
+  sequence            Int
+  promptTokens        Int?
+  completionTokens    Int?
+  totalTokens         Int?
+  finishReason        String?
+  createdAt           DateTime             @default(now())
+  editedAt            DateTime?
+  taskId              String
+  task                Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  pullRequestSnapshot PullRequestSnapshot?
+
   // Compression fields
-  compressedVersions     Json?                // Store compressed versions as JSON
-  activeCompressionLevel String               @default("NONE")
+  compressedVersions     Json?
+  activeCompressionLevel String @default("NONE")
 
   @@index([taskId, sequence])
   @@index([taskId, role, sequence])
