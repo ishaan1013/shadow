@@ -10,7 +10,7 @@ const TIMEOUT = 20000;
 
 export type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4001";
+const socketUrl = process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4001";
 
 export const socket: TypedSocket = io(socketUrl, {
   autoConnect: false,

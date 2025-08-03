@@ -1,5 +1,5 @@
 import { GitManager } from "./git-manager";
-import { LLMService } from "../ai/llm";
+import { LLMService } from "../agent/llm";
 import { PRService } from "../github/pull-requests";
 import type { PRMetadata, CreatePROptions } from "../github/types";
 
@@ -17,7 +17,7 @@ export class PRManager {
    * Create or update PR and save snapshot
    */
   async createPRIfNeeded(
-    options: CreatePROptions, 
+    options: CreatePROptions,
     userApiKeys?: { openai?: string; anthropic?: string }
   ): Promise<void> {
     try {
@@ -45,7 +45,12 @@ export class PRManager {
         await this.createNewPR(options, commitSha, userApiKeys);
       } else {
         // Update existing PR path
-        await this.updateExistingPR(options, existingPRNumber, commitSha, userApiKeys);
+        await this.updateExistingPR(
+          options,
+          existingPRNumber,
+          commitSha,
+          userApiKeys
+        );
       }
 
       console.log(

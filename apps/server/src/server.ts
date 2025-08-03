@@ -1,14 +1,11 @@
-import { app, socketIOServer } from "./app";
+import { socketIOServer } from "./app";
 import config from "./config";
-import { stopAllFileSystemWatchers } from "./ai/tools";
+import { stopAllFileSystemWatchers } from "./agent/tools";
 import { taskCleanupService } from "./services/task-cleanup";
 
-const apiServer = app.listen(config.apiPort, () => {
-  console.log(`Server running on port ${config.apiPort}`);
-});
-
-const socketServer = socketIOServer.listen(config.socketPort, () => {
-  console.log(`Socket.IO server running on port ${config.socketPort}`);
+// Use single server for both HTTP and WebSocket
+const server = socketIOServer.listen(config.apiPort, () => {
+  console.log(`Server (HTTP + WebSocket) running on port ${config.apiPort}`);
 
   // Start background cleanup service
   taskCleanupService.start();
@@ -24,13 +21,9 @@ const shutdown = (signal: string) => {
   // Stop all filesystem watchers first
   stopAllFileSystemWatchers();
 
-  // Close servers
-  apiServer.close(() => {
-    console.log("[SERVER] HTTP server closed");
-  });
-
-  socketServer.close(() => {
-    console.log("[SERVER] Socket.IO server closed");
+  // Close server (handles both HTTP and WebSocket)
+  server.close(() => {
+    console.log("[SERVER] Server closed (HTTP + WebSocket)");
     process.exit(0);
   });
 

@@ -96,7 +96,7 @@ export async function createTask(formData: FormData) {
       try {
         // Initiate the task on the backend
         const baseUrl =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+          process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
         // Forward cookies from the original request
         const requestHeaders = await headers();
         const cookieHeader = requestHeaders.get("cookie");

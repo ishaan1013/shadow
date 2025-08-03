@@ -43,37 +43,7 @@ Install dependencies:
 npm install
 ```
 
-Fill out environment variables:
-
-**apps/frontend/.env.local**
-
-```
-NEXT_PUBLIC_API_URL=http://localhost:4000
-NEXT_PUBLIC_SOCKET_URL=http://localhost:4001
-
-BETTER_AUTH_SECRET=
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-```
-
-**apps/server/.env**
-Note: The database URL is only needed here if you want to run the terminal agent for local workspace testing. Use the same values as the DB package, see the next section for more details.
-
-```
-ANTHROPIC_API_KEY=
-OPENAI_API_KEY=
-
-WORKSPACE_DIR=
-DEBUG=
-
-DATABASE_URL=
-```
-
-**packages/db/.env**
-
-```
-DATABASE_URL=
-```
+Fill out environment variables using the template files in each app and package.
 
 To develop all apps and packages, ensure you have [turbo installed globally](<(https://turborepo.com/docs/getting-started/installation#global-installation)>).
 

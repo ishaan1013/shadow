@@ -1,5 +1,5 @@
 import type { Message, SemanticSearchToolResult } from "@repo/types";
-import { Code, File, Folder, ScanSearch } from "lucide-react";
+import { File, Folder, ScanSearch } from "lucide-react";
 import { ToolTypes } from "@repo/types";
 import { ToolComponent } from "./collapsible-tool";
 

@@ -22,7 +22,8 @@ export async function POST(
     }
 
     // Forward request to backend
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
     const requestHeaders = await headers();
     const cookieHeader = requestHeaders.get("cookie");
 

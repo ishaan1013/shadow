@@ -1,17 +1,17 @@
-import config from "@/config";
 import fg from "fast-glob";
 import { createHash } from "crypto";
 import { readFileSync, statSync } from "fs";
-import { OpenAI } from "openai";
 import path from "path";
 import Parser from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
 import { CodebaseUnderstandingStorage } from "./db-storage";
 import TS from "tree-sitter-typescript";
+import { ModelProvider } from "@/agent/llm/models/model-provider";
+import { ModelType, getModelProvider } from "@repo/types";
+import { generateText } from "ai";
 
 // Configuration
 const TEMP = 0.15;
-const openai = new OpenAI();
 
 // Processing statistics
 interface ProcessingStats {
@@ -239,7 +239,13 @@ function analyzeFileComplexity(symbols: Symbols, fileSize: number): boolean {
 }
 
 // Summarize a file
-async function summarizeFile(rootPath: string, rel: string): Promise<string> {
+async function summarizeFile(
+  rootPath: string,
+  rel: string,
+  modelProvider: ModelProvider,
+  userApiKeys: { openai?: string; anthropic?: string },
+  modelMini: ModelType
+): Promise<string> {
   const abs = path.join(rootPath, rel);
   const src = readFileSync(abs, "utf8");
 
@@ -260,7 +266,14 @@ async function summarizeFile(rootPath: string, rel: string): Promise<string> {
 
   if (needsDeepAnalysis) {
     // Use GPT for complex files
-    return await analyzeFileWithGPT(rel, src, symbols);
+    return await analyzeFileWithLLM(
+      rel,
+      src,
+      symbols,
+      modelProvider,
+      userApiKeys,
+      modelMini
+    );
   } else {
     // Use basic symbol extraction
     return symbolsToMarkdown(symbols) || "_(no symbols found)_";
@@ -268,10 +281,13 @@ async function summarizeFile(rootPath: string, rel: string): Promise<string> {
 }
 
 // Analyze file with GPT
-async function analyzeFileWithGPT(
+async function analyzeFileWithLLM(
   rel: string,
   src: string,
-  symbols: Symbols
+  symbols: Symbols,
+  modelProvider: ModelProvider,
+  userApiKeys: { openai?: string; anthropic?: string },
+  modelMini: ModelType
 ): Promise<string> {
   const ext = path.extname(rel).toLowerCase();
   const isDataFile =
@@ -298,14 +314,16 @@ File: ${path.basename(rel)}`;
   ];
 
   try {
-    const res = await openai.chat.completions.create({
-      model: config.modelMini,
+    const model = modelProvider.getModel(modelMini, userApiKeys);
+
+    const { text } = await generateText({
+      model,
       temperature: 0.6,
       messages,
-      max_tokens: 2048,
+      maxTokens: 2048,
     });
 
-    return res.choices[0]?.message?.content?.trim() || "_(no response)_";
+    return text?.trim() || "_(no response)_";
   } catch (err) {
     console.error(`Error analyzing ${rel} with GPT:`, err);
     return symbolsToMarkdown(symbols) || "_(no symbols found)_";
@@ -313,21 +331,32 @@ File: ${path.basename(rel)}`;
 }
 
 // LLM chat function
-async function chat(messages: any[], budget: number): Promise<string> {
-  const res = await openai.chat.completions.create({
-    model: config.model,
+async function chat(
+  messages: any[],
+  budget: number,
+  modelProvider: ModelProvider,
+  userApiKeys: { openai?: string; anthropic?: string },
+  model: ModelType
+): Promise<string> {
+  const modelInstance = modelProvider.getModel(model, userApiKeys);
+
+  const { text } = await generateText({
+    model: modelInstance,
     temperature: TEMP,
     messages,
-    max_tokens: budget,
+    maxTokens: budget,
   });
 
-  return res.choices[0]?.message?.content?.trim() || "_(no response)_";
+  return text?.trim() || "_(no response)_";
 }
 
 // Summarize directory
 async function summarizeDir(
   node: TreeNode,
-  childSummaries: string[]
+  childSummaries: string[],
+  modelProvider: ModelProvider,
+  userApiKeys: { openai?: string; anthropic?: string },
+  model: ModelType
 ): Promise<string> {
   const budget = Math.min(800, 200 + childSummaries.length * 40);
   const systemPrompt = `Summarize this code directory. Be ultra-concise.
@@ -344,13 +373,16 @@ Use bullet points, fragments, abbreviations. Directory: ${node.relPath}`;
     { role: "user" as const, content: childSummaries.join("\n---\n") },
   ];
 
-  return chat(messages, budget);
+  return chat(messages, budget, modelProvider, userApiKeys, model);
 }
 
 // Summarize root
 async function summarizeRoot(
   node: TreeNode,
-  childSummaries: string[]
+  childSummaries: string[],
+  modelProvider: ModelProvider,
+  userApiKeys: { openai?: string; anthropic?: string },
+  model: ModelType
 ): Promise<string> {
   const budget = Math.min(500, 150 + childSummaries.length * 30);
   const systemPrompt = `Create a concise architecture overview for ${node.name}.
@@ -368,7 +400,7 @@ Use bullet points and fragments. Ultra-concise technical descriptions only.`;
     { role: "user" as const, content: childSummaries.join("\n---\n") },
   ];
 
-  return chat(messages, budget);
+  return chat(messages, budget, modelProvider, userApiKeys, model);
 }
 
 /**
@@ -380,18 +412,66 @@ export async function runDeepWiki(
   repoFullName: string,
   repoUrl: string,
   userId: string,
+  userApiKeys: { openai?: string; anthropic?: string },
   options: {
     concurrency?: number;
-    model?: string;
-    modelMini?: string;
+    model?: ModelType;
+    modelMini?: ModelType;
   }
 ): Promise<{ codebaseUnderstandingId: string; stats: ProcessingStats }> {
   console.log(`[DEEP-WIKI] Analyzing ${repoPath} for task ${taskId}`);
 
-  // Update config
-  if (options.model) config.model = options.model;
-  if (options.modelMini) config.modelMini = options.modelMini;
+  // Determine which models to use based on available API keys
+  let mainModel: ModelType;
+  let miniModel: ModelType;
 
+  if (options.model && options.modelMini) {
+    // Use provided models if both are specified
+    mainModel = options.model;
+    miniModel = options.modelMini;
+  } else {
+    // Auto-select based on available API keys
+    if (userApiKeys.openai) {
+      mainModel = "gpt-4o" as ModelType;
+      miniModel = "gpt-4o-mini" as ModelType;
+    } else if (userApiKeys.anthropic) {
+      mainModel = "claude-sonnet-4-20250514" as ModelType;
+      miniModel = "claude-3-5-haiku-latest" as ModelType;
+    } else {
+      throw new Error(
+        "No API keys provided. Please configure either OpenAI or Anthropic API key."
+      );
+    }
+  }
+
+  // Validate that we have the required API key for the selected models
+  const mainProvider = getModelProvider(mainModel);
+  const miniProvider = getModelProvider(miniModel);
+
+  if (mainProvider === "openai" && !userApiKeys.openai) {
+    throw new Error(
+      "OpenAI API key required for selected model but not provided."
+    );
+  }
+  if (mainProvider === "anthropic" && !userApiKeys.anthropic) {
+    throw new Error(
+      "Anthropic API key required for selected model but not provided."
+    );
+  }
+  if (miniProvider === "openai" && !userApiKeys.openai) {
+    throw new Error("OpenAI API key required for mini model but not provided.");
+  }
+  if (miniProvider === "anthropic" && !userApiKeys.anthropic) {
+    throw new Error(
+      "Anthropic API key required for mini model but not provided."
+    );
+  }
+
+  console.log(
+    `[DEEP-WIKI] Using models: ${mainModel} (main), ${miniModel} (mini)`
+  );
+
+  const modelProvider = new ModelProvider();
   const stats: ProcessingStats = {
     filesProcessed: 0,
     directoriesProcessed: 0,
@@ -409,7 +489,13 @@ export async function runDeepWiki(
     const node = tree.nodes[nid]!;
     for (const rel of node.files || []) {
       fileTasks.push(
-        summarizeFile(repoPath, rel).then((summary) => {
+        summarizeFile(
+          repoPath,
+          rel,
+          modelProvider,
+          userApiKeys,
+          miniModel
+        ).then((summary) => {
           fileCache[rel] = summary;
           stats.filesProcessed++;
         })
@@ -443,7 +529,13 @@ export async function runDeepWiki(
       blocks.push(`### ${fileName}\n${fileContent.split("\n\n")[0]}`);
     }
 
-    node.summary = await summarizeDir(node, blocks);
+    node.summary = await summarizeDir(
+      node,
+      blocks,
+      modelProvider,
+      userApiKeys,
+      mainModel
+    );
     stats.directoriesProcessed++;
   }
 
@@ -454,7 +546,13 @@ export async function runDeepWiki(
     return `## ${c.name}\n${c.summary || "_missing_"}`;
   });
 
-  root.summary = await summarizeRoot(root, topBlocks);
+  root.summary = await summarizeRoot(
+    root,
+    topBlocks,
+    modelProvider,
+    userApiKeys,
+    mainModel
+  );
 
   // Create final summary structure
   const summaryContent = {

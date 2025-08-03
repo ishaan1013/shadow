@@ -72,7 +72,8 @@ export class TaskInitializationEngine {
   async initializeTask(
     taskId: string,
     steps: InitStatus[] = ["PREPARE_WORKSPACE"],
-    userId: string
+    userId: string,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<void> {
     console.log(
       `[TASK_INIT] Starting initialization for task ${taskId} with steps: ${steps.join(", ")}`
@@ -116,7 +117,7 @@ export class TaskInitializationEngine {
           );
 
           // Execute the step
-          await this.executeStep(taskId, step, userId);
+          await this.executeStep(taskId, step, userId, userApiKeys);
 
           // Mark step as completed
           await setInitStatus(taskId, step);
@@ -179,7 +180,8 @@ export class TaskInitializationEngine {
   private async executeStep(
     taskId: string,
     step: InitStatus,
-    userId: string
+    userId: string,
+    userApiKeys: { openai?: string; anthropic?: string }
   ): Promise<void> {
     switch (step) {
       // Local mode step
@@ -207,7 +209,7 @@ export class TaskInitializationEngine {
 
       // Deep wiki generation step (both modes, optional)
       case "GENERATE_DEEP_WIKI":
-        await this.executeGenerateDeepWiki(taskId);
+        await this.executeGenerateDeepWiki(taskId, userApiKeys);
         break;
 
       case "INACTIVE":
@@ -463,7 +465,10 @@ export class TaskInitializationEngine {
   /**
    * Generate deep wiki step - Generate comprehensive codebase documentation
    */
-  private async executeGenerateDeepWiki(taskId: string): Promise<void> {
+  private async executeGenerateDeepWiki(
+    taskId: string,
+    userApiKeys: { openai?: string; anthropic?: string }
+  ): Promise<void> {
     console.log(`[TASK_INIT] ${taskId}: Starting deep wiki generation`);
 
     try {
@@ -521,6 +526,7 @@ export class TaskInitializationEngine {
         task.repoFullName,
         task.repoUrl,
         task.userId,
+        userApiKeys,
         {
           // migrate to better abstraction for userApiKeys
           concurrency: 12,

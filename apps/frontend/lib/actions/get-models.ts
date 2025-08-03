@@ -7,12 +7,12 @@ import { headers } from "next/headers";
 export async function getModels(): Promise<ModelInfo[]> {
   try {
     const baseUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    
+      process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
+
     // Forward cookies from the original request
     const requestHeaders = await headers();
-    const cookieHeader = requestHeaders.get('cookie');
-    
+    const cookieHeader = requestHeaders.get("cookie");
+
     const response = await fetch(`${baseUrl}/api/models`, {
       headers: {
         ...(cookieHeader && { Cookie: cookieHeader }),
@@ -27,4 +27,4 @@ export async function getModels(): Promise<ModelInfo[]> {
     console.error("Error fetching models:", error);
     return [];
   }
-} 
+}

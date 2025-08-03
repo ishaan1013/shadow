@@ -7,19 +7,31 @@ export async function POST(
   try {
     const { taskId } = await params;
     const body = await request.json();
-    
+
     // Proxy to backend server
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
-    const response = await fetch(`${backendUrl}/api/indexing/deepwiki/generate/${taskId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:4000";
+
+    // Forward cookies to backend
+    const cookieHeader = request.headers.get("cookie");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (cookieHeader) {
+      headers["cookie"] = cookieHeader;
+    }
+
+    const response = await fetch(
+      `${backendUrl}/api/indexing/deepwiki/generate/${taskId}`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      }
+    );
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       return NextResponse.json(data, { status: response.status });
     }

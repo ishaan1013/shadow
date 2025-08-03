@@ -4,7 +4,8 @@ import { runDeepWiki } from "./core";
 import { CodebaseUnderstandingStorage } from "./db-storage";
 import fs from "fs";
 import { db } from "@repo/db";
-import { AvailableModels } from "@repo/types";
+import { ModelType } from "@repo/types";
+import { parseApiKeysFromCookies } from "@/utils/cookie-parser";
 
 const deepwikiRouter = express.Router();
 
@@ -14,9 +15,18 @@ const deepwikiRouter = express.Router();
  */
 deepwikiRouter.post("/generate/:taskId", async (req, res, next) => {
   const { taskId } = req.params;
-  const { forceRefresh = false } = req.body;
+  const { forceRefresh = false, model, modelMini } = req.body;
 
   try {
+    // Extract API keys from cookies
+    const userApiKeys = parseApiKeysFromCookies(req.headers.cookie);
+
+    if (!userApiKeys.openai && !userApiKeys.anthropic) {
+      return res.status(400).json({
+        error:
+          "No API keys found. Please configure your OpenAI or Anthropic API key in settings.",
+      });
+    }
     // Get task details
     const task = await db.task.findUnique({
       where: { id: taskId },
@@ -58,10 +68,11 @@ deepwikiRouter.post("/generate/:taskId", async (req, res, next) => {
       task.repoFullName,
       task.repoUrl,
       task.userId,
+      userApiKeys,
       {
         concurrency: 12,
-        model: AvailableModels.GPT_4O,
-        modelMini: AvailableModels.GPT_4O_MINI,
+        model: model as ModelType,
+        modelMini: modelMini as ModelType,
       }
     );
 
