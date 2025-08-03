@@ -7,12 +7,12 @@ import { useTaskMessages } from "@/hooks/use-task-messages";
 import { useTaskSocket } from "@/hooks/socket";
 import { useParams } from "next/navigation";
 import { ScrollToBottom } from "./scroll-to-bottom";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ModelType } from "@repo/types";
 import { useTaskStatus } from "@/hooks/use-task-status";
 
-export function TaskPageContent() {
+function TaskPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
 
   const queryClient = useQueryClient();
@@ -125,3 +125,5 @@ export function TaskPageContent() {
     </div>
   );
 }
+
+export const MemoizedTaskPageContent = memo(TaskPageContent);

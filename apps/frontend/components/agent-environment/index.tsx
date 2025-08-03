@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/resizable";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Editor } from "./editor";
 import { FileExplorer } from "./file-explorer";
 import { Button } from "../ui/button";
@@ -19,7 +19,7 @@ import { LogoHover } from "../graphics/logo/logo-hover";
 
 const Terminal = dynamic(() => import("./terminal"), { ssr: false });
 
-export function AgentEnvironment() {
+function AgentEnvironment() {
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
 
@@ -198,3 +198,5 @@ export function AgentEnvironment() {
     </div>
   );
 }
+
+export const MemoizedAgentEnvironment = memo(AgentEnvironment);

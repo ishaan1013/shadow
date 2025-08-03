@@ -18,8 +18,8 @@ import { AppWindowMac } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import type { ImperativePanelGroupHandle } from "react-resizable-panels";
 import { StickToBottom } from "use-stick-to-bottom";
-import { AgentEnvironment } from "../agent-environment";
-import { TaskPageContent } from "./task-content";
+import { MemoizedAgentEnvironment as AgentEnvironment } from "../agent-environment";
+import { MemoizedTaskPageContent as TaskPageContent } from "./task-content";
 import { useParams } from "next/navigation";
 import { useAgentEnvironment } from "../agent-environment/agent-environment-context";
 import { useTaskTitle, useUpdateTaskTitle } from "@/hooks/use-task-title";
@@ -46,8 +46,6 @@ export function TaskPageWrapper({
     variables: taskTitleVariables,
     isPending: isUpdatingTaskTitle,
   } = useUpdateTaskTitle();
-  // We don't need to access the sidebar view from context anymore
-  // Just check the pathname directly to determine what to render
 
   useEffect(() => {
     if (taskTitle) {
@@ -61,6 +59,7 @@ export function TaskPageWrapper({
 
   const { rightPanelRef, lastPanelSizeRef, triggerTerminalResize } =
     useAgentEnvironment();
+  const [isAgentEnvironmentOpen, setIsAgentEnvironmentOpen] = useState(true);
   const resizablePanelGroupRef = useRef<ImperativePanelGroupHandle>(null);
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
@@ -68,6 +67,17 @@ export function TaskPageWrapper({
 
   const handleLayout = useCallback((layout: number[]) => {
     triggerTerminalResize();
+
+    if (rightPanelRef.current) {
+      if (rightPanelRef.current.isCollapsed() && isAgentEnvironmentOpen) {
+        setIsAgentEnvironmentOpen(false);
+      } else if (
+        !rightPanelRef.current.isCollapsed() &&
+        !isAgentEnvironmentOpen
+      ) {
+        setIsAgentEnvironmentOpen(true);
+      }
+    }
 
     // Clear existing timeout
     if (debounceTimeoutRef.current) {
@@ -78,7 +88,7 @@ export function TaskPageWrapper({
     debounceTimeoutRef.current = setTimeout(() => {
       saveResizableTaskLayoutCookie("taskLayout", layout);
     }, 100);
-  }, []);
+  }, [triggerTerminalResize, rightPanelRef, isAgentEnvironmentOpen]);
 
   const { leftSize, rightSize } = useMemo(() => {
     if (initialLayout && initialLayout.length >= 2) {
@@ -91,7 +101,7 @@ export function TaskPageWrapper({
       leftSize: 100,
       rightSize: 0,
     };
-  }, [initialLayout, triggerTerminalResize]);
+  }, [initialLayout]);
 
   /* 
   Keyboard shortcuts
@@ -180,7 +190,7 @@ export function TaskPageWrapper({
         >
           <StickToBottom.Content className="relative flex min-h-svh w-full flex-col">
             <div className="bg-background sticky top-0 z-10 flex w-full items-center justify-between pb-3">
-              <div className="flex grow items-center gap-1 overflow-hidden p-3 pr-0">
+              <div className="h-13 flex grow items-center gap-1 overflow-hidden p-3 pr-0">
                 {!open && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -229,23 +239,25 @@ export function TaskPageWrapper({
                 </div>
               </div>
 
-              <div className="p-3">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn("size-7 cursor-pointer")}
-                      onClick={handleToggleRightPanel}
-                    >
-                      <AppWindowMac className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" shortcut="⌘J">
-                    Toggle Shadow Realm
-                  </TooltipContent>
-                </Tooltip>
-              </div>
+              {!isAgentEnvironmentOpen && (
+                <div className="p-3">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn("size-7 cursor-pointer")}
+                        onClick={handleToggleRightPanel}
+                      >
+                        <AppWindowMac className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" shortcut="⌘J">
+                      Toggle Shadow Realm
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
             </div>
             <TaskPageContent />
           </StickToBottom.Content>

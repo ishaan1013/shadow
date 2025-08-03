@@ -59,7 +59,7 @@ export default function Terminal() {
 
     // Create xterm instance
     const xterm = new XTerm({
-      fontFamily: '"Departure Mono", "Fira Code", "Courier New", monospace',
+      fontFamily: '"Geist Mono", "Fira Code", "Courier New", monospace',
       fontSize: 13,
       fontWeight: 400,
       lineHeight: 1.2,
