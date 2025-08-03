@@ -65,30 +65,33 @@ export function TaskPageWrapper({
     undefined
   );
 
-  const handleLayout = useCallback((layout: number[]) => {
-    triggerTerminalResize();
+  const handleLayout = useCallback(
+    (layout: number[]) => {
+      triggerTerminalResize();
 
-    if (rightPanelRef.current) {
-      if (rightPanelRef.current.isCollapsed() && isAgentEnvironmentOpen) {
-        setIsAgentEnvironmentOpen(false);
-      } else if (
-        !rightPanelRef.current.isCollapsed() &&
-        !isAgentEnvironmentOpen
-      ) {
-        setIsAgentEnvironmentOpen(true);
+      if (rightPanelRef.current) {
+        if (rightPanelRef.current.isCollapsed() && isAgentEnvironmentOpen) {
+          setIsAgentEnvironmentOpen(false);
+        } else if (
+          !rightPanelRef.current.isCollapsed() &&
+          !isAgentEnvironmentOpen
+        ) {
+          setIsAgentEnvironmentOpen(true);
+        }
       }
-    }
 
-    // Clear existing timeout
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
+      // Clear existing timeout
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
 
-    // Set new timeout for debounced save
-    debounceTimeoutRef.current = setTimeout(() => {
-      saveResizableTaskLayoutCookie("taskLayout", layout);
-    }, 100);
-  }, [triggerTerminalResize, rightPanelRef, isAgentEnvironmentOpen]);
+      // Set new timeout for debounced save
+      debounceTimeoutRef.current = setTimeout(() => {
+        saveResizableTaskLayoutCookie("taskLayout", layout);
+      }, 100);
+    },
+    [triggerTerminalResize, rightPanelRef, isAgentEnvironmentOpen]
+  );
 
   const { leftSize, rightSize } = useMemo(() => {
     if (initialLayout && initialLayout.length >= 2) {

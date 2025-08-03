@@ -35,12 +35,12 @@ export default function Terminal() {
 
     switch (entry.type) {
       case "command":
-        // Green for commands
-        xterm.write(`\x1b[32m$ ${entry.data}\x1b[0m\r\n`);
+        // Gray for commands
+        xterm.write(`\x1b[90m$ ${entry.data}\x1b[0m\r\n`);
         break;
       case "stdout":
         // Normal white text for stdout
-        xterm.write(entry.data);
+        xterm.write(entry.data + '\r\n');
         break;
       case "stderr":
         // Red text for errors
@@ -79,7 +79,7 @@ export default function Terminal() {
         magenta: "#ff79c6",
         cyan: "#8be9fd",
         white: "#f8f8f2",
-        brightBlack: "#44475a",
+        brightBlack: "#A1A1A1",
         brightRed: "#ff5555",
         brightGreen: "#50fa7b",
         brightYellow: "#f1fa8c",
