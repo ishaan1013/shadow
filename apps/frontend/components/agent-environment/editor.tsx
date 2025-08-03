@@ -23,11 +23,15 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 export function Editor({
   selectedFilePath,
   selectedFileContent,
+  isExplorerCollapsed,
+  onToggleCollapse,
   isLoadingContent,
   contentError,
 }: {
   selectedFilePath?: string | null;
   selectedFileContent?: string;
+  isExplorerCollapsed: boolean;
+  onToggleCollapse: () => void;
   isLoadingContent?: boolean;
   contentError?: string;
 }) {
@@ -49,20 +53,42 @@ export function Editor({
 
   return (
     <div className="bg-background flex size-full flex-col">
-      <div className="text-muted-foreground flex items-center gap-0.5 px-5 pb-1 pt-2 text-[13px]">
-        {selectedFilePath &&
-          selectedFilePath.split("/").map((part, index) => (
-            <Fragment key={index}>
-              {index > 1 && (
-                <span className="text-muted-foreground">
-                  <ChevronRight className="size-3" />
-                </span>
-              )}
-              <span className="text-muted-foreground leading-tight">
-                {part}
-              </span>
-            </Fragment>
-          ))}
+      <div className="border-sidebar-border bg-card h-13 flex items-center gap-2 border-b px-2">
+        {isExplorerCollapsed && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="iconSm"
+                className="hover:bg-sidebar-accent"
+                onClick={onToggleCollapse}
+              >
+                <ChevronsRight className="size-4" />
+              </Button>
+            </TooltipTrigger>
+
+            <TooltipContent side="right">Open File Explorer</TooltipContent>
+          </Tooltip>
+        )}
+        <div className="flex flex-col items-start justify-center">
+          <div className="select-none text-sm">Code Editor</div>
+          <div className="text-muted-foreground flex items-center gap-0.5 text-[13px]">
+            {selectedFilePath
+              ? selectedFilePath.split("/").map((part, index) => (
+                  <Fragment key={index}>
+                    {index > 1 && (
+                      <span className="text-muted-foreground">
+                        <ChevronRight className="size-3" />
+                      </span>
+                    )}
+                    <span className="text-muted-foreground leading-tight">
+                      {part}
+                    </span>
+                  </Fragment>
+                ))
+              : "No file selected"}
+          </div>
+        </div>
       </div>
       <div className="code-editor relative z-0 flex-1 overflow-hidden pl-2">
         {(isLoadingContent || contentError || !selectedFilePath) && (

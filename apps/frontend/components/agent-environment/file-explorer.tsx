@@ -3,12 +3,15 @@
 import {
   ChevronDown,
   ChevronRight,
+  ChevronsLeft,
   File,
   Folder,
   FolderOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "../ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { FileNode } from "@repo/types";
 
 interface FileChange {
@@ -147,7 +150,7 @@ export function FileExplorer({
           />
         )}
         <div
-          className={`group/item text-foreground/80 hover:text-foreground flex cursor-pointer items-center gap-1.5 overflow-hidden rounded-md px-2 py-1 hover:bg-white/10 ${
+          className={`group/item text-foreground/80 hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 hover:bg-white/10 ${
             isSelected ? "bg-white/5" : ""
           } ${showDiffOperation ? "justify-between" : ""}`}
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -159,26 +162,23 @@ export function FileExplorer({
             }
           }}
         >
-          <div
-            className="flex items-center gap-1.5 overflow-hidden"
-            title={node.name}
-          >
+          <div className="flex items-center gap-1.5">
             {node.type === "folder" ? (
               isExpanded ? (
                 <>
-                  <FolderOpen className="size-4 shrink-0 group-hover/item:hidden" />
-                  <ChevronDown className="hidden size-4 shrink-0 group-hover/item:block" />
+                  <FolderOpen className="size-4 group-hover/item:hidden" />
+                  <ChevronDown className="hidden size-4 group-hover/item:block" />
                 </>
               ) : (
                 <>
-                  <Folder className="size-4 shrink-0 group-hover/item:hidden" />
-                  <ChevronRight className="hidden size-4 shrink-0 group-hover/item:block" />
+                  <Folder className="size-4 group-hover/item:hidden" />
+                  <ChevronRight className="hidden size-4 group-hover/item:block" />
                 </>
               )
             ) : (
-              <File className="size-4 shrink-0" />
+              <File className="size-4" />
             )}
-            <span className="truncate text-sm">{node.name}</span>
+            <span className="text-sm">{node.name}</span>
           </div>
           {showDiffOperation && node.type === "file" && operation && (
             <span
@@ -200,19 +200,38 @@ export function FileExplorer({
     );
   };
 
-  // If being used in Agent Environment
+  // If this is being used as a collapsible sidebar (with header)
   if (isCollapsed !== undefined && onToggleCollapse) {
     if (!isCollapsed) {
       return (
-        <div className="bg-sidebar group/files border-border flex w-48 shrink-0 select-none flex-col gap-0.5 overflow-y-auto border-r p-1">
-          {files.map((file) => renderNode(file))}
+        <div className="bg-sidebar border-sidebar-border flex w-52 shrink-0 select-none flex-col border-r">
+          <div className="border-sidebar-border h-13 flex items-center justify-between border-b px-2">
+            <h3 className="font-departureMono tracking-tight">Shadow Realm</h3>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="hover:bg-sidebar-accent size-7 cursor-pointer"
+                  onClick={onToggleCollapse}
+                >
+                  <ChevronsLeft className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                Close File Explorer
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div className="group/files flex flex-1 flex-col gap-0.5 overflow-auto p-1">
+            {files.map((file) => renderNode(file))}
+          </div>
         </div>
       );
     }
     return null;
   }
-
-  // If used outside of Agent Environment (e.g. agent-view sidebar)
+  // If this is being used without the sidebar header
   return (
     <div className="group/files flex flex-col gap-0.5">
       {files.map((file) => renderNode(file))}
