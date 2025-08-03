@@ -7,7 +7,7 @@ export function BottomPanelOpenIcon({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       width="100%"
       height="100%"
-      className={cn("fill-current stroke-current", className)}
+      className={cn("stroke-current", className)}
       fill="none"
     >
       <path
@@ -15,13 +15,13 @@ export function BottomPanelOpenIcon({ className }: { className?: string }) {
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        fill="var(--card)"
       />
       <path
         d="M19 21C20.1046 21 21 20.1046 21 19V15H3V19C3 20.1046 3.89543 21 5 21H19Z"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        className="fill-current"
       />
     </svg>
   );

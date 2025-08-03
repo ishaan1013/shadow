@@ -50,20 +50,19 @@ export function Editor({
   return (
     <div className="bg-background flex size-full flex-col">
       <div className="text-muted-foreground flex items-center gap-0.5 px-5 pb-1 pt-2 text-[13px]">
-        {selectedFilePath
-          ? selectedFilePath.split("/").map((part, index) => (
-              <Fragment key={index}>
-                {index > 1 && (
-                  <span className="text-muted-foreground">
-                    <ChevronRight className="size-3" />
-                  </span>
-                )}
-                <span className="text-muted-foreground leading-tight">
-                  {part}
+        {selectedFilePath &&
+          selectedFilePath.split("/").map((part, index) => (
+            <Fragment key={index}>
+              {index > 1 && (
+                <span className="text-muted-foreground">
+                  <ChevronRight className="size-3" />
                 </span>
-              </Fragment>
-            ))
-          : "No file selected"}
+              )}
+              <span className="text-muted-foreground leading-tight">
+                {part}
+              </span>
+            </Fragment>
+          ))}
       </div>
       <div className="code-editor relative z-0 flex-1 overflow-hidden pl-2">
         {(isLoadingContent || contentError || !selectedFilePath) && (

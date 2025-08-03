@@ -3,15 +3,12 @@
 import {
   ChevronDown,
   ChevronRight,
-  ChevronsLeft,
   File,
   Folder,
   FolderOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "../ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { FileNode } from "@repo/types";
 
 interface FileChange {
@@ -150,7 +147,7 @@ export function FileExplorer({
           />
         )}
         <div
-          className={`group/item text-foreground/80 hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 hover:bg-white/10 ${
+          className={`group/item text-foreground/80 hover:text-foreground flex cursor-pointer items-center gap-1.5 overflow-hidden rounded-md px-2 py-1 hover:bg-white/10 ${
             isSelected ? "bg-white/5" : ""
           } ${showDiffOperation ? "justify-between" : ""}`}
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -162,23 +159,26 @@ export function FileExplorer({
             }
           }}
         >
-          <div className="flex items-center gap-1.5">
+          <div
+            className="flex items-center gap-1.5 overflow-hidden"
+            title={node.name}
+          >
             {node.type === "folder" ? (
               isExpanded ? (
                 <>
-                  <FolderOpen className="size-4 group-hover/item:hidden" />
-                  <ChevronDown className="hidden size-4 group-hover/item:block" />
+                  <FolderOpen className="size-4 shrink-0 group-hover/item:hidden" />
+                  <ChevronDown className="hidden size-4 shrink-0 group-hover/item:block" />
                 </>
               ) : (
                 <>
-                  <Folder className="size-4 group-hover/item:hidden" />
-                  <ChevronRight className="hidden size-4 group-hover/item:block" />
+                  <Folder className="size-4 shrink-0 group-hover/item:hidden" />
+                  <ChevronRight className="hidden size-4 shrink-0 group-hover/item:block" />
                 </>
               )
             ) : (
-              <File className="size-4" />
+              <File className="size-4 shrink-0" />
             )}
-            <span className="text-sm">{node.name}</span>
+            <span className="truncate text-sm">{node.name}</span>
           </div>
           {showDiffOperation && node.type === "file" && operation && (
             <span
@@ -200,18 +200,19 @@ export function FileExplorer({
     );
   };
 
-  // If this is being used as a collapsible sidebar (with header)
+  // If being used in Agent Environment
   if (isCollapsed !== undefined && onToggleCollapse) {
     if (!isCollapsed) {
       return (
-        <div className="bg-sidebar group/files border-border flex w-52 shrink-0 select-none flex-col gap-0.5 overflow-auto border-r p-1">
+        <div className="bg-sidebar group/files border-border flex w-48 shrink-0 select-none flex-col gap-0.5 overflow-y-auto border-r p-1">
           {files.map((file) => renderNode(file))}
         </div>
       );
     }
     return null;
   }
-  // If this is being used without the sidebar header
+
+  // If used outside of Agent Environment (e.g. agent-view sidebar)
   return (
     <div className="group/files flex flex-col gap-0.5">
       {files.map((file) => renderNode(file))}

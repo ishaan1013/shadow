@@ -13,6 +13,7 @@ export default function Terminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const isFirstRender = useRef(true);
 
   const params = useParams();
   const taskId = params?.taskId as string;
@@ -34,8 +35,8 @@ export default function Terminal() {
 
     switch (entry.type) {
       case "command":
-        // Green bold for commands
-        xterm.write(`\x1b[1;32m$ ${entry.data}\x1b[0m\r\n`);
+        // Green for commands
+        xterm.write(`\x1b[32m$ ${entry.data}\x1b[0m\r\n`);
         break;
       case "stdout":
         // Normal white text for stdout
@@ -126,6 +127,11 @@ export default function Terminal() {
 
   // Handle panel resize triggers from context
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    
     if (fitAddonRef.current) {
       fitAddonRef.current.fit();
     }
