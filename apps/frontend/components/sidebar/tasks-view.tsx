@@ -19,6 +19,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
 import { useDebounceCallback } from "@/lib/debounce";
+import { useArchiveTask } from "@/hooks/use-archive-task";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { Archive } from "lucide-react";
 
 type GroupedTasks = {
   [repoUrl: string]: {
@@ -47,6 +55,7 @@ export function SidebarTasksView({
   const searchFormRef = useRef<HTMLFormElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [groupBy, setGroupBy] = useState<GroupBy>("repo");
+  const archiveTask = useArchiveTask();
 
   // Debounced search handler
   const debouncedSearch = useDebounceCallback((query: string) => {
@@ -124,48 +133,63 @@ export function SidebarTasksView({
   const renderTaskItem = (task: Task) => {
     const displayStatus = getDisplayStatus(task);
     const StatusIcon = statusColorsConfig[displayStatus].icon;
+    
+    const handleArchiveTask = () => {
+      archiveTask.mutate(task.id);
+    };
+
     return (
       <SidebarMenuItem key={task.id}>
-        <SidebarMenuButton
-          className="flex h-auto flex-col items-start gap-0 overflow-hidden"
-          asChild
-        >
-          <a href={`/tasks/${task.id}`} className="w-full overflow-hidden">
-            <div className="flex w-full items-center gap-1.5">
-              <div className="line-clamp-1 flex-1">{task.title}</div>
-            </div>
-            <div className="text-muted-foreground flex max-w-full items-center gap-1 overflow-hidden text-xs">
-              {groupBy === "repo" ? (
-                <>
-                  <StatusIcon
-                    className={`!size-3 shrink-0 ${statusColorsConfig[displayStatus].className}`}
-                  />
-                  <span className="mr-0.5 whitespace-nowrap text-xs capitalize">
-                    {getStatusText(task).startsWith("Failed")
-                      ? "Failed"
-                      : getStatusText(task)}
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <SidebarMenuButton
+              className="flex h-auto flex-col items-start gap-0 overflow-hidden"
+              asChild
+            >
+              <a href={`/tasks/${task.id}`} className="w-full overflow-hidden">
+                <div className="flex w-full items-center gap-1.5">
+                  <div className="line-clamp-1 flex-1">{task.title}</div>
+                </div>
+                <div className="text-muted-foreground flex max-w-full items-center gap-1 overflow-hidden text-xs">
+                  {groupBy === "repo" ? (
+                    <>
+                      <StatusIcon
+                        className={`!size-3 shrink-0 ${statusColorsConfig[displayStatus].className}`}
+                      />
+                      <span className="mr-0.5 whitespace-nowrap text-xs capitalize">
+                        {getStatusText(task).startsWith("Failed")
+                          ? "Failed"
+                          : getStatusText(task)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Folder className="size-3 shrink-0" />
+                      <span
+                        className="mr-0.5 whitespace-nowrap"
+                        title={task.repoFullName}
+                      >
+                        {task.repoFullName && task.repoFullName.length > 20
+                          ? `${task.repoFullName.slice(0, 20)}...`
+                          : task.repoFullName}
+                      </span>
+                    </>
+                  )}
+                  <GitBranch className="size-3 shrink-0" />
+                  <span className="truncate" title={task.shadowBranch}>
+                    {task.shadowBranch}
                   </span>
-                </>
-              ) : (
-                <>
-                  <Folder className="size-3 shrink-0" />
-                  <span
-                    className="mr-0.5 whitespace-nowrap"
-                    title={task.repoFullName}
-                  >
-                    {task.repoFullName && task.repoFullName.length > 20
-                      ? `${task.repoFullName.slice(0, 20)}...`
-                      : task.repoFullName}
-                  </span>
-                </>
-              )}
-              <GitBranch className="size-3 shrink-0" />
-              <span className="truncate" title={task.shadowBranch}>
-                {task.shadowBranch}
-              </span>
-            </div>
-          </a>
-        </SidebarMenuButton>
+                </div>
+              </a>
+            </SidebarMenuButton>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={handleArchiveTask}>
+              <Archive className="mr-2 h-4 w-4" />
+              Archive
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       </SidebarMenuItem>
     );
   };
