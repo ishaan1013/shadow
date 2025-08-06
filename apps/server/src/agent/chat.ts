@@ -626,6 +626,7 @@ export class ChatService {
     skipUserMessageSave = false,
     workspacePath,
     queue = false,
+    thinkingConfig,
   }: {
     taskId: string;
     userMessage: string;
@@ -634,6 +635,10 @@ export class ChatService {
     skipUserMessageSave?: boolean;
     workspacePath?: string;
     queue?: boolean;
+    thinkingConfig?: {
+      enabled: boolean;
+      budgetTokens?: number;
+    };
   }) {
     // Update task's mainModel to keep it current
     await modelContextService.updateTaskMainModel(
@@ -649,6 +654,7 @@ export class ChatService {
       skipUserMessageSave,
       workspacePath,
       queue,
+      thinkingConfig,
     });
   }
 
@@ -663,6 +669,7 @@ export class ChatService {
     skipUserMessageSave = false,
     workspacePath,
     queue = false,
+    thinkingConfig,
   }: {
     taskId: string;
     userMessage: string;
@@ -671,6 +678,10 @@ export class ChatService {
     skipUserMessageSave?: boolean;
     workspacePath?: string;
     queue?: boolean;
+    thinkingConfig?: {
+      enabled: boolean;
+      budgetTokens?: number;
+    };
   }) {
     // Handle follow-up logic for COMPLETED tasks
     await this.handleFollowUpLogic(taskId);
@@ -855,7 +866,8 @@ export class ChatService {
         taskId, // Pass taskId to enable todo tool context
         workspacePath, // Pass workspace path for tool operations
         abortController.signal,
-        availableTools
+        availableTools,
+        thinkingConfig
       )) {
         if (this.stopRequested.has(taskId)) {
           console.log(`[CHAT] Stop requested during stream for task ${taskId}`);

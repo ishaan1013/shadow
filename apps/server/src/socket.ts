@@ -442,6 +442,7 @@ export function createSocketServer(
           context: modelContext,
           workspacePath: task?.workspacePath || undefined,
           queue: data.queue || false,
+          thinkingConfig: data.thinkingConfig,
         });
       } catch (error) {
         console.error("Error processing user message:", error);

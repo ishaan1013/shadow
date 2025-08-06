@@ -14,6 +14,7 @@ import type {
   FileNode,
   QueuedActionUI,
   ToolCallPart,
+  ThinkingPart,
 } from "@repo/types";
 import { TextPart, ToolResultPart } from "ai";
 import type { TaskWithDetails } from "@/lib/db-operations/get-task-with-details";
@@ -340,6 +341,14 @@ export function useTaskSocket(taskId: string | undefined) {
             };
             newPartsMap.set(partId, textPart);
             newPartsOrder.push(partId);
+          } else if (chunk.type === "thinking" && chunk.thinking) {
+            const partId = `thinking-${Date.now()}-${Math.random()}`;
+            const thinkingPart: ThinkingPart = {
+              type: "thinking",
+              thinking: chunk.thinking,
+            };
+            newPartsMap.set(partId, thinkingPart);
+            newPartsOrder.push(partId);
           } else if (chunk.type === "tool-call-start" && chunk.toolCallStart) {
             const partId = chunk.toolCallStart.id;
             const toolCallStartPart: ToolCallPart = {
@@ -420,6 +429,19 @@ export function useTaskSocket(taskId: string | undefined) {
               text: chunk.content,
             };
             addStreamingPart(textPart, `text-${Date.now()}-${Math.random()}`);
+          }
+          break;
+
+        case "thinking":
+          if (chunk.thinking) {
+            const thinkingPart: ThinkingPart = {
+              type: "thinking",
+              thinking: chunk.thinking,
+            };
+            addStreamingPart(
+              thinkingPart,
+              `thinking-${Date.now()}-${Math.random()}`
+            );
           }
           break;
 
@@ -851,15 +873,27 @@ export function useTaskSocket(taskId: string | undefined) {
 
   // Socket actions (methods to call from components)
   const sendMessage = useCallback(
-    (message: string, model: string, queue: boolean = false) => {
+    (
+      message: string,
+      model: string,
+      queue: boolean = false,
+      thinkingConfig?: { enabled: boolean; budgetTokens?: number }
+    ) => {
       if (!socket || !taskId || !message.trim()) return;
 
-      console.log("Sending message:", { taskId, message, model, queue });
+      console.log("Sending message:", {
+        taskId,
+        message,
+        model,
+        queue,
+        thinkingConfig,
+      });
       socket.emit("user-message", {
         taskId,
         message: message.trim(),
         llmModel: model as ModelType,
         queue,
+        thinkingConfig,
       });
     },
     [socket, taskId]

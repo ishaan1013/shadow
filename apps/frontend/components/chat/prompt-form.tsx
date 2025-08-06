@@ -49,6 +49,8 @@ export function PromptForm({
   initialGitCookieState,
   initialSelectedModel,
   isInitializing = false,
+  thinkingEnabled = false,
+  onThinkingToggle,
 }: {
   onSubmit?: (message: string, model: ModelType, queue: boolean) => void;
   onCreateStackedPR?: (
@@ -67,6 +69,8 @@ export function PromptForm({
   } | null;
   initialSelectedModel?: ModelType | null;
   isInitializing?: boolean;
+  thinkingEnabled?: boolean;
+  onThinkingToggle?: (enabled: boolean) => void;
 }) {
   const { taskId } = useParams<{ taskId: string }>();
 
@@ -259,6 +263,13 @@ export function PromptForm({
       formData.append("repoFullName", repo.full_name);
       formData.append("baseBranch", branch.name);
       formData.append("baseCommitSha", branch.commitSha);
+      formData.append(
+        "thinkingConfig",
+        JSON.stringify({
+          enabled: thinkingEnabled,
+          budgetTokens: 10000,
+        })
+      );
 
       startTransition(async () => {
         let taskId: string | null = null;
@@ -382,6 +393,13 @@ export function PromptForm({
     formData.append("repoFullName", repo.full_name);
     formData.append("baseBranch", branch.name);
     formData.append("baseCommitSha", branch.commitSha);
+    formData.append(
+      "thinkingConfig",
+      JSON.stringify({
+        enabled: thinkingEnabled,
+        budgetTokens: 10000,
+      })
+    );
 
     startTransition(async () => {
       let taskId: string | null = null;
@@ -535,6 +553,8 @@ export function PromptForm({
                 isHome={isHome}
                 selectedModel={selectedModel}
                 handleSelectModel={handleSelectModel}
+                thinkingEnabled={thinkingEnabled}
+                onThinkingToggle={onThinkingToggle}
               />
 
               <div className="flex items-center gap-2 overflow-hidden">

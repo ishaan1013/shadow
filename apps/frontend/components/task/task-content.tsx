@@ -7,7 +7,7 @@ import { useTaskMessages } from "@/hooks/use-task-messages";
 import { useTaskSocket } from "@/hooks/socket";
 import { useParams } from "next/navigation";
 import { ScrollToBottom } from "./scroll-to-bottom";
-import { useCallback, useMemo, memo } from "react";
+import { useCallback, useMemo, memo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ModelType } from "@repo/types";
 import { useTaskStatus } from "@/hooks/use-task-status";
@@ -23,6 +23,9 @@ function TaskPageContent() {
 
   const { data } = useTaskStatus(taskId);
   const status = data?.status;
+
+  // Thinking state management
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
   const {
     data: { messages = [], mostRecentMessageModel = null } = {},
@@ -49,10 +52,13 @@ function TaskPageContent() {
         sendMessageMutation.mutate({ taskId, message, model });
       }
 
-      // Send via socket
-      sendMessage(message, model, queue);
+      // Send via socket with thinking configuration
+      const thinkingConfig = thinkingEnabled
+        ? { enabled: true, budgetTokens: 10000 }
+        : { enabled: false };
+      sendMessage(message, model, queue, thinkingConfig);
     },
-    [taskId, sendMessageMutation, sendMessage]
+    [taskId, sendMessageMutation, sendMessage, thinkingEnabled]
   );
 
   const handleStopStream = useCallback(() => {
@@ -172,6 +178,8 @@ function TaskPageContent() {
               queryClient.setQueryData(["edit-message-id", taskId], null);
             }}
             isInitializing={status === "INITIALIZING"}
+            thinkingEnabled={thinkingEnabled}
+            onThinkingToggle={setThinkingEnabled}
           />
         </>
       )}

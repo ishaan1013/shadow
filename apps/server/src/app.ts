@@ -30,6 +30,12 @@ const initiateTaskSchema = z.object({
     errorMap: () => ({ message: "Invalid model type" }),
   }),
   userId: z.string().min(1, "User ID is required"),
+  thinkingConfig: z
+    .object({
+      enabled: z.boolean(),
+      budgetTokens: z.number().optional(),
+    })
+    .optional(),
 });
 
 const socketIOServer = http.createServer(app);
@@ -130,7 +136,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       });
     }
 
-    const { message, model, userId } = validation.data;
+    const { message, model, userId, thinkingConfig } = validation.data;
 
     // Verify task exists
     const task = await prisma.task.findUnique({
@@ -218,6 +224,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
         enableTools: true,
         skipUserMessageSave: true,
         workspacePath: updatedTask?.workspacePath || undefined,
+        thinkingConfig,
       });
 
       res.json({

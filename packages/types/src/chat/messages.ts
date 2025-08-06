@@ -16,6 +16,12 @@ export interface ErrorPart {
   finishReason?: FinishReason;
 }
 
+// Thinking part type for extended thinking
+export interface ThinkingPart {
+  type: "thinking";
+  thinking: string;
+}
+
 // Extended ToolCallPart with streaming state tracking
 export interface ToolCallPart extends BaseToolCallPart {
   // Streaming state properties
@@ -33,6 +39,7 @@ export type AssistantMessagePart =
   | TextPart
   | ToolCallPart
   | ToolResultPart
+  | ThinkingPart
   | ErrorPart;
 
 export type CompletionTokenUsage = {

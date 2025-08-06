@@ -15,11 +15,43 @@ export class ChunkHandlers {
   /**
    * Handle text-delta chunks
    */
-  handleTextDelta(chunk: AIStreamChunk & { type: "text-delta" }): StreamChunk | null {
+  handleTextDelta(
+    chunk: AIStreamChunk & { type: "text-delta" }
+  ): StreamChunk | null {
     if (chunk.textDelta) {
       return {
         type: "content",
         content: chunk.textDelta,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Handle thinking-delta chunks
+   */
+  handleThinkingDelta(
+    chunk: AIStreamChunk & { type: "thinking-delta" }
+  ): StreamChunk | null {
+    if (chunk.thinkingDelta) {
+      return {
+        type: "thinking",
+        thinking: chunk.thinkingDelta,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Handle thinking chunks
+   */
+  handleThinking(
+    chunk: AIStreamChunk & { type: "thinking" }
+  ): StreamChunk | null {
+    if (chunk.thinking) {
+      return {
+        type: "thinking",
+        thinking: chunk.thinking,
       };
     }
     return null;
@@ -103,14 +135,16 @@ export class ChunkHandlers {
     if (chunk.toolName in ToolResultSchemas) {
       toolCallMap.set(chunk.toolCallId, chunk.toolName as ToolName);
     } else {
-      console.warn(`[LLM] Invalid tool call streaming start: ${chunk.toolName}`);
+      console.warn(
+        `[LLM] Invalid tool call streaming start: ${chunk.toolName}`
+      );
     }
 
     return chunks;
   }
 
   /**
-   * Handle tool-call-delta chunks  
+   * Handle tool-call-delta chunks
    */
   handleToolCallDelta(
     chunk: AIStreamChunk & { type: "tool-call-delta" }
@@ -148,7 +182,10 @@ export class ChunkHandlers {
 
     // Validate tool execution results (not parameters - those are handled by AI SDK repair)
     // This catches: malformed tool outputs, implementation bugs, external service failures
-    const validation = this.toolValidator.validateToolResult(toolName, chunk.result);
+    const validation = this.toolValidator.validateToolResult(
+      toolName,
+      chunk.result
+    );
 
     if (validation.isValid) {
       // Valid result - emit normal tool-result

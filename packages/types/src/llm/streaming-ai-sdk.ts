@@ -43,6 +43,17 @@ export interface ToolCallDeltaChunk {
   argsTextDelta: string;
 }
 
+export interface ThinkingDeltaChunk {
+  type: "thinking-delta";
+  thinkingDelta: string;
+}
+
+export interface ThinkingChunk {
+  type: "thinking";
+  thinking: string;
+  signature?: string;
+}
+
 // Discriminated-union representing every chunk variant we care about.
 export type AIStreamChunk =
   | TextDeltaChunk
@@ -50,5 +61,7 @@ export type AIStreamChunk =
   | ToolCallStreamingStartChunk
   | ToolCallDeltaChunk
   | ToolResultChunk
+  | ThinkingDeltaChunk
+  | ThinkingChunk
   | FinishChunk
   | ErrorChunk;

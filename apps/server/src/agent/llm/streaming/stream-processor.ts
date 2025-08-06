@@ -36,7 +36,11 @@ export class StreamProcessor {
     taskId: string,
     workspacePath?: string,
     abortSignal?: AbortSignal,
-    preCreatedTools?: ToolSet
+    preCreatedTools?: ToolSet,
+    thinkingConfig?: {
+      enabled: boolean;
+      budgetTokens?: number;
+    }
   ): AsyncGenerator<StreamChunk> {
     try {
       const modelInstance = this.modelProvider.getModel(model, userApiKeys);
@@ -75,6 +79,29 @@ export class StreamProcessor {
         finalMessages = coreMessages;
       }
 
+      // Check if model supports thinking
+      const supportsThinking = (() => {
+        try {
+          const {
+            supportsThinking: supportsThinkingFn,
+          } = require("@repo/types");
+          return supportsThinkingFn(model);
+        } catch {
+          return false;
+        }
+      })();
+
+      // Determine if thinking should be enabled
+      const thinkingEnabled = thinkingConfig?.enabled ?? true; // Default to enabled for supported models
+      const shouldEnableThinking =
+        supportsThinking && isAnthropicModel && thinkingEnabled;
+
+      // Prepare headers for thinking support
+      const headers: Record<string, string> = {};
+      if (shouldEnableThinking) {
+        headers["anthropic-beta"] = "interleaved-thinking-2025-05-14";
+      }
+
       const streamConfig = {
         model: modelInstance,
         ...(isAnthropicModel ? {} : { system: systemPrompt }),
@@ -84,6 +111,17 @@ export class StreamProcessor {
         maxSteps: MAX_STEPS,
         ...(enableTools && tools && { tools, toolCallStreaming: true }),
         ...(abortSignal && { abortSignal }),
+        ...(Object.keys(headers).length > 0 && { headers }),
+        ...(shouldEnableThinking && {
+          providerOptions: {
+            anthropic: {
+              thinking: {
+                type: "enabled" as const,
+                budgetTokens: thinkingConfig?.budgetTokens ?? 10000, // Default thinking budget
+              },
+            },
+          },
+        }),
         ...(enableTools &&
           tools && {
             experimental_repairToolCall: async ({
@@ -360,6 +398,22 @@ export class StreamProcessor {
             break;
           }
 
+          case "thinking-delta": {
+            const streamChunk = this.chunkHandlers.handleThinkingDelta(chunk);
+            if (streamChunk) {
+              yield streamChunk;
+            }
+            break;
+          }
+
+          case "thinking": {
+            const streamChunk = this.chunkHandlers.handleThinking(chunk);
+            if (streamChunk) {
+              yield streamChunk;
+            }
+            break;
+          }
+
           case "tool-call": {
             const streamChunks = this.chunkHandlers.handleToolCall(
               chunk,
@@ -372,10 +426,11 @@ export class StreamProcessor {
           }
 
           case "tool-call-streaming-start": {
-            const streamChunks = this.chunkHandlers.handleToolCallStreamingStart(
-              chunk,
-              toolCallMap
-            );
+            const streamChunks =
+              this.chunkHandlers.handleToolCallStreamingStart(
+                chunk,
+                toolCallMap
+              );
             for (const streamChunk of streamChunks) {
               yield streamChunk;
             }

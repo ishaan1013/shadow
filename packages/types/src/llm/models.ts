@@ -6,6 +6,10 @@ export interface LLMConfig {
   temperature?: number;
   systemPrompt?: string;
   provider: "anthropic" | "openai" | "openrouter" /* | "groq" | "ollama" */;
+  thinking?: {
+    type: "enabled";
+    budgetTokens: number;
+  };
 }
 
 // Model Selection
@@ -29,6 +33,7 @@ export const AvailableModels = {
   CHATGPT_4O_LATEST: "chatgpt-4o-latest",
 
   // Anthropic models
+  CLAUDE_OPUS_4_1: "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4: "claude-opus-4-20250514",
   CLAUDE_SONNET_4: "claude-sonnet-4-20250514",
   CLAUDE_3_7_SONNET: "claude-3-7-sonnet-20250219",
@@ -148,6 +153,11 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
   },
 
   // Anthropic models
+  [AvailableModels.CLAUDE_OPUS_4_1]: {
+    id: AvailableModels.CLAUDE_OPUS_4_1,
+    name: "Claude Opus 4.1",
+    provider: "anthropic",
+  },
   [AvailableModels.CLAUDE_OPUS_4]: {
     id: AvailableModels.CLAUDE_OPUS_4,
     name: "Claude Opus 4",
@@ -245,6 +255,53 @@ export function getModelInfo(model: ModelType): ModelInfo {
 }
 
 /**
+ * Check if a model supports extended thinking
+ */
+export function supportsThinking(model: ModelType): boolean {
+  const thinkingModels: ModelType[] = [
+    AvailableModels.CLAUDE_OPUS_4_1,
+    AvailableModels.CLAUDE_OPUS_4,
+    AvailableModels.CLAUDE_SONNET_4,
+    AvailableModels.CLAUDE_3_7_SONNET,
+  ];
+  return thinkingModels.includes(model);
+}
+
+/**
+ * Get thinking configuration for a model
+ * @param model The model to check
+ * @param enabled Whether thinking should be enabled (default: true for supported models)
+ * @param budgetTokens The thinking budget in tokens (default: 10000)
+ * @returns Thinking configuration or null if model doesn't support thinking
+ */
+export function getThinkingConfig(
+  model: ModelType,
+  enabled: boolean = true,
+  budgetTokens: number = 10000
+): { enabled: boolean; budgetTokens: number } | null {
+  if (!supportsThinking(model)) {
+    return null;
+  }
+
+  return {
+    enabled,
+    budgetTokens,
+  };
+}
+
+/**
+ * Get all models that support thinking
+ */
+export function getThinkingModels(): ModelType[] {
+  return [
+    AvailableModels.CLAUDE_OPUS_4_1,
+    AvailableModels.CLAUDE_OPUS_4,
+    AvailableModels.CLAUDE_SONNET_4,
+    AvailableModels.CLAUDE_3_7_SONNET,
+  ];
+}
+
+/**
  * Get all possible models based on user API keys (for settings UI)
  */
 export async function getAllPossibleModels(
@@ -254,6 +311,7 @@ export async function getAllPossibleModels(
 
   if (userApiKeys.anthropic) {
     models.push(
+      AvailableModels.CLAUDE_OPUS_4_1,
       AvailableModels.CLAUDE_OPUS_4,
       AvailableModels.CLAUDE_SONNET_4,
       AvailableModels.CLAUDE_3_7_SONNET,
@@ -319,6 +377,7 @@ export async function getDefaultSelectedModels(
 
   if (userApiKeys.anthropic) {
     defaultModels.push(
+      AvailableModels.CLAUDE_OPUS_4_1, // default
       AvailableModels.CLAUDE_OPUS_4, // default
       AvailableModels.CLAUDE_SONNET_4, // default
       AvailableModels.CLAUDE_3_7_SONNET, // default

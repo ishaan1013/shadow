@@ -5,6 +5,7 @@ import type {
   ToolResultTypes,
   ValidationErrorResult,
   ToolCallPart,
+  ThinkingPart,
 } from "@repo/types";
 import {
   ChevronDown,
@@ -36,6 +37,7 @@ import {
 function getMessageCopyContent(
   groupedParts: Array<
     | { type: "text"; text: string }
+    | { type: "thinking"; part: ThinkingPart; index: number }
     | { type: "tool-call"; part: unknown; index: number }
     | { type: "tool-result"; part: unknown; index: number }
     | { type: "error"; part: ErrorPart; index: number }
@@ -126,6 +128,7 @@ export function AssistantMessage({
 
     const parts: Array<
       | { type: "text"; text: string }
+      | { type: "thinking"; part: ThinkingPart; index: number }
       | { type: "tool-call"; part: unknown; index: number }
       | { type: "tool-result"; part: unknown; index: number }
       | { type: "error"; part: ErrorPart; index: number }
@@ -142,7 +145,9 @@ export function AssistantMessage({
           currentTextGroup = "";
         }
         // Add the non-text part
-        if (part.type === "tool-call") {
+        if (part.type === "thinking") {
+          parts.push({ type: "thinking", part: part as ThinkingPart, index });
+        } else if (part.type === "tool-call") {
           parts.push({ type: "tool-call", part, index });
         } else if (part.type === "tool-result") {
           parts.push({ type: "tool-result", part, index });
@@ -192,6 +197,23 @@ export function AssistantMessage({
                 content={group.text}
                 id={`${message.id}-text-${groupIndex}`}
               />
+            </div>
+          );
+        }
+
+        if (group.type === "thinking") {
+          const part = group.part as ThinkingPart;
+          return (
+            <div key={`thinking-${groupIndex}`} className="px-3 py-2 text-sm">
+              <div className="rounded bg-blue-50 p-3 border border-blue-200">
+                <div className="text-xs text-blue-600 font-medium mb-2">
+                  Thinking
+                </div>
+                <MemoizedMarkdown
+                  content={part.thinking}
+                  id={`${message.id}-thinking-${groupIndex}`}
+                />
+              </div>
             </div>
           );
         }

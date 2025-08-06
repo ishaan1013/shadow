@@ -17,6 +17,7 @@ export function HomePageContent({
   initialSelectedModel?: ModelType | null;
 }) {
   const [isFocused, setIsFocused] = useState(true);
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
   return (
     <div className="mx-auto mt-20 flex w-full max-w-xl flex-col items-center gap-10 overflow-hidden p-4">
@@ -33,6 +34,8 @@ export function HomePageContent({
         onBlur={() => setIsFocused(false)}
         initialGitCookieState={initialGitCookieState}
         initialSelectedModel={initialSelectedModel}
+        thinkingEnabled={thinkingEnabled}
+        onThinkingToggle={setThinkingEnabled}
       />
     </div>
   );

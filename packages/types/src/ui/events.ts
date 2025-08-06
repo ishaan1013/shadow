@@ -4,7 +4,7 @@ import type { StreamChunk } from "../chat/streaming-client";
 import type { ModelType } from "../llm/models";
 
 export type QueuedActionUI = {
-  type: 'message' | 'stacked-pr';
+  type: "message" | "stacked-pr";
   message: string;
   model: ModelType;
 };
@@ -85,6 +85,10 @@ export interface ClientToServerEvents {
     message: string;
     llmModel?: ModelType;
     queue?: boolean;
+    thinkingConfig?: {
+      enabled: boolean;
+      budgetTokens?: number;
+    };
   }) => void;
   "edit-user-message": (data: {
     taskId: string;

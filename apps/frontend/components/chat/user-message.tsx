@@ -196,6 +196,8 @@ export function UserMessage({
               <ModelSelector
                 selectedModel={selectedModel}
                 handleSelectModel={handleSelectModel}
+                thinkingEnabled={false}
+                onThinkingToggle={() => {}} // No thinking toggle for editing
               />
 
               <div className="flex items-center gap-2">

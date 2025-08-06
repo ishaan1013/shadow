@@ -25,7 +25,11 @@ export class LLMService {
     taskId: string,
     workspacePath?: string,
     abortSignal?: AbortSignal,
-    preCreatedTools?: ToolSet
+    preCreatedTools?: ToolSet,
+    thinkingConfig?: {
+      enabled: boolean;
+      budgetTokens?: number;
+    }
   ): AsyncGenerator<StreamChunk> {
     yield* this.streamProcessor.createMessageStream(
       systemPrompt,
@@ -36,7 +40,8 @@ export class LLMService {
       taskId,
       workspacePath,
       abortSignal,
-      preCreatedTools
+      preCreatedTools,
+      thinkingConfig
     );
   }
 
