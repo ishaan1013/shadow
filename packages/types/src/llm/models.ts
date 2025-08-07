@@ -20,6 +20,7 @@ export const AvailableModels = {
   GPT_4_TURBO: "gpt-4-turbo",
   GPT_4: "gpt-4",
   GPT_3_5_TURBO: "gpt-3.5-turbo",
+  GPT_5: "gpt-5-2025-08-07",
   // O1: "o1",
   // O1_MINI: "o1-mini",
   // O1_PREVIEW: "o1-preview",
@@ -113,6 +114,11 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
   [AvailableModels.GPT_3_5_TURBO]: {
     id: AvailableModels.GPT_3_5_TURBO,
     name: "GPT-3.5 Turbo",
+    provider: "openai",
+  },
+  [AvailableModels.GPT_5]: {
+    id: AvailableModels.GPT_5,
+    name: "GPT-5",
     provider: "openai",
   },
   // [AvailableModels.O1]: {
@@ -289,7 +295,8 @@ export async function getAllPossibleModels(
     models.push(
       AvailableModels.GPT_4_1,
       AvailableModels.GPT_4O,
-      AvailableModels.GPT_4O_MINI
+      AvailableModels.GPT_4O_MINI,
+      AvailableModels.GPT_5
       // AvailableModels.O3,
       // AvailableModels.O4_MINI
     );
@@ -341,7 +348,8 @@ export async function getDefaultSelectedModels(
   if (userApiKeys.openai) {
     defaultModels.push(
       AvailableModels.GPT_4_1, // default
-      AvailableModels.GPT_4O // default
+      AvailableModels.GPT_4O, // default
+      AvailableModels.GPT_5 // default
       // AvailableModels.O3, // default
       // AvailableModels.O4_MINI // default
     );
