@@ -281,6 +281,20 @@ export function getModelInfo(model: ModelType): ModelInfo {
   return ModelInfos[model];
 }
 
+// Explicit reasoning-model registry to avoid regex checks elsewhere
+const ReasoningModels: Partial<Record<ModelType, true>> = {
+  [AvailableModels.GPT_5]: true,
+  [AvailableModels.GPT_5_MINI]: true,
+} as const;
+
+/**
+ * Returns true if the selected model uses reasoning-mode semantics
+ * (e.g., special parameter constraints, reasoning deltas, temperature lock).
+ */
+export function isReasoningModel(model: ModelType): boolean {
+  return Boolean(ReasoningModels[model]);
+}
+
 /**
  * Get all possible models based on user API keys (for settings UI)
  */

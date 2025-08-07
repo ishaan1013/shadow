@@ -33,10 +33,10 @@ export class ChunkHandlers {
   handleReasoning(
     chunk: AIStreamChunk & { type: "reasoning" }
   ): StreamChunk | null {
-    if (chunk.reasoning) {
+    if (chunk.textDelta) {
       return {
         type: "thinking",
-        thinking: chunk.reasoning,
+        thinking: chunk.textDelta,
       };
     }
     return null;

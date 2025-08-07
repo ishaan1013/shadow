@@ -397,6 +397,16 @@ export function useTaskSocket(taskId: string | undefined) {
             };
             newPartsMap.set(partId, toolResultPart);
             newPartsOrder.push(partId);
+          } else if (chunk.type === "thinking") {
+            // Show a single Thinking... indicator during reasoning
+            if (!newPartsMap.has("thinking")) {
+              const thinkingPart: TextPart = {
+                type: "text",
+                text: "Thinking...",
+              };
+              newPartsMap.set("thinking", thinkingPart);
+              newPartsOrder.push("thinking");
+            }
           }
         });
 
@@ -567,9 +577,19 @@ export function useTaskSocket(taskId: string | undefined) {
           console.log("Usage:", chunk.usage);
           break;
 
-        case "thinking":
-          console.log("Thinking:", chunk.thinking);
+        case "thinking": {
+          // Add or ensure a Thinking... indicator is present in the streaming parts
+          const thinkingId = "thinking";
+          const existing = streamingParts.current.get(thinkingId);
+          if (!existing) {
+            const thinkingPart: TextPart = {
+              type: "text",
+              text: "Thinking...",
+            };
+            addStreamingPart(thinkingPart, thinkingId);
+          }
           break;
+        }
 
         case "init-progress":
           if (chunk.initProgress) {

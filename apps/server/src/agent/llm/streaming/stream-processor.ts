@@ -80,8 +80,9 @@ export class StreamProcessor {
       // OpenAI reasoning models (e.g., GPT-5, o-series) reject max_tokens and require max_completion_tokens.
       // The provider adapter currently maps maxTokens -> max_tokens, so omit for those models.
       const isOpenAIProvider = modelProvider === "openai";
+      // Prefer explicit registry over regex for readability and control
       const isReasoningOpenAIModel =
-        isOpenAIProvider && /^(gpt-5|o\d)/i.test(String(model));
+        isOpenAIProvider && model.includes("gpt-5");
 
       type StreamConfig = {
         model: LanguageModel;

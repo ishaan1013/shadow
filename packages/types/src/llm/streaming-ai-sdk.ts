@@ -20,8 +20,9 @@ export interface ToolResultChunk {
 }
 
 export interface ReasoningChunk {
-  type: "reasoning"; // provider-agnostic reasoning/thinking chunk
-  reasoning: string;
+  type: "reasoning";
+  // Align with AI SDK: reasoning streams are text deltas
+  textDelta: string;
 }
 
 export interface FinishChunk {
