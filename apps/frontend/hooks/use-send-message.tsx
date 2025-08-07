@@ -21,7 +21,14 @@ export function useSendMessage() {
     },
     onMutate: async ({ taskId, message, model }) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["task-messages", taskId] });
+      try {
+        // Ignore CancelledError from in-flight queries
+        await queryClient.cancelQueries({
+          queryKey: ["task-messages", taskId],
+        });
+      } catch (_err) {
+        // no-op: query cancellations can throw in-flight CancelledError; safe to ignore
+      }
 
       // Snapshot the previous value
       const previousMessages = queryClient.getQueryData<TaskMessages>([

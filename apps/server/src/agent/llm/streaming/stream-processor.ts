@@ -16,6 +16,7 @@ import {
   InvalidToolArgumentsError,
   ToolSet,
 } from "ai";
+import type { LanguageModel } from "ai";
 import type { LanguageModelV1FunctionToolCall } from "@ai-sdk/provider";
 import { createTools } from "../../tools";
 import { ModelProvider } from "../models/model-provider";
@@ -75,12 +76,43 @@ export class StreamProcessor {
         finalMessages = coreMessages;
       }
 
-      const streamConfig = {
-        model: modelInstance,
+      // Determine whether to include maxTokens.
+      // OpenAI reasoning models (e.g., GPT-5, o-series) reject max_tokens and require max_completion_tokens.
+      // The provider adapter currently maps maxTokens -> max_tokens, so omit for those models.
+      const isOpenAIProvider = modelProvider === "openai";
+      const isReasoningOpenAIModel =
+        isOpenAIProvider && /^(gpt-5|o\d)/i.test(String(model));
+
+      type StreamConfig = {
+        model: LanguageModel;
+        system?: string;
+        messages: CoreMessage[];
+        temperature?: number;
+        maxSteps?: number;
+        maxTokens?: number;
+        tools?: ToolSet;
+        toolCallStreaming?: boolean;
+        abortSignal?: AbortSignal;
+        experimental_repairToolCall?: ({
+          system,
+          messages,
+          toolCall,
+          tools,
+          error,
+        }: {
+          system: string | undefined;
+          messages: CoreMessage[];
+          toolCall: LanguageModelV1FunctionToolCall;
+          tools: ToolSet;
+          error: NoSuchToolError | InvalidToolArgumentsError;
+        }) => Promise<LanguageModelV1FunctionToolCall | null>;
+      };
+
+      const baseConfig: StreamConfig = {
+        model: modelInstance as LanguageModel,
         ...(isAnthropicModel ? {} : { system: systemPrompt }),
         messages: finalMessages,
-        maxTokens: 4096,
-        temperature: 0.7,
+        ...(isReasoningOpenAIModel ? { temperature: 1 } : { temperature: 0.7 }),
         maxSteps: MAX_STEPS,
         ...(enableTools && tools && { tools, toolCallStreaming: true }),
         ...(abortSignal && { abortSignal }),
@@ -190,6 +222,12 @@ export class StreamProcessor {
           }),
       };
 
+      if (!isReasoningOpenAIModel) {
+        baseConfig.maxTokens = 4096;
+      }
+
+      const streamConfig: StreamConfig = baseConfig;
+
       // Log cache control usage for debugging
       if (isAnthropicModel) {
         console.log(
@@ -281,6 +319,13 @@ export class StreamProcessor {
         chunkCount++;
 
         switch (chunk.type) {
+          case "reasoning": {
+            const streamChunk = this.chunkHandlers.handleReasoning(chunk);
+            if (streamChunk) {
+              yield streamChunk;
+            }
+            break;
+          }
           case "text-delta": {
             const streamChunk = this.chunkHandlers.handleTextDelta(chunk);
             if (streamChunk) {

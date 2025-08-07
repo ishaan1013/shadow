@@ -28,6 +28,21 @@ export class ChunkHandlers {
   }
 
   /**
+   * Handle provider reasoning/thinking chunks (mapped to 'thinking' for frontend)
+   */
+  handleReasoning(
+    chunk: AIStreamChunk & { type: "reasoning" }
+  ): StreamChunk | null {
+    if (chunk.reasoning) {
+      return {
+        type: "thinking",
+        thinking: chunk.reasoning,
+      };
+    }
+    return null;
+  }
+
+  /**
    * Handle tool-call chunks
    */
   handleToolCall(

@@ -820,6 +820,8 @@ export class ChatService {
     let usageMetadata: MessageMetadata["usage"];
     let finishReason: MessageMetadata["finishReason"];
     let hasError = false;
+    let thinkingStartAt: number | null = null;
+    let thinkingBuffer = "";
 
     const toolCallSequences = new Map<string, number>();
 
@@ -908,6 +910,59 @@ export class ChatService {
                 },
               });
             }
+          }
+        }
+
+        // Handle reasoning/thinking chunks
+        if (chunk.type === "thinking" && chunk.thinking) {
+          // Track start and accumulate reasoning content
+          if (thinkingStartAt === null) thinkingStartAt = Date.now();
+          thinkingBuffer += chunk.thinking;
+
+          // Ensure assistant message exists so we can store metadata
+          if (assistantSequence === null) {
+            assistantSequence = await this.getNextSequence(taskId);
+            const assistantMsg = await this.saveAssistantMessage(
+              taskId,
+              "", // no visible content yet
+              context.getMainModel(),
+              assistantSequence,
+              {
+                isStreaming: true,
+                parts: assistantParts,
+                thinking: {
+                  content: thinkingBuffer,
+                  duration:
+                    thinkingStartAt !== null
+                      ? Math.floor((Date.now() - thinkingStartAt) / 1000)
+                      : 0,
+                },
+              }
+            );
+            assistantMessageId = assistantMsg.id;
+          } else if (assistantMessageId) {
+            const fullContent = assistantParts
+              .filter((part) => part.type === "text")
+              .map((part) => (part as TextPart).text)
+              .join("");
+
+            await prisma.chatMessage.update({
+              where: { id: assistantMessageId },
+              data: {
+                content: fullContent,
+                metadata: {
+                  isStreaming: true,
+                  parts: assistantParts,
+                  thinking: {
+                    content: thinkingBuffer,
+                    duration:
+                      thinkingStartAt !== null
+                        ? Math.floor((Date.now() - thinkingStartAt) / 1000)
+                        : 0,
+                  },
+                },
+              },
+            });
           }
         }
 
@@ -1147,6 +1202,17 @@ export class ChatService {
           finishReason,
           isStreaming: false,
           parts: assistantParts,
+          ...(thinkingBuffer
+            ? {
+                thinking: {
+                  content: thinkingBuffer,
+                  duration:
+                    thinkingStartAt !== null
+                      ? Math.floor((Date.now() - thinkingStartAt) / 1000)
+                      : 0,
+                },
+              }
+            : {}),
         };
 
         await prisma.chatMessage.update({

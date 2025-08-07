@@ -27,21 +27,36 @@ export class OpenAIAPIHandler implements APIHandler {
 
   async *createMessage(
     systemPrompt: string,
-    messages: Anthropic.Messages.MessageParam[],
+    messages: Anthropic.Messages.MessageParam[]
   ): APIStream {
     const openAiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
       ...convertToOpenAiMessages(messages),
     ];
-    const stream = await this.client.chat.completions.create({
+    // Some newer OpenAI models (e.g., o1-series, GPT-5) no longer accept `max_tokens`
+    // and require `max_completion_tokens` instead. Use a simple heuristic to choose.
+    const requiresMaxCompletionTokens =
+      this.isReasoning ||
+      /^gpt-5/i.test(this.modelName) ||
+      /^o[1-9]/i.test(this.modelName);
+
+    const payload: Record<string, unknown> = {
       model: this.modelName,
       messages: openAiMessages,
       temperature: 0.0,
-      max_tokens: 1000,
-      reasoning_effort: "high",
       stream: true,
       stream_options: { include_usage: true },
-    });
+    };
+
+    if (requiresMaxCompletionTokens) {
+      payload["max_completion_tokens"] = 1000;
+      // Only include reasoning controls for models that support it
+      payload["reasoning_effort"] = "high";
+    } else {
+      payload["max_tokens"] = 1000;
+    }
+
+    const stream = await this.client.chat.completions.create(payload as any);
 
     // Type is complex so set to any
     for await (const chunk of stream as any) {

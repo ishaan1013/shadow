@@ -11,6 +11,8 @@ export interface LLMConfig {
 // Model Selection
 export const AvailableModels = {
   // OpenAI models
+  GPT_5: "gpt-5-2025-08-07",
+  GPT_5_MINI: "gpt-5-mini-2025-08-07",
   GPT_4_1: "gpt-4.1",
   GPT_4_1_MINI: "gpt-4.1-mini",
   GPT_4_1_NANO: "gpt-4.1-nano",
@@ -148,6 +150,16 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
   [AvailableModels.CHATGPT_4O_LATEST]: {
     id: AvailableModels.CHATGPT_4O_LATEST,
     name: "ChatGPT-4o Latest",
+    provider: "openai",
+  },
+  [AvailableModels.GPT_5]: {
+    id: AvailableModels.GPT_5,
+    name: "GPT-5",
+    provider: "openai",
+  },
+  [AvailableModels.GPT_5_MINI]: {
+    id: AvailableModels.GPT_5_MINI,
+    name: "GPT-5 Mini",
     provider: "openai",
   },
 
@@ -289,7 +301,9 @@ export async function getAllPossibleModels(
     models.push(
       AvailableModels.GPT_4_1,
       AvailableModels.GPT_4O,
-      AvailableModels.GPT_4O_MINI
+      AvailableModels.GPT_4O_MINI,
+      AvailableModels.GPT_5,
+      AvailableModels.GPT_5_MINI
       // AvailableModels.O3,
       // AvailableModels.O4_MINI
     );
@@ -341,7 +355,9 @@ export async function getDefaultSelectedModels(
   if (userApiKeys.openai) {
     defaultModels.push(
       AvailableModels.GPT_4_1, // default
-      AvailableModels.GPT_4O // default
+      AvailableModels.GPT_4O, // default
+      AvailableModels.GPT_5, // default
+      AvailableModels.GPT_5_MINI // default
       // AvailableModels.O3, // default
       // AvailableModels.O4_MINI // default
     );

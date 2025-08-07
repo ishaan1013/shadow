@@ -19,6 +19,11 @@ export interface ToolResultChunk {
   result: unknown;
 }
 
+export interface ReasoningChunk {
+  type: "reasoning"; // provider-agnostic reasoning/thinking chunk
+  reasoning: string;
+}
+
 export interface FinishChunk {
   type: "finish";
   usage?: CompletionTokenUsage;
@@ -50,5 +55,6 @@ export type AIStreamChunk =
   | ToolCallStreamingStartChunk
   | ToolCallDeltaChunk
   | ToolResultChunk
+  | ReasoningChunk
   | FinishChunk
   | ErrorChunk;

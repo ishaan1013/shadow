@@ -16,7 +16,7 @@ import {
 } from "@repo/types";
 
 export class FileService {
-  constructor(private workspaceService: WorkspaceService) { }
+  constructor(private workspaceService: WorkspaceService) {}
 
   /**
    * Read file contents with optional line range
@@ -54,15 +54,21 @@ export class FileService {
         };
       }
 
-      // Handle line range reading
-      const startIdx = (startLine || 1) - 1;
-      const endIdx = endLine || lines.length;
+      // Handle line range reading (clamp to file bounds)
+      let startIdx = (startLine || 1) - 1;
+      let endIdx = endLine || lines.length;
 
-      if (startIdx < 0 || endIdx > lines.length || startIdx >= endIdx) {
+      if (startIdx < 0) startIdx = 0;
+      if (endIdx > lines.length) endIdx = lines.length;
+
+      if (startIdx >= endIdx) {
         return {
-          success: false,
-          message: `Invalid line range: ${startLine}-${endLine} for file with ${lines.length} lines`,
-          error: "INVALID_LINE_RANGE",
+          success: true,
+          content: "",
+          totalLines: lines.length,
+          startLine: startIdx + 1,
+          endLine: endIdx,
+          message: `Empty range ${startIdx + 1}-${endIdx} for ${relativePath}`,
         };
       }
 
@@ -168,7 +174,9 @@ export class FileService {
         relativePath,
         isNewFile,
         instructions,
-        linesAdded: isNewFile ? newLines : Math.max(0, newLines - existingLines),
+        linesAdded: isNewFile
+          ? newLines
+          : Math.max(0, newLines - existingLines),
         linesRemoved: isNewFile ? 0 : Math.max(0, existingLines - newLines),
       });
 
@@ -178,7 +186,9 @@ export class FileService {
           ? `Created new file: ${relativePath}`
           : `Modified file: ${relativePath}`,
         isNewFile,
-        linesAdded: isNewFile ? newLines : Math.max(0, newLines - existingLines),
+        linesAdded: isNewFile
+          ? newLines
+          : Math.max(0, newLines - existingLines),
         linesRemoved: isNewFile ? 0 : Math.max(0, existingLines - newLines),
       };
     } catch (error) {
@@ -319,13 +329,13 @@ export class FileService {
 
       // Perform replacement and calculate metrics
       const newContent = existingContent.replace(oldString, newString);
-      
+
       // Calculate line changes
       const oldLines = existingContent.split("\n");
       const newLines = newContent.split("\n");
       const oldLineCount = oldLines.length;
       const newLineCount = newLines.length;
-      
+
       const linesAdded = Math.max(0, newLineCount - oldLineCount);
       const linesRemoved = Math.max(0, oldLineCount - newLineCount);
 
@@ -376,7 +386,7 @@ export class FileService {
       const fullPath = this.workspaceService.resolvePath(relativePath);
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
 
-      const contents: DirectoryEntry[] = entries.map(entry => ({
+      const contents: DirectoryEntry[] = entries.map((entry) => ({
         name: entry.name,
         type: entry.isDirectory() ? "directory" : "file",
         isDirectory: entry.isDirectory(),
@@ -419,11 +429,13 @@ export class FileService {
   /**
    * Recursively list all files and directories in a tree
    */
-  async listDirectoryRecursive(relativePath: string = "."): Promise<RecursiveDirectoryListing> {
+  async listDirectoryRecursive(
+    relativePath: string = "."
+  ): Promise<RecursiveDirectoryListing> {
     // Folders to ignore while walking the repository
     const IGNORE_DIRS = [
       "node_modules",
-      ".git", 
+      ".git",
       ".next",
       ".turbo",
       "dist",
@@ -441,8 +453,9 @@ export class FileService {
           // Skip ignored directories
           if (IGNORE_DIRS.includes(entry.name)) continue;
 
-          const entryPath = currentPath === "." ? entry.name : `${currentPath}/${entry.name}`;
-          
+          const entryPath =
+            currentPath === "." ? entry.name : `${currentPath}/${entry.name}`;
+
           entries.push({
             name: entry.name,
             type: entry.isDirectory() ? "directory" : "file",
@@ -485,7 +498,10 @@ export class FileService {
         message: `Recursively listed ${entries.length} items starting from ${relativePath}`,
       };
     } catch (error) {
-      logger.error("Failed to list directory recursively", { relativePath, error });
+      logger.error("Failed to list directory recursively", {
+        relativePath,
+        error,
+      });
 
       if (error instanceof Error && error.message.includes("ENOENT")) {
         return {

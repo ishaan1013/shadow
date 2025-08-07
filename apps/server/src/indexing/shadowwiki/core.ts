@@ -636,12 +636,7 @@ async function summarizeFile(
       calls: new Set(),
       imports: new Set(),
     };
-    return await analyzeFileWithLLM(
-      rel,
-      src,
-      emptySymbols,
-      miniModelInstance
-    );
+    return await analyzeFileWithLLM(rel, src, emptySymbols, miniModelInstance);
   }
 
   if (!isParseableFile(src, rel)) {
@@ -660,12 +655,7 @@ async function summarizeFile(
   const needsDeepAnalysis = analyzeFileComplexity(symbols, src.length);
 
   if (needsDeepAnalysis && !skipLLM) {
-    return await analyzeFileWithLLM(
-      rel,
-      src,
-      symbols,
-      miniModelInstance
-    );
+    return await analyzeFileWithLLM(rel, src, symbols, miniModelInstance);
   } else {
     const markdown = symbolsToMarkdown(symbols);
     if (markdown) {
@@ -689,12 +679,12 @@ async function analyzeFileWithLLM(
       ext
     );
   const isCritical = isCriticalFile(rel);
-  
+
   // Skip analysis for extremely large files (over 50k chars ~ 12.5k tokens)
   if (src.length > 50000) {
-    return `Large file: ${path.basename(rel)} (${Math.round(src.length/1000)}KB) - skipped analysis due to size`;
+    return `Large file: ${path.basename(rel)} (${Math.round(src.length / 1000)}KB) - skipped analysis due to size`;
   }
-  
+
   const maxTokens = isCritical ? 15000 : isDataFile ? 4000 : 8000;
 
   let truncatedSrc = src;
@@ -762,7 +752,6 @@ async function chat(
   budget: number,
   mainModelInstance: any
 ): Promise<string> {
-
   const { text } = await withTimeout(
     generateText({
       model: mainModelInstance,
@@ -1038,8 +1027,14 @@ export async function runShadowWiki(
   );
 
   const modelProvider = new ModelProvider();
-  const miniModelInstance = modelProvider.getModel(miniModel, context.getApiKeys());
-  const mainModelInstance = modelProvider.getModel(mainModel, context.getApiKeys());
+  const miniModelInstance = modelProvider.getModel(
+    miniModel,
+    context.getApiKeys()
+  );
+  const mainModelInstance = modelProvider.getModel(
+    mainModel,
+    context.getApiKeys()
+  );
   const stats: ProcessingStats = {
     filesProcessed: 0,
     directoriesProcessed: 0,
@@ -1064,14 +1059,19 @@ export async function runShadowWiki(
   console.log(`[SHADOW-WIKI] Processing ${allFiles.length} files in batches`);
 
   // Dynamic batch size based on total files to prevent overwhelming large codebases
-  const BATCH_SIZE = Math.max(10, Math.min(50, Math.ceil(allFiles.length / 50)));
+  const BATCH_SIZE = Math.max(
+    10,
+    Math.min(50, Math.ceil(allFiles.length / 50))
+  );
   console.log(`[SHADOW-WIKI] Using batch size: ${BATCH_SIZE}`);
-  
+
   for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
     const batch = allFiles.slice(i, i + BATCH_SIZE);
     const skipLLM = consecutiveLLMFailures >= MAX_CONSECUTIVE_FAILURES;
     if (skipLLM && i === 0) {
-      console.warn(`[SHADOW-WIKI] Too many consecutive LLM failures (${consecutiveLLMFailures}), switching to symbol-only analysis`);
+      console.warn(
+        `[SHADOW-WIKI] Too many consecutive LLM failures (${consecutiveLLMFailures}), switching to symbol-only analysis`
+      );
     }
 
     const batchTasks = batch.map(async (rel) => {
@@ -1100,7 +1100,8 @@ export async function runShadowWiki(
 
     if (i + BATCH_SIZE < allFiles.length) {
       // Dynamic delay based on codebase size - smaller for larger codebases
-      const delay = allFiles.length > 1000 ? 200 : allFiles.length > 500 ? 350 : 500;
+      const delay =
+        allFiles.length > 1000 ? 200 : allFiles.length > 500 ? 350 : 500;
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -1153,11 +1154,7 @@ export async function runShadowWiki(
     return `## ${c.name}\n${c.summary || "_missing_"}`;
   });
 
-  root.summary = await summarizeRoot(
-    root,
-    topBlocks,
-    mainModelInstance
-  );
+  root.summary = await summarizeRoot(root, topBlocks, mainModelInstance);
 
   const summaryContent = {
     rootSummary: root.summary,

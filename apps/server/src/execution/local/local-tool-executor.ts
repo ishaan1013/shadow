@@ -77,13 +77,23 @@ export class LocalToolExecutor implements ToolExecutor {
         };
       }
 
-      const startLine = options?.startLineOneIndexed || 1;
-      const endLine = options?.endLineOneIndexedInclusive || lines.length;
+      // Treat provided range as bounds: clamp within file length
+      let startLine = options?.startLineOneIndexed ?? 1;
+      let endLine = options?.endLineOneIndexedInclusive ?? lines.length;
 
-      if (startLine < 1 || endLine > lines.length || startLine > endLine) {
-        throw new Error(
-          `Invalid line range: ${startLine}-${endLine} for file with ${lines.length} lines`
-        );
+      if (startLine < 1) startLine = 1;
+      if (endLine > lines.length) endLine = lines.length;
+
+      if (startLine > endLine) {
+        // Empty selection is allowed; return success with empty content
+        return {
+          success: true,
+          content: "",
+          startLine,
+          endLine,
+          totalLines: lines.length,
+          message: `Empty range ${startLine}-${endLine} for ${targetFile}`,
+        };
       }
 
       const selectedLines = lines.slice(startLine - 1, endLine);
