@@ -58,6 +58,15 @@ export interface RedactedReasoningChunk {
   data: string;
 }
 
+// Provider step lifecycle events (used as a heuristic for reasoning-in-progress)
+export interface StepStartChunk {
+  type: "step-start";
+}
+
+export interface StepFinishChunk {
+  type: "step-finish";
+}
+
 // Discriminated-union representing every chunk variant we care about.
 export type AIStreamChunk =
   | TextDeltaChunk
@@ -68,5 +77,7 @@ export type AIStreamChunk =
   | ReasoningChunk
   | ReasoningSignatureChunk
   | RedactedReasoningChunk
+  | StepStartChunk
+  | StepFinishChunk
   | FinishChunk
   | ErrorChunk;

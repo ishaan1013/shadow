@@ -410,8 +410,8 @@ export function useTaskSocket(taskId: string | undefined) {
             };
             newPartsMap.set(partId, toolResultPart);
             newPartsOrder.push(partId);
-          } else if (chunk.type === "reasoning" && chunk.reasoning) {
-            // Add reasoning immediately to parts map for live streaming
+          } else if (chunk.type === "reasoning") {
+            // Add reasoning immediately to parts map (Claude has content, GPT-5 has placeholder)
             const partId = `reasoning-${replayReasoningCounter}`;
             const existingPart = newPartsMap.get(partId);
 
@@ -419,7 +419,7 @@ export function useTaskSocket(taskId: string | undefined) {
               type: "reasoning" as const,
               text:
                 (existingPart?.type === "reasoning" ? existingPart.text : "") +
-                chunk.reasoning,
+                (chunk.reasoning || ""),
             };
 
             newPartsMap.set(partId, updatedReasoning);
@@ -657,20 +657,18 @@ export function useTaskSocket(taskId: string | undefined) {
           break;
 
         case "reasoning":
-          if (chunk.reasoning) {
-            // Add reasoning immediately to streaming parts for live streaming
-            const partId = `reasoning-${reasoningCounterRef.current}`;
-            const existingPart = streamingParts.current.get(partId);
+          // Handle reasoning content (Claude has text, GPT-5 has empty placeholder)
+          const partId = `reasoning-${reasoningCounterRef.current}`;
+          const existingPart = streamingParts.current.get(partId);
 
-            const updatedReasoning: ReasoningPart = {
-              type: "reasoning",
-              text:
-                (existingPart?.type === "reasoning" ? existingPart.text : "") +
-                chunk.reasoning,
-            };
+          const updatedReasoning: ReasoningPart = {
+            type: "reasoning",
+            text:
+              (existingPart?.type === "reasoning" ? existingPart.text : "") +
+              (chunk.reasoning || ""),
+          };
 
-            addStreamingPart(updatedReasoning, partId);
-          }
+          addStreamingPart(updatedReasoning, partId);
           break;
 
         case "reasoning-signature":

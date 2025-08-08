@@ -20,7 +20,11 @@ export function ReasoningComponent({
       type={ToolTypes.REASONING}
     >
       <div className="text-muted-foreground whitespace-pre-wrap pb-1 text-sm">
-        {part.text}
+        {part.text && part.text.trim().length > 0
+          ? part.text
+          : isLoading
+            ? "Reasoning…"
+            : "Reasoning completed"}
       </div>
     </ToolComponent>
   );

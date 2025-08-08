@@ -290,10 +290,10 @@ export function AssistantMessage({
 
         // Render reasoning parts
         if (group.type === "reasoning") {
-          // Detect if this is a streaming message and if reasoning is the latest part
+          // Show loading only when reasoning hasn't completed (no signature yet)
           const isStreamingMessage = message.metadata?.isStreaming === true;
-          const isLatestPart = groupIndex === groupedParts.length - 1;
-          const isLoading = isStreamingMessage && isLatestPart;
+          const isIncomplete = !(group.part as ReasoningPart).signature;
+          const isLoading = isStreamingMessage && isIncomplete;
 
           return (
             <ReasoningComponent

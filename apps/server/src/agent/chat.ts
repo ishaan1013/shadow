@@ -904,8 +904,8 @@ export class ChatService {
           }
         }
 
-        // Handle reasoning content chunks
-        if (chunk.type === "reasoning" && chunk.reasoning) {
+        // Handle reasoning content chunks (including empty placeholders for GPT-5 step-start)
+        if (chunk.type === "reasoning") {
           // Create new reasoning part or continue existing one
           const currentReasoning = activeReasoningParts.get(
             reasoningCounter
@@ -916,7 +916,7 @@ export class ChatService {
 
           const updatedReasoning: ReasoningPart = {
             ...currentReasoning,
-            text: currentReasoning.text + chunk.reasoning,
+            text: currentReasoning.text + (chunk.reasoning || ""),
           };
 
           activeReasoningParts.set(reasoningCounter, updatedReasoning);
@@ -926,7 +926,7 @@ export class ChatService {
             assistantSequence = await this.getNextSequence(taskId);
             const assistantMsg = await this.saveAssistantMessage(
               taskId,
-              chunk.reasoning, // Store some content for backward compatibility
+              "", // no text yet; content comes from parts
               context.getMainModel(),
               assistantSequence,
               {
@@ -1315,12 +1315,16 @@ export class ChatService {
 
           // Create checkpoint after successful completion and commit
           if (changesCommitted && assistantMessageId) {
-            console.log(`[CHAT] 📸 Creating checkpoint after successful response: task=${taskId}, message=${assistantMessageId}`);
+            console.log(
+              `[CHAT] 📸 Creating checkpoint after successful response: task=${taskId}, message=${assistantMessageId}`
+            );
             await checkpointService.createCheckpoint(
               taskId,
               assistantMessageId
             );
-            console.log(`[CHAT] ✅ Checkpoint creation completed after successful response`);
+            console.log(
+              `[CHAT] ✅ Checkpoint creation completed after successful response`
+            );
           }
         } catch (error) {
           console.error(
@@ -1525,9 +1529,13 @@ export class ChatService {
     }
 
     // Restore checkpoint state before deleting subsequent messages
-    console.log(`[CHAT] 🔄 About to restore checkpoint for message editing: task=${taskId}, message=${messageId}`);
+    console.log(
+      `[CHAT] 🔄 About to restore checkpoint for message editing: task=${taskId}, message=${messageId}`
+    );
     await checkpointService.restoreCheckpoint(taskId, messageId);
-    console.log(`[CHAT] ✅ Checkpoint restoration completed for message editing`);
+    console.log(
+      `[CHAT] ✅ Checkpoint restoration completed for message editing`
+    );
 
     // Delete all messages that come after the edited message
     await prisma.chatMessage.deleteMany({

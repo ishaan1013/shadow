@@ -53,6 +53,9 @@ export class StreamProcessor {
 
       const modelProvider = getModelProvider(model);
       const isAnthropicModel = modelProvider === "anthropic";
+      const isOpenAIModel = modelProvider === "openai";
+      // Treat any model id starting with "gpt-5" as part of the GPT-5 family (includes mini variants)
+      const isGpt5Family = (model as unknown as string)?.startsWith("gpt-5");
 
       let finalMessages: CoreMessage[];
       if (isAnthropicModel) {
@@ -78,6 +81,8 @@ export class StreamProcessor {
         finalMessages = coreMessages;
       }
 
+      const DEFAULT_GPT5_MAX_COMPLETION_TOKENS = 4096;
+
       const reasoningProviderOptions: LanguageModelV1ProviderMetadata = {
         anthropic: {
           thinking: {
@@ -85,10 +90,11 @@ export class StreamProcessor {
             budgetTokens: 12000,
           },
         },
-        ...(model === "gpt-5-2025-08-07"
+        ...(isOpenAIModel && isGpt5Family
           ? {
               openai: {
-                reasoningEffort: "high",
+                // AI SDK providerOptions style; SDK maps to OpenAI REST
+                reasoningEffort: "high" as const,
               },
             }
           : {}),
@@ -98,7 +104,12 @@ export class StreamProcessor {
         model: modelInstance,
         ...(isAnthropicModel ? {} : { system: systemPrompt }),
         messages: finalMessages,
-        temperature: 0.7,
+        // For GPT-5 family, temperature must be 1
+        temperature: isOpenAIModel && isGpt5Family ? 1 : 0.7,
+        // Map to OpenAI max_completion_tokens for reasoning models
+        ...(isOpenAIModel && isGpt5Family
+          ? { maxOutputTokens: DEFAULT_GPT5_MAX_COMPLETION_TOKENS }
+          : {}),
         maxSteps: MAX_STEPS,
         providerOptions: reasoningProviderOptions,
         ...(isAnthropicModel && {
@@ -298,12 +309,54 @@ export class StreamProcessor {
         };
         return;
       }
+      // For GPT-5 interleaved thinking: show reasoning immediately on step-start
+      const isOpenAIModelForReasoning = isOpenAIModel && isGpt5Family;
+      let gpt5ReasoningActive = false;
+      let chunkCounter = 0;
+
+      console.log(`[GPT5_DEBUG] Stream starting - isGPT5: ${isOpenAIModelForReasoning}, model: ${model}`);
 
       for await (const chunk of result.fullStream as AsyncIterable<AIStreamChunk>) {
+        chunkCounter++;
+        console.log(`[GPT5_DEBUG] #${chunkCounter} Received chunk: ${chunk.type}, reasoningActive: ${gpt5ReasoningActive}`);
+        
+        if (chunk.type === "step-start" && isOpenAIModelForReasoning) {
+          // Close previous reasoning if still active
+          if (gpt5ReasoningActive) {
+            console.log(`[GPT5_DEBUG] #${chunkCounter} CLOSING previous reasoning (was active)`);
+            yield { type: "reasoning-signature", reasoningSignature: "gpt5" };
+          }
+          console.log(`[GPT5_DEBUG] #${chunkCounter} STARTING new reasoning session`);
+          yield { type: "reasoning", reasoning: "" };
+          gpt5ReasoningActive = true;
+          continue;
+        }
+        
+        if (chunk.type === "step-finish" && isOpenAIModelForReasoning) {
+          console.log(`[GPT5_DEBUG] #${chunkCounter} SKIPPING step-finish (reasoning: ${gpt5ReasoningActive})`);
+          continue; // Skip step-finish, we handle reasoning close on content
+        }
+
+        // Close reasoning ONLY for actual text output, NOT for tool calls (tools are part of reasoning)
+        if (gpt5ReasoningActive && isOpenAIModelForReasoning && chunk.type === "text-delta") {
+          console.log(`[GPT5_DEBUG] #${chunkCounter} CLOSING reasoning BEFORE text-delta`);
+          yield { type: "reasoning-signature", reasoningSignature: "gpt5" };
+          gpt5ReasoningActive = false;
+        }
+        
+        // DEBUG: Log reasoning state during tool execution
+        if (gpt5ReasoningActive && isOpenAIModelForReasoning && 
+            (chunk.type.startsWith("tool-call") || chunk.type === "tool-result")) {
+          console.log(`[GPT5_DEBUG] #${chunkCounter} KEEPING reasoning ACTIVE during ${chunk.type}`);
+        }
+
+        console.log(`[GPT5_DEBUG] #${chunkCounter} Processing chunk in switch: ${chunk.type}`);
+        
         switch (chunk.type) {
           case "text-delta": {
             const streamChunk = this.chunkHandlers.handleTextDelta(chunk);
             if (streamChunk) {
+              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING text-delta:`, streamChunk.type);
               yield streamChunk;
             }
             break;
@@ -315,6 +368,7 @@ export class StreamProcessor {
               toolCallMap
             );
             for (const streamChunk of streamChunks) {
+              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING tool-call:`, streamChunk.type, 'toolCall' in streamChunk ? streamChunk.toolCall?.name : 'N/A');
               yield streamChunk;
             }
             break;
@@ -327,6 +381,7 @@ export class StreamProcessor {
                 toolCallMap
               );
             for (const streamChunk of streamChunks) {
+              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING tool-call-start:`, streamChunk.type, 'toolCallStart' in streamChunk ? streamChunk.toolCallStart?.name : 'N/A');
               yield streamChunk;
             }
             break;
@@ -362,6 +417,7 @@ export class StreamProcessor {
           case "reasoning": {
             const streamChunk = this.chunkHandlers.handleReasoning(chunk);
             if (streamChunk) {
+              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING reasoning:`, streamChunk.type);
               yield streamChunk;
             }
             break;
@@ -371,6 +427,7 @@ export class StreamProcessor {
             const streamChunk =
               this.chunkHandlers.handleReasoningSignature(chunk);
             if (streamChunk) {
+              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING reasoning-signature:`, streamChunk.type);
               yield streamChunk;
             }
             break;
