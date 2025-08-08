@@ -314,49 +314,75 @@ export class StreamProcessor {
       let gpt5ReasoningActive = false;
       let chunkCounter = 0;
 
-      console.log(`[GPT5_DEBUG] Stream starting - isGPT5: ${isOpenAIModelForReasoning}, model: ${model}`);
+      console.log(
+        `[GPT5_DEBUG] Stream starting - isGPT5: ${isOpenAIModelForReasoning}, model: ${model}`
+      );
 
       for await (const chunk of result.fullStream as AsyncIterable<AIStreamChunk>) {
         chunkCounter++;
-        console.log(`[GPT5_DEBUG] #${chunkCounter} Received chunk: ${chunk.type}, reasoningActive: ${gpt5ReasoningActive}`);
-        
+        console.log(
+          `[GPT5_DEBUG] #${chunkCounter} Received chunk: ${chunk.type}, reasoningActive: ${gpt5ReasoningActive}`
+        );
+
         if (chunk.type === "step-start" && isOpenAIModelForReasoning) {
           // Close previous reasoning if still active
           if (gpt5ReasoningActive) {
-            console.log(`[GPT5_DEBUG] #${chunkCounter} CLOSING previous reasoning (was active)`);
+            console.log(
+              `[GPT5_DEBUG] #${chunkCounter} CLOSING previous reasoning (was active)`
+            );
             yield { type: "reasoning-signature", reasoningSignature: "gpt5" };
           }
-          console.log(`[GPT5_DEBUG] #${chunkCounter} STARTING new reasoning session`);
+          console.log(
+            `[GPT5_DEBUG] #${chunkCounter} STARTING new reasoning session`
+          );
           yield { type: "reasoning", reasoning: "" };
           gpt5ReasoningActive = true;
           continue;
         }
-        
+
         if (chunk.type === "step-finish" && isOpenAIModelForReasoning) {
-          console.log(`[GPT5_DEBUG] #${chunkCounter} SKIPPING step-finish (reasoning: ${gpt5ReasoningActive})`);
+          console.log(
+            `[GPT5_DEBUG] #${chunkCounter} SKIPPING step-finish (reasoning: ${gpt5ReasoningActive})`
+          );
           continue; // Skip step-finish, we handle reasoning close on content
         }
 
         // Close reasoning ONLY for actual text output, NOT for tool calls (tools are part of reasoning)
-        if (gpt5ReasoningActive && isOpenAIModelForReasoning && chunk.type === "text-delta") {
-          console.log(`[GPT5_DEBUG] #${chunkCounter} CLOSING reasoning BEFORE text-delta`);
+        if (
+          gpt5ReasoningActive &&
+          isOpenAIModelForReasoning &&
+          chunk.type === "text-delta"
+        ) {
+          console.log(
+            `[GPT5_DEBUG] #${chunkCounter} CLOSING reasoning BEFORE text-delta`
+          );
           yield { type: "reasoning-signature", reasoningSignature: "gpt5" };
           gpt5ReasoningActive = false;
         }
-        
+
         // DEBUG: Log reasoning state during tool execution
-        if (gpt5ReasoningActive && isOpenAIModelForReasoning && 
-            (chunk.type.startsWith("tool-call") || chunk.type === "tool-result")) {
-          console.log(`[GPT5_DEBUG] #${chunkCounter} KEEPING reasoning ACTIVE during ${chunk.type}`);
+        if (
+          gpt5ReasoningActive &&
+          isOpenAIModelForReasoning &&
+          (chunk.type.startsWith("tool-call") || chunk.type === "tool-result")
+        ) {
+          console.log(
+            `[GPT5_DEBUG] #${chunkCounter} KEEPING reasoning ACTIVE during ${chunk.type}`
+          );
         }
 
-        console.log(`[GPT5_DEBUG] #${chunkCounter} Processing chunk in switch: ${chunk.type}`);
-        
+        console.log(
+          `[GPT5_DEBUG] #${chunkCounter} Processing chunk in switch: ${chunk.type}`
+        );
+
         switch (chunk.type) {
           case "text-delta": {
             const streamChunk = this.chunkHandlers.handleTextDelta(chunk);
             if (streamChunk) {
-              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING text-delta:`, streamChunk.type);
+              console.log(
+                `[GPT5_DEBUG] #${chunkCounter} YIELDING text-delta:`,
+                streamChunk.type
+              );
               yield streamChunk;
             }
             break;
@@ -368,7 +394,11 @@ export class StreamProcessor {
               toolCallMap
             );
             for (const streamChunk of streamChunks) {
-              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING tool-call:`, streamChunk.type, 'toolCall' in streamChunk ? streamChunk.toolCall?.name : 'N/A');
+              console.log(
+                `[GPT5_DEBUG] #${chunkCounter} YIELDING tool-call:`,
+                streamChunk.type,
+                "toolCall" in streamChunk ? streamChunk.toolCall?.name : "N/A"
+              );
               yield streamChunk;
             }
             break;
@@ -381,7 +411,13 @@ export class StreamProcessor {
                 toolCallMap
               );
             for (const streamChunk of streamChunks) {
-              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING tool-call-start:`, streamChunk.type, 'toolCallStart' in streamChunk ? streamChunk.toolCallStart?.name : 'N/A');
+              console.log(
+                `[GPT5_DEBUG] #${chunkCounter} YIELDING tool-call-start:`,
+                streamChunk.type,
+                "toolCallStart" in streamChunk
+                  ? streamChunk.toolCallStart?.name
+                  : "N/A"
+              );
               yield streamChunk;
             }
             break;
@@ -417,7 +453,10 @@ export class StreamProcessor {
           case "reasoning": {
             const streamChunk = this.chunkHandlers.handleReasoning(chunk);
             if (streamChunk) {
-              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING reasoning:`, streamChunk.type);
+              console.log(
+                `[GPT5_DEBUG] #${chunkCounter} YIELDING reasoning:`,
+                streamChunk.type
+              );
               yield streamChunk;
             }
             break;
@@ -427,7 +466,10 @@ export class StreamProcessor {
             const streamChunk =
               this.chunkHandlers.handleReasoningSignature(chunk);
             if (streamChunk) {
-              console.log(`[GPT5_DEBUG] #${chunkCounter} YIELDING reasoning-signature:`, streamChunk.type);
+              console.log(
+                `[GPT5_DEBUG] #${chunkCounter} YIELDING reasoning-signature:`,
+                streamChunk.type
+              );
               yield streamChunk;
             }
             break;
