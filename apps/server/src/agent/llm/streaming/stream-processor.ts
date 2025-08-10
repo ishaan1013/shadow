@@ -86,13 +86,9 @@ export class StreamProcessor {
             budgetTokens: 12000,
           },
         },
-        // ...(model === "gpt-5-2025-08-07"
-        //   ? {
-        //       openai: {
-        //         reasoningEffort: "high",
-        //       },
-        //     }
-        //   : {}),
+        openai: {
+          reasoningEffort: "high",
+        },
       };
 
       const streamConfig = {
