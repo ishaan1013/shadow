@@ -34,7 +34,6 @@ export const AvailableModels = {
   XAI_GROK_3: "x-ai/grok-3",
   // OPENAI_GPT_OSS_120B: "openai/gpt-oss-120b",
   // OPENAI_GPT_OSS_20B: "openai/gpt-oss-20b",
-  OPENROUTER_HORIZON_BETA: "openrouter/horizon-beta",
   MISTRAL_CODESTRAL_2508: "mistralai/codestral-2508",
   DEEPSEEK_R1_0528: "deepseek/deepseek-r1-0528",
   DEEPSEEK_CHAT_V3_0324: "deepseek/deepseek-chat-v3-0324",
@@ -163,11 +162,6 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
   //   name: "GPT OSS 20B",
   //   provider: "openrouter",
   // },
-  [AvailableModels.OPENROUTER_HORIZON_BETA]: {
-    id: AvailableModels.OPENROUTER_HORIZON_BETA,
-    name: "Horizon Beta (Free)",
-    provider: "openrouter",
-  },
   [AvailableModels.MISTRAL_CODESTRAL_2508]: {
     id: AvailableModels.MISTRAL_CODESTRAL_2508,
     name: "Codestral 2508",
@@ -255,7 +249,6 @@ export async function getAllPossibleModels(
       AvailableModels.XAI_GROK_3,
       // AvailableModels.OPENAI_GPT_OSS_120B,
       // AvailableModels.OPENAI_GPT_OSS_20B,
-      // AvailableModels.OPENROUTER_HORIZON_BETA,
       AvailableModels.MISTRAL_CODESTRAL_2508,
       AvailableModels.DEEPSEEK_R1_0528,
       AvailableModels.DEEPSEEK_CHAT_V3_0324,
@@ -311,18 +304,11 @@ export async function getDefaultSelectedModels(
   }
 
   if (userApiKeys.openrouter) {
-    // All OpenRouter models default
     defaultModels.push(
       AvailableModels.XAI_GROK_3,
-      // AvailableModels.OPENAI_GPT_OSS_120B,
-      // AvailableModels.OPENAI_GPT_OSS_20B,
-      // AvailableModels.OPENROUTER_HORIZON_BETA,
       AvailableModels.MISTRAL_CODESTRAL_2508,
       AvailableModels.DEEPSEEK_R1_0528,
       AvailableModels.DEEPSEEK_CHAT_V3_0324,
-      // AvailableModels.OPENAI_CODEX_MINI, // Removed - returns "Bad Request"
-      // AvailableModels.QWEN_2_5_CODER_32B_INSTRUCT_FREE, // Removed - rate limiting issues
-      // AvailableModels.MOONSHOT_KIMI_K2_FREE, // Removed - rate limiting issues
       AvailableModels.QWEN_3_235B_A22B_2507
     );
   }
