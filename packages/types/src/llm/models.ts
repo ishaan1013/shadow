@@ -255,7 +255,7 @@ export async function getAllPossibleModels(
       AvailableModels.XAI_GROK_3,
       // AvailableModels.OPENAI_GPT_OSS_120B,
       // AvailableModels.OPENAI_GPT_OSS_20B,
-      AvailableModels.OPENROUTER_HORIZON_BETA,
+      // AvailableModels.OPENROUTER_HORIZON_BETA,
       AvailableModels.MISTRAL_CODESTRAL_2508,
       AvailableModels.DEEPSEEK_R1_0528,
       AvailableModels.DEEPSEEK_CHAT_V3_0324,
