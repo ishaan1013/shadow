@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Task } from "@repo/db";
 
-export function useArchiveTask() {
+export function useDeleteTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const response = await fetch(`/api/tasks/${taskId}/archive`, {
-        method: "POST",
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
         headers: {
           "Content-Type": "application/json",
         },
@@ -15,7 +15,7 @@ export function useArchiveTask() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to archive task");
+        throw new Error(error.error || "Failed to delete task");
       }
 
       return response.json();
@@ -28,9 +28,7 @@ export function useArchiveTask() {
       queryClient.setQueryData<Task[]>(["tasks"], (oldTasks) => {
         if (!oldTasks) return oldTasks;
 
-        return oldTasks.map((task) =>
-          task.id === taskId ? { ...task, status: "ARCHIVED" as const } : task
-        );
+        return oldTasks.filter((task) => task.id !== taskId);
       });
 
       return { previousTasks };

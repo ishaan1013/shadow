@@ -57,3 +57,18 @@ export const MemoizedMarkdown = memo(
 );
 
 MemoizedMarkdown.displayName = "MemoizedMarkdown";
+
+export function FadedMarkdown({
+  content,
+  id,
+}: {
+  content: string;
+  id: string;
+}) {
+  return (
+    <div className="relative z-0 max-h-96 overflow-hidden opacity-70">
+      <div className="from-background absolute -bottom-px left-0 z-10 h-24 w-full bg-gradient-to-t to-transparent" />
+      <MemoizedMarkdown content={content} id={id} />
+    </div>
+  );
+}

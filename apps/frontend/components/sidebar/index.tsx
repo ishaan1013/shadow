@@ -107,7 +107,7 @@ export function SidebarViews({
       <Sidebar>
         <SidebarContent>
           <SidebarGroup className="flex h-7 flex-row items-center justify-between">
-            <div className="flex items-center gap-1.5 overflow-hidden">
+            <div className="flex select-none items-center gap-1.5 overflow-hidden">
               <div className="truncate font-medium">
                 {sidebarViewLabels[sidebarView].label}
               </div>

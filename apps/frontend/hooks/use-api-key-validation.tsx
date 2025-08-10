@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { ApiKeyProvider } from "@repo/types";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -6,14 +7,21 @@ export interface ValidationResult {
   latencyMs?: number;
 }
 
-export type ValidationResults = Record<string, ValidationResult>;
+export interface ValidationResults {
+  individualVerification: boolean;
+  [provider: string]: ValidationResult | boolean;
+}
 
 export function useValidateApiKeys() {
   return useMutation({
-    mutationFn: async (): Promise<ValidationResults> => {
+    mutationFn: async (provider?: ApiKeyProvider): Promise<ValidationResults> => {
       const response = await fetch("/api/validate-keys", {
         method: "POST",
         credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: provider ? JSON.stringify({ provider }) : undefined,
       });
       
       if (!response.ok) {

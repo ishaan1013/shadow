@@ -23,7 +23,6 @@ export function useSendMessage() {
       return { taskId, message, model };
     },
     onMutate: async ({ taskId, message, model }) => {
-      // Cancel any outgoing refetches; ignore cancellation errors surfacing from in-flight queries
       try {
         await queryClient.cancelQueries({
           queryKey: ["task-messages", taskId],
@@ -35,13 +34,11 @@ export function useSendMessage() {
         }
       }
 
-      // Snapshot the previous value
       const previousMessages = queryClient.getQueryData<Message[]>([
         "task-messages",
         taskId,
       ]);
 
-      // Optimistically update with new message
       const optimisticMessage: Message = {
         id: `temp-${Date.now()}`,
         role: "user",
@@ -57,11 +54,9 @@ export function useSendMessage() {
         return [...currentMessages, optimisticMessage];
       });
 
-      // Return a context object with the snapshotted value
       return { previousMessages };
     },
     onError: (_err, variables, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousMessages) {
         queryClient.setQueryData(
           ["task-messages", variables.taskId],

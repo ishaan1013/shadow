@@ -1,6 +1,6 @@
 import type { Message } from "@repo/types";
 import { ToolComponent } from "./tool";
-import { MemoizedMarkdown } from "../memoized-markdown";
+import { FadedMarkdown } from "../memoized-markdown";
 import { ToolTypes, getMCPToolTitle, getMCPToolPrefix } from "@repo/types";
 import { MCPLogo } from "@/components/graphics/icons/mcp-logo";
 
@@ -74,15 +74,5 @@ export function MCPTool({ message }: { message: Message }) {
       {/* ONLY the markdown content - no headers, no arguments, no status */}
       {renderMarkdownOnly()}
     </ToolComponent>
-  );
-}
-
-function FadedMarkdown({ content, id }: { content: string; id: string }) {
-  return (
-    <div className="relative z-0 max-h-96 overflow-hidden opacity-70">
-      <div className="to-background absolute -bottom-px left-0 z-10 h-24 w-full bg-gradient-to-b from-transparent" />
-      <div className="to-background absolute -top-px left-0 z-10 h-24 w-full bg-gradient-to-t from-transparent" />
-      <MemoizedMarkdown content={content} id={id} />
-    </div>
   );
 }

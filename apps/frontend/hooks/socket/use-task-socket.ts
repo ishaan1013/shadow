@@ -55,9 +55,6 @@ function updateCodebaseTreeOptimistically(
 ): FileNode[] {
   const { operation, filePath, isDirectory } = fsChange;
 
-  console.log(
-    `[OPTIMISTIC_TREE_UPDATE] ${operation} ${filePath} (isDirectory: ${isDirectory})`
-  );
 
   if (operation === "file-created" || operation === "directory-created") {
     return addNodeToTree(
@@ -285,11 +282,9 @@ export function useTaskSocket(taskId: string | undefined) {
   useEffect(() => {
     if (socket && taskId && isConnected) {
       socket.emit("join-task", { taskId });
-      console.log(`[SOCKET] Joined task room: ${taskId}`);
 
       return () => {
         socket.emit("leave-task", { taskId });
-        console.log(`[SOCKET] Left task room: ${taskId}`);
       };
     }
   }, [socket, taskId, isConnected]);
@@ -327,7 +322,6 @@ export function useTaskSocket(taskId: string | undefined) {
       isStreaming: boolean;
       totalChunks: number;
     }) {
-      console.log("Received stream state:", state);
       setStreamingStatus(
         state.isStreaming ? StreamingStatus.STREAMING : StreamingStatus.IDLE
       );
@@ -462,14 +456,10 @@ export function useTaskSocket(taskId: string | undefined) {
 
         streamingParts.update(() => newPartsMap);
         setStreamingPartsOrder(newPartsOrder);
-        console.log(
-          `[STREAM_STATE] Reconstructed ${newPartsMap.size} parts from ${state.chunks.length} chunks`
-        );
       }
     }
 
     function onStreamChunk(chunk: StreamChunk) {
-      console.log("onStreamChunk", chunk);
       setStreamingStatus(StreamingStatus.STREAMING);
 
       // Handle different types of stream chunks
@@ -708,7 +698,6 @@ export function useTaskSocket(taskId: string | undefined) {
 
         case "init-progress":
           if (chunk.initProgress) {
-            console.log("Initialization progress:", chunk.initProgress);
 
             queryClient.setQueryData(
               ["task", taskId],
@@ -719,7 +708,6 @@ export function useTaskSocket(taskId: string | undefined) {
                   task: {
                     ...oldData.task,
                     initStatus:
-                      chunk.initProgress?.initStatus ||
                       chunk.initProgress?.currentStep ||
                       oldData.task?.initStatus,
                     initializationError: chunk.initProgress?.error || null,
@@ -736,7 +724,7 @@ export function useTaskSocket(taskId: string | undefined) {
                 return {
                   ...oldData,
                   initStatus:
-                    chunk.initProgress?.initStatus || oldData.initStatus,
+                    chunk.initProgress?.currentStep || oldData.initStatus,
                 };
               }
             );
@@ -748,9 +736,7 @@ export function useTaskSocket(taskId: string | undefined) {
                     ? {
                         ...task,
                         initStatus:
-                          chunk.initProgress?.initStatus ||
-                          chunk.initProgress?.currentStep ||
-                          task.initStatus,
+                          chunk.initProgress?.currentStep || task.initStatus,
                         initializationError: chunk.initProgress?.error || null,
                         updatedAt: new Date().toISOString(),
                       }

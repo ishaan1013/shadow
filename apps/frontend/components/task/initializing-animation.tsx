@@ -6,7 +6,6 @@ import { Check } from "lucide-react";
 import { LogoHover } from "../graphics/logo/logo-hover";
 import { useEffect, useMemo, useState } from "react";
 import { useTaskStatus } from "@/hooks/use-task-status";
-import { useUserSettings } from "@/hooks/use-user-settings";
 
 // height of each step
 const LINE_HEIGHT = 20;
@@ -23,7 +22,6 @@ export default function InitializingAnimation({
 }) {
   const { data } = useTaskStatus(taskId);
   const { status, initStatus } = data || {};
-  const { data: userSettings } = useUserSettings();
 
   const [topSpacing, setTopSpacing] = useState(0);
   useEffect(() => {
@@ -38,23 +36,15 @@ export default function InitializingAnimation({
       ? "remote"
       : "local";
 
-  // Use user settings to determine which steps to show
-  const steps = useMemo(
-    () =>
-      getStepsForMode(mode, {
-        enableShadowWiki: userSettings?.enableShadowWiki ?? true,
-        enableIndexing: userSettings?.enableIndexing ?? true,
-      }),
-    [mode, userSettings]
-  );
+  // Get initialization steps for the current mode
+  const steps = useMemo(() => getStepsForMode(mode), [mode]);
 
   let currentStepIndex = 0;
 
   if (initStatus === "ACTIVE") {
     currentStepIndex = steps.length; // All steps completed
   } else if (initStatus && initStatus !== "INACTIVE") {
-    const stepIndex = steps.findIndex((step) => step === initStatus);
-    currentStepIndex = stepIndex >= 0 ? stepIndex + 1 : 0;
+    currentStepIndex = steps.findIndex((step) => step === initStatus);
   }
 
   return (

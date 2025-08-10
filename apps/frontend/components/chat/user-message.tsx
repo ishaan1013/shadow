@@ -10,7 +10,7 @@ import { useEditMessageId } from "@/hooks/use-edit-message-id";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useEditMessage } from "@/hooks/use-edit-message";
-import { StreamingStatus, type StreamingStatusSetter } from "@/lib/constants";
+import { type StreamingStatusSetter } from "@/lib/constants";
 
 const MAX_CONTENT_HEIGHT = 128;
 
@@ -144,6 +144,7 @@ export function UserMessage({
       handleStartEditing={handleStartEditing}
       isFirstMessage={isFirstMessage}
       className={className}
+      disableEditing={disableEditing}
     >
       {isEditing ? (
         <>
@@ -247,6 +248,7 @@ function UserMessageWrapper({
   className,
   handleStartEditing,
   userMessageWrapperRef,
+  disableEditing,
 }: {
   children: React.ReactNode;
   isEditing: boolean;
@@ -254,6 +256,7 @@ function UserMessageWrapper({
   className?: string;
   handleStartEditing: () => void;
   userMessageWrapperRef: React.RefObject<HTMLButtonElement | null>;
+  disableEditing: boolean;
 }) {
   if (isEditing) {
     return (
@@ -275,10 +278,11 @@ function UserMessageWrapper({
       ref={userMessageWrapperRef}
       onClick={handleStartEditing}
       className={cn(
-        "sticky top-16 z-10 w-full cursor-pointer rounded-[calc(var(--radius)+1px)] p-px text-left transition-all",
+        "sticky top-16 z-10 w-full rounded-[calc(var(--radius)+1px)] p-px text-left transition-all",
         "focus-visible:ring-ring/10 focus-visible:outline-none focus-visible:ring-4",
         "user-message-border user-message-shadow",
         !isFirstMessage && "mt-9",
+        !disableEditing && "cursor-pointer",
         className
       )}
     >

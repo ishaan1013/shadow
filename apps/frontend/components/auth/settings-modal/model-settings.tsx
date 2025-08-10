@@ -19,7 +19,7 @@ import { useValidateApiKeys } from "@/hooks/use-api-key-validation";
 import {
   Loader2,
   Trash,
-  CheckCircle,
+  CheckCircle2,
   X,
   Settings,
   Eye,
@@ -41,10 +41,6 @@ export function ModelSettings() {
   const saveValidationMutation = useSaveApiKeyValidation();
   const queryClient = useQueryClient();
   const { openProviderConfig } = useModal();
-
-  useEffect(() => {
-    console.log("apiKeys", apiKeys);
-  }, [apiKeys]);
 
   const [openaiInput, setOpenaiInput] = useState(apiKeys?.openai ?? "");
   const [anthropicInput, setAnthropicInput] = useState(
@@ -74,13 +70,13 @@ export function ModelSettings() {
 
   const renderValidationIcon = (provider: string) => {
     const result = validationState?.[provider as keyof typeof validationState];
-    if (!result) return null;
+    if (!result || !apiKeys?.[provider as keyof typeof apiKeys]) return null;
 
     if (result.isValid) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>
-            <CheckCircle className="size-3.5 text-gray-400" />
+            <CheckCircle2 className="size-3.5 text-green-400" />
           </TooltipTrigger>
           <TooltipContent>Valid API key</TooltipContent>
         </Tooltip>
@@ -131,11 +127,12 @@ export function ModelSettings() {
           // Wait a bit for the API key to be saved before validating
           await new Promise((resolve) => setTimeout(resolve, 100));
 
-          const results = await validateApiKeysMutation.mutateAsync();
+          const results = await validateApiKeysMutation.mutateAsync(provider);
 
           // Save validation results for each provider that was validated
-          const savePromises = Object.entries(results).map(
-            async ([validationProvider, result]) => {
+          const savePromises = Object.entries(results)
+            .filter(([key]) => key !== "individualVerification")
+            .map(async ([validationProvider, result]) => {
               try {
                 await saveValidationMutation.mutateAsync({
                   provider: validationProvider as ApiKeyProvider,
@@ -147,10 +144,23 @@ export function ModelSettings() {
                   saveError
                 );
               }
-            }
-          );
+            });
 
           await Promise.all(savePromises);
+
+          // Show toast notification for individual validation
+          if (results.individualVerification) {
+            const validationResult = results[provider] as any;
+            if (validationResult?.isValid) {
+              toast.success(
+                `${provider.charAt(0).toUpperCase() + provider.slice(1)} API key validated successfully!`
+              );
+            } else {
+              toast.error(
+                `${provider.charAt(0).toUpperCase() + provider.slice(1)} API key validation failed: ${validationResult?.error || "Unknown error"}`
+              );
+            }
+          }
 
           // Invalidate validation query to refresh the UI
           queryClient.invalidateQueries({ queryKey: ["api-key-validation"] });

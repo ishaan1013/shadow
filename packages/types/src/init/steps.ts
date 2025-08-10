@@ -9,43 +9,35 @@ export const STEP_DISPLAY_NAMES: Record<InitStatus, string> = {
   CREATE_VM: "Creating VM",
   WAIT_VM_READY: "Starting VM",
   VERIFY_VM_WORKSPACE: "Verifying Workspace",
+  START_BACKGROUND_SERVICES: "Starting Background Services",
   INSTALL_DEPENDENCIES: "Installing Dependencies",
-  INDEX_REPOSITORY: "Indexing Repository",
+  FINALIZE_SETUP: "Finalizing Setup",
   ACTIVE: "Active",
-  GENERATE_SHADOW_WIKI: "Understanding Your Codebase",
 };
 
 /**
  * Get all step display names in execution order for a given mode
  */
-export function getStepsForMode(
-  mode: "local" | "remote",
-  options?: { enableShadowWiki?: boolean; enableIndexing?: boolean }
-): InitStatus[] {
+export function getStepsForMode(mode: "local" | "remote"): InitStatus[] {
   const steps: InitStatus[] = [];
-  const enableShadowWiki = options?.enableShadowWiki ?? true; // Default to true
-  const enableIndexing = options?.enableIndexing ?? true; // Default to true
+  // Background services are enabled by default and run in parallel
 
   if (mode === "remote") {
-    steps.push("CREATE_VM", "WAIT_VM_READY", "VERIFY_VM_WORKSPACE", "INSTALL_DEPENDENCIES");
-
-    if (enableShadowWiki) {
-      steps.push("GENERATE_SHADOW_WIKI");
-    }
-
-    if (enableIndexing) {
-      steps.push("INDEX_REPOSITORY");
-    }
+    steps.push(
+      "CREATE_VM",
+      "WAIT_VM_READY",
+      "VERIFY_VM_WORKSPACE",
+      "START_BACKGROUND_SERVICES",
+      "INSTALL_DEPENDENCIES",
+      "FINALIZE_SETUP"
+    );
   } else {
-    steps.push("PREPARE_WORKSPACE", "INSTALL_DEPENDENCIES");
-
-    if (enableShadowWiki) {
-      steps.push("GENERATE_SHADOW_WIKI");
-    }
-
-    if (enableIndexing) {
-      steps.push("INDEX_REPOSITORY");
-    }
+    steps.push(
+      "PREPARE_WORKSPACE",
+      "START_BACKGROUND_SERVICES",
+      "INSTALL_DEPENDENCIES",
+      "FINALIZE_SETUP"
+    );
   }
 
   return steps;

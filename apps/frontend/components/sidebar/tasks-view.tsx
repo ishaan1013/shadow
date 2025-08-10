@@ -12,12 +12,18 @@ import {
   GitBranch,
   Search,
   X,
-  List,
   Archive,
   Plus,
   Minus,
+  ListFilter,
+  Copy,
+  Trash,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,6 +42,18 @@ import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
 import { useDebounceCallback } from "@/lib/debounce";
 import { useArchiveTask } from "@/hooks/use-archive-task";
+import { useDeleteTask } from "@/hooks/use-delete-task";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { GithubLogo } from "@/components/graphics/github/github-logo";
+import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 
 type TaskGroup = {
   repoName: string;
@@ -69,6 +87,8 @@ export function SidebarTasksView({
   const [searchQuery, setSearchQuery] = useState("");
   const [groupBy, setGroupBy] = useState<GroupBy>("repo");
   const archiveTask = useArchiveTask();
+  const deleteTask = useDeleteTask();
+  const { copyToClipboard } = useCopyToClipboard();
 
   // Debounced search handler
   const debouncedSearch = useDebounceCallback((query: string) => {
@@ -78,6 +98,36 @@ export function SidebarTasksView({
   // Handler for archiving tasks
   const handleArchiveTask = (taskId: string) => {
     archiveTask.mutate(taskId);
+  };
+
+  // Handler for deleting tasks
+  const handleDeleteTask = (taskId: string) => {
+    deleteTask.mutate(taskId);
+  };
+
+  // Handler for copying branch name
+  const handleCopyBranchName = async (shadowBranch: string) => {
+    const success = await copyToClipboard(shadowBranch);
+    if (success) {
+      toast.success("Branch name copied to clipboard");
+    } else {
+      toast.error("Failed to copy branch name");
+    }
+  };
+
+  // Handler for copying task ID
+  const handleCopyTaskId = async (taskId: string) => {
+    const success = await copyToClipboard(taskId);
+    if (success) {
+      toast.success("Task ID copied to clipboard");
+    } else {
+      toast.error("Failed to copy task ID");
+    }
+  };
+
+  // Handler for opening in GitHub
+  const handleOpenInGithub = (repoUrl: string) => {
+    window.open(repoUrl, "_blank");
   };
 
   // Filter tasks based on search query
@@ -196,14 +246,43 @@ export function SidebarTasksView({
               </a>
             </SidebarMenuButton>
           </ContextMenuTrigger>
-          <ContextMenuContent>
+          <ContextMenuContent className="bg-sidebar-accent border-sidebar-border">
+            <ContextMenuItem
+              onClick={() => handleOpenInGithub(task.repoUrl)}
+              className="text-muted-foreground hover:text-foreground hover:bg-sidebar-border! h-7"
+            >
+              <GithubLogo className="size-3.5 text-inherit" />
+              <span className="text-[13px]">Open in GitHub</span>
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => handleCopyBranchName(task.shadowBranch)}
+              className="text-muted-foreground hover:text-foreground hover:bg-sidebar-border! h-7"
+            >
+              <GitBranch className="size-3.5 text-inherit" />
+              <span className="text-[13px]">Copy branch name</span>
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => handleCopyTaskId(task.id)}
+              className="text-muted-foreground hover:text-foreground hover:bg-sidebar-border! h-7"
+            >
+              <Copy className="size-3.5 text-inherit" />
+              <span className="text-[13px]">Copy task ID</span>
+            </ContextMenuItem>
             <ContextMenuItem
               onClick={() => handleArchiveTask(task.id)}
               disabled={archiveTask.isPending}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground hover:bg-sidebar-border! h-7"
             >
               <Archive className="size-3.5 text-inherit" />
-              Archive
+              <span className="text-[13px]">Archive</span>
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => handleDeleteTask(task.id)}
+              disabled={deleteTask.isPending}
+              className="text-destructive hover:text-destructive! hover:bg-sidebar-border! h-7"
+            >
+              <Trash className="size-3.5 text-inherit" />
+              <span className="text-[13px]">Delete</span>
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
@@ -215,9 +294,9 @@ export function SidebarTasksView({
     <>
       {/* Search and Group By Controls */}
       <SidebarGroup>
-        <div className="space-y-2">
+        <div className="flex gap-2">
           {/* Search Input */}
-          <form ref={searchFormRef} className="relative">
+          <form ref={searchFormRef} className="relative flex-1">
             <Search className="text-muted-foreground absolute left-2 top-1/2 size-3.5 -translate-y-1/2" />
             <Input
               placeholder="Search tasks..."
@@ -241,8 +320,67 @@ export function SidebarTasksView({
             )}
           </form>
 
+          <Popover>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <ListFilter className="size-3.5" />
+                  </Button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top" align="end" lighter>
+                Group By
+              </TooltipContent>
+            </Tooltip>
+            <PopoverContent
+              align="end"
+              className="bg-sidebar-accent border-sidebar-border flex w-48 select-none flex-col gap-2 p-2"
+            >
+              <div className="flex items-center gap-2 pl-0.5">
+                <span className="text-muted-foreground flex-1 text-[13px]">
+                  Group By
+                </span>
+                <Select
+                  value={groupBy}
+                  onValueChange={(value) => setGroupBy(value as GroupBy)}
+                >
+                  <SelectTrigger
+                    data-size="sm"
+                    className="bg-sidebar-accent border-sidebar-border text-muted-foreground hover:text-foreground"
+                  >
+                    <SelectValue className="text-[13px]" />
+                  </SelectTrigger>
+                  <SelectContent
+                    align="end"
+                    className="bg-sidebar-accent border-sidebar-border"
+                  >
+                    <SelectItem
+                      data-size="sm"
+                      value="repo"
+                      className="hover:bg-sidebar-border!"
+                    >
+                      Repo
+                    </SelectItem>
+                    <SelectItem
+                      data-size="sm"
+                      value="status"
+                      className="hover:bg-sidebar-border!"
+                    >
+                      Status
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           {/* Don't group by if search is active */}
-          {!searchQuery && (
+          {/* {!searchQuery && (
             <div className="bg-sidebar-accent grid grid-cols-2 items-center gap-1 rounded-lg p-0.5">
               <Button
                 variant="ghost"
@@ -273,7 +411,7 @@ export function SidebarTasksView({
                 Status
               </Button>
             </div>
-          )}
+          )} */}
         </div>
       </SidebarGroup>
 
@@ -337,7 +475,7 @@ export function SidebarTasksView({
                         <span className="capitalize">
                           {status.toLowerCase().replaceAll("_", " ")}
                         </span>
-                        <ChevronDown className="ml-auto -rotate-90 transition-transform group-data-[state=open]/collapsible:rotate-0" />
+                        <ChevronDown className="ml-auto -rotate-90 opacity-70 transition-transform group-data-[state=open]/collapsible:rotate-0" />
                       </CollapsibleTrigger>
                     </SidebarGroupLabel>
                     <CollapsibleContent>
@@ -394,7 +532,7 @@ function RepoGroup({
           <CollapsibleTrigger>
             <Folder className="mr-1.5 !size-3.5" />
             {group.repoName}
-            <ChevronDown className="ml-auto -rotate-90 transition-transform group-data-[state=open]/collapsible:rotate-0" />
+            <ChevronDown className="ml-auto -rotate-90 opacity-70 transition-transform group-data-[state=open]/collapsible:rotate-0" />
           </CollapsibleTrigger>
         </SidebarGroupLabel>
         <CollapsibleContent>

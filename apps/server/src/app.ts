@@ -1,7 +1,6 @@
 import { router as IndexingRouter } from "@/indexing/index";
 import { prisma } from "@repo/db";
 import { AvailableModels, ModelType } from "@repo/types";
-import { parseApiKeysFromCookies } from "./utils/cookie-parser";
 import cors from "cors";
 import express from "express";
 import http from "http";
@@ -20,12 +19,10 @@ import { filesRouter } from "./files/router";
 import { handleGitHubWebhook } from "./webhooks/github-webhook";
 import { getIndexingStatus } from "./routes/indexing-status";
 import { modelContextService } from "./services/model-context-service";
-import { ApiKeyValidator } from "./services/api-key-validator";
 
 const app = express();
 export const chatService = new ChatService();
 const initializationEngine = new TaskInitializationEngine();
-const apiKeyValidator = new ApiKeyValidator();
 
 const initiateTaskSchema = z.object({
   message: z.string().min(1, "Message is required"),
@@ -202,6 +199,9 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       }
 
       await updateTaskStatus(taskId, "INITIALIZING", "INIT");
+      console.log(
+        `⏳ [TASK_INITIATE] Task ${taskId} status set to INITIALIZING - starting initialization...`
+      );
 
       const initSteps =
         await initializationEngine.getDefaultStepsForTask(userId);
@@ -221,6 +221,9 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       // Update task status to running
       await updateTaskStatus(taskId, "RUNNING", "INIT");
 
+      console.log(
+        `🚀 [TASK_INITIATE] Task ${taskId} status changed: INITIALIZING → RUNNING`
+      );
       console.log(`[TASK_INITIATE] Successfully initialized task ${taskId}`);
 
       // Process the message with the agent using the task workspace
@@ -245,6 +248,9 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       console.error(
         `[TASK_INITIATE] Initialization failed for task ${taskId}:`,
         initError
+      );
+      console.log(
+        `❌ [TASK_INITIATE] Task ${taskId} initialization failed - setting status to FAILED`
       );
 
       await updateTaskStatus(taskId, "FAILED", "INIT");
@@ -273,50 +279,6 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
   }
 });
 
-// Validate API keys
-app.post("/api/validate-keys", async (req, res) => {
-  try {
-    const userApiKeys = parseApiKeysFromCookies(req.headers.cookie);
-
-    console.log("[VALIDATION] Parsed API keys:", {
-      hasOpenAI: !!userApiKeys.openai,
-      hasAnthropic: !!userApiKeys.anthropic,
-      hasOpenRouter: !!userApiKeys.openrouter,
-      // hasGroq: !!userApiKeys.groq,
-      // hasOllama: !!userApiKeys.ollama,
-    });
-
-    // Only validate keys that are present and not empty
-    const keysToValidate: Partial<Record<string, string>> = {};
-    if (userApiKeys.openai && userApiKeys.openai.trim()) {
-      keysToValidate.openai = userApiKeys.openai;
-    }
-    if (userApiKeys.anthropic && userApiKeys.anthropic.trim()) {
-      keysToValidate.anthropic = userApiKeys.anthropic;
-    }
-    if (userApiKeys.openrouter && userApiKeys.openrouter.trim()) {
-      keysToValidate.openrouter = userApiKeys.openrouter;
-    }
-    // if (userApiKeys.groq && userApiKeys.groq.trim()) {
-    //   keysToValidate.groq = userApiKeys.groq;
-    // }
-    // if (userApiKeys.ollama && userApiKeys.ollama.trim()) {
-    //   keysToValidate.ollama = userApiKeys.ollama;
-    // }
-
-    console.log("[VALIDATION] Keys to validate:", Object.keys(keysToValidate));
-
-    const validationResults =
-      await apiKeyValidator.validateMultiple(keysToValidate);
-
-    console.log("[VALIDATION] Results:", validationResults);
-
-    res.json(validationResults);
-  } catch (error) {
-    console.error("Error validating API keys:", error);
-    res.status(500).json({ error: "Failed to validate API keys" });
-  }
-});
 
 // Get chat messages for a task
 app.get("/api/tasks/:taskId/messages", async (req, res) => {

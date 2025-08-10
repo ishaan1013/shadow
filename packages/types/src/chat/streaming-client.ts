@@ -38,9 +38,9 @@ export interface StreamChunk {
   content?: string;
 
   // For reasoning chunks
-  reasoning?: string;              // Incremental reasoning text delta
-  reasoningSignature?: string;     // Verification signature
-  redactedReasoningData?: string;  // Complete redacted reasoning block
+  reasoning?: string; // Incremental reasoning text delta
+  reasoningSignature?: string; // Verification signature
+  redactedReasoningData?: string; // Complete redacted reasoning block
 
   usage?: CompletionTokenUsage & {
     // Provider-specific tokens
@@ -140,16 +140,7 @@ export interface InitializationProgress {
 
   // Current step info
   currentStep?: InitStatus;
-  stepName?: string; // Human readable name
-  message?: string;
-
-  // Optional: simple progress
-  stepNumber?: number;
-  totalSteps?: number;
 
   // Error details
   error?: string;
-
-  // Progress tracking fields
-  initStatus?: InitStatus; // For progress tracking
 }

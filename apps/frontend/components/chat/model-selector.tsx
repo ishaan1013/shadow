@@ -17,11 +17,9 @@ import { useModels } from "@/hooks/use-models";
 import { useApiKeys, useApiKeyValidation } from "@/hooks/use-api-keys";
 
 export function ModelSelector({
-  isHome,
   selectedModel,
   handleSelectModel,
 }: {
-  isHome?: boolean;
   selectedModel: ModelType | null;
   handleSelectModel: (model: ModelType | null) => void;
 }) {

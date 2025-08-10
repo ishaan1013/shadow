@@ -5,7 +5,6 @@ export interface ParsedMCPToolName {
   displayToolName: string;
 }
 
-// Hardcoded mapping for the 2 MCP tools we support
 const KNOWN_MCP_TOOLS = new Set([
   "context7_resolve_library_id",
   "context7_get_library_docs",
@@ -23,16 +22,14 @@ const MCP_TOOL_MAPPINGS: Record<string, string> = {
 export function transformMCPToolName(originalName: string): string {
   const transformed = originalName.replace(/[:-]/g, "_");
 
-  // Note: Mapping is now handled via hardcoded MCP_TOOL_MAPPINGS constant
   return transformed;
 }
 
 export function isOriginalMCPTool(toolName: string): boolean {
-  return toolName.includes(":");
+  return Object.values(MCP_TOOL_MAPPINGS).includes(toolName);
 }
 
 export function isTransformedMCPTool(toolName: string): boolean {
-  // Use hardcoded set of known MCP tools
   return KNOWN_MCP_TOOLS.has(toolName);
 }
 
@@ -40,13 +37,7 @@ export function isMCPTool(toolName: string): boolean {
   return isOriginalMCPTool(toolName) || isTransformedMCPTool(toolName);
 }
 
-/**
- * Parse MCP tool name into server and tool components with display formatting
- * Handles both original (server:tool-name) and transformed (server_tool_name) formats
- * Only parses tools that are confirmed to be MCP tools
- */
 export function parseMCPToolName(toolName: string): ParsedMCPToolName | null {
-  // Only parse if this is actually an MCP tool to avoid incorrect parsing of native tools
   if (!isMCPTool(toolName)) {
     return null;
   }
@@ -89,37 +80,25 @@ export function parseMCPToolName(toolName: string): ParsedMCPToolName | null {
   };
 }
 
-/**
- * Get original MCP tool name from transformed name
- */
 export function getOriginalMCPToolName(
   transformedName: string
 ): string | undefined {
   return MCP_TOOL_MAPPINGS[transformedName];
 }
 
-// Removed: registerMCPToolMapping, clearMCPToolMappings, getMCPToolMappings
-// These functions are no longer needed with hardcoded mappings
-
-/**
- * Get custom MCP tool title based on tool name and arguments
- * Maps specific tools to user-friendly titles with parameter substitution
- */
+// For frontend tool UI title
 export function getMCPToolTitle(
   toolName: string,
   args: Record<string, any> = {}
 ): string {
-  // Get original name if this is a transformed tool, otherwise use as-is
   const originalName = getOriginalMCPToolName(toolName) || toolName;
 
-  // Handle context7:resolve-library-id (original format with colons)
   if (originalName === "context7:resolve-library-id") {
     const libraryName =
       args?.libraryName || args?.library || args?.name || "Unknown";
     return `Find Library "${libraryName}"`;
   }
 
-  // Handle context7:get-library-docs (original format with colons)
   if (originalName === "context7:get-library-docs") {
     const libraryID =
       args?.context7CompatibleLibraryID ||
@@ -130,14 +109,10 @@ export function getMCPToolTitle(
     return `${libraryID} "${topic}"`;
   }
 
-  // Fallback to display name
   const parsed = parseMCPToolName(toolName);
   return parsed ? parsed.displayToolName : toolName;
 }
 
-/**
- * Get MCP tool prefix (server name) for display
- */
 export function getMCPToolPrefix(toolName: string): string {
   const parsed = parseMCPToolName(toolName);
   return parsed ? parsed.displayServerName : "MCP";
