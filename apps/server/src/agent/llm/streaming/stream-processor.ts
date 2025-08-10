@@ -86,13 +86,13 @@ export class StreamProcessor {
             budgetTokens: 12000,
           },
         },
-        ...(model === "gpt-5-2025-08-07"
-          ? {
-              openai: {
-                reasoningEffort: "high",
-              },
-            }
-          : {}),
+        // ...(model === "gpt-5-2025-08-07"
+        //   ? {
+        //       openai: {
+        //         reasoningEffort: "high",
+        //       },
+        //     }
+        //   : {}),
       };
 
       const streamConfig = {
@@ -181,16 +181,14 @@ export class StreamProcessor {
                     },
                   ],
                   tools,
-                  experimental_telemetry: braintrustService.getOperationTelemetry(
-                    "tool-repair",
-                    {
+                  experimental_telemetry:
+                    braintrustService.getOperationTelemetry("tool-repair", {
                       taskId,
                       toolName: toolCall.toolName,
                       errorType: error.constructor.name,
                       originalArgs: toolCall.args,
                       modelProvider,
-                    }
-                  ),
+                    }),
                 });
 
                 console.log(`[REPAIR_DEBUG] Repair result:`, {
