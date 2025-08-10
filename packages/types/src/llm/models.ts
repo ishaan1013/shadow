@@ -11,19 +11,19 @@ export interface LLMConfig {
 // Model Selection
 export const AvailableModels = {
   // OpenAI models
-  GPT_5: "gpt-5-2025-08-07",
+  // GPT_5: "gpt-5-2025-08-07",
   GPT_4_1: "gpt-4.1",
   GPT_4_1_MINI: "gpt-4.1-mini",
   GPT_4O: "gpt-4o",
   GPT_4O_MINI: "gpt-4o-mini",
-  GPT_4O_AUDIO_PREVIEW: "gpt-4o-audio-preview",
+  // GPT_4O_AUDIO_PREVIEW: "gpt-4o-audio-preview",
   // O1: "o1",
   // O1_MINI: "o1-mini",
   // O1_PREVIEW: "o1-preview",
   // O3_MINI: "o3-mini",
   // O3: "o3",
   // O4_MINI: "o4-mini",
-  CHATGPT_4O_LATEST: "chatgpt-4o-latest",
+  // CHATGPT_4O_LATEST: "chatgpt-4o-latest",
 
   // Anthropic models
   CLAUDE_OPUS_4: "claude-opus-4-1-20250805",
@@ -63,11 +63,11 @@ export interface ModelInfo {
 
 export const ModelInfos: Record<ModelType, ModelInfo> = {
   // OpenAI models
-  [AvailableModels.GPT_5]: {
-    id: AvailableModels.GPT_5,
-    name: "GPT-5",
-    provider: "openai",
-  },
+  // [AvailableModels.GPT_5]: {
+  //   id: AvailableModels.GPT_5,
+  //   name: "GPT-5",
+  //   provider: "openai",
+  // },
   [AvailableModels.GPT_4_1]: {
     id: AvailableModels.GPT_4_1,
     name: "GPT-4.1",
@@ -88,11 +88,11 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
     name: "GPT-4o Mini",
     provider: "openai",
   },
-  [AvailableModels.GPT_4O_AUDIO_PREVIEW]: {
-    id: AvailableModels.GPT_4O_AUDIO_PREVIEW,
-    name: "GPT-4o Audio Preview",
-    provider: "openai",
-  },
+  // [AvailableModels.GPT_4O_AUDIO_PREVIEW]: {
+  //   id: AvailableModels.GPT_4O_AUDIO_PREVIEW,
+  //   name: "GPT-4o Audio Preview",
+  //   provider: "openai",
+  // },
   // [AvailableModels.O1]: {
   //   id: AvailableModels.O1,
   //   name: "o1",
@@ -123,11 +123,11 @@ export const ModelInfos: Record<ModelType, ModelInfo> = {
   //   name: "o4-mini",
   //   provider: "openai",
   // },
-  [AvailableModels.CHATGPT_4O_LATEST]: {
-    id: AvailableModels.CHATGPT_4O_LATEST,
-    name: "ChatGPT-4o Latest",
-    provider: "openai",
-  },
+  // [AvailableModels.CHATGPT_4O_LATEST]: {
+  //   id: AvailableModels.CHATGPT_4O_LATEST,
+  //   name: "ChatGPT-4o Latest",
+  //   provider: "openai",
+  // },
 
   // Anthropic models
   [AvailableModels.CLAUDE_OPUS_4]: {
@@ -236,15 +236,12 @@ export async function getAllPossibleModels(
   const models: ModelType[] = [];
 
   if (userApiKeys.anthropic) {
-    models.push(
-      AvailableModels.CLAUDE_OPUS_4,
-      AvailableModels.CLAUDE_SONNET_4
-    );
+    models.push(AvailableModels.CLAUDE_OPUS_4, AvailableModels.CLAUDE_SONNET_4);
   }
 
   if (userApiKeys.openai) {
     models.push(
-      AvailableModels.GPT_5,
+      // AvailableModels.GPT_5,
       AvailableModels.GPT_4_1,
       AvailableModels.GPT_4O,
       AvailableModels.GPT_4O_MINI
@@ -298,7 +295,7 @@ export async function getDefaultSelectedModels(
   // Add defaults for each provider (matching the user's request)
   if (userApiKeys.openai) {
     defaultModels.push(
-      AvailableModels.GPT_5, // default
+      // AvailableModels.GPT_5, // default
       AvailableModels.GPT_4_1, // default
       AvailableModels.GPT_4O // default
       // AvailableModels.O3, // default
@@ -319,7 +316,7 @@ export async function getDefaultSelectedModels(
       AvailableModels.XAI_GROK_3,
       // AvailableModels.OPENAI_GPT_OSS_120B,
       // AvailableModels.OPENAI_GPT_OSS_20B,
-      AvailableModels.OPENROUTER_HORIZON_BETA,
+      // AvailableModels.OPENROUTER_HORIZON_BETA,
       AvailableModels.MISTRAL_CODESTRAL_2508,
       AvailableModels.DEEPSEEK_R1_0528,
       AvailableModels.DEEPSEEK_CHAT_V3_0324,
