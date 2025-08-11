@@ -20,7 +20,7 @@ import {
   SquareCheck,
   SquareX,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { statusColorsConfig } from "./status";
 import { FileExplorer } from "@/components/agent-environment/file-explorer";
 import { FileNode } from "@repo/types";
@@ -199,6 +199,54 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
     return "Index Repo";
   };
 
+  // Context menu state for branch name
+  const [branchContextMenu, setBranchContextMenu] = useState<{
+    open: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
+  const ctxRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleWindowClick(e: MouseEvent) {
+      // Close if clicking outside the context menu
+      if (!ctxRef.current) return;
+      const el = ctxRef.current;
+      if (e.target && el && !el.contains(e.target as Node)) {
+        setBranchContextMenu(null);
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setBranchContextMenu(null);
+    }
+    window.addEventListener("click", handleWindowClick);
+    window.addEventListener("contextmenu", handleWindowClick);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("click", handleWindowClick);
+      window.removeEventListener("contextmenu", handleWindowClick);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const onBranchContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    // Show our custom menu near cursor
+    setBranchContextMenu({ open: true, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const copyBranchName = useCallback(async () => {
+    try {
+      if (task?.shadowBranch) {
+        await navigator.clipboard.writeText(task.shadowBranch);
+      }
+    } catch (err) {
+      console.error("Failed to copy branch name:", err);
+    } finally {
+      setBranchContextMenu(null);
+    }
+  }, [task?.shadowBranch]);
+
   return (
     <>
       {/* PR buttons - show create or view based on state */}
@@ -314,10 +362,13 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
               variant="ghost"
               className="hover:bg-sidebar-accent px-2! w-full justify-start font-normal"
               asChild
+              onContextMenu={onBranchContextMenu}
             >
               <Link
                 href={`${task.repoUrl}/tree/${task.shadowBranch}`}
                 target="_blank"
+                // prevent default browser context menu when right-clicking the link
+                onContextMenu={(e) => e.preventDefault()}
               >
                 <GitBranch className="size-4 shrink-0" />
                 <span className="truncate">{task.shadowBranch}</span>
@@ -326,6 +377,29 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
           </SidebarMenuItem>
         </SidebarGroupContent>
       </SidebarGroup>
+
+      {/* Custom context menu for branch name */}
+      {branchContextMenu?.open && (
+        <div
+          ref={ctxRef}
+          style={{ left: branchContextMenu.x, top: branchContextMenu.y }}
+          className="fixed z-50 rounded-md border border-sidebar-border bg-sidebar-accent shadow-md"
+        >
+          <div
+            role="menu"
+            aria-label="Branch options"
+            className="p-1"
+          >
+            <button
+              onClick={copyBranchName}
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-sidebar-border"
+            >
+              <GitBranch className="size-4 shrink-0 text-foreground" />
+              <span>Copy branch name</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-3">
         <div className="bg-border h-px w-full" />
