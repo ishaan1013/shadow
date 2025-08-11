@@ -199,6 +199,19 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
     return "Index Repo";
   };
 
+  // State for branch right-click context menu
+  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+
+  const handleCopyBranch = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(task.shadowBranch);
+    } catch (err) {
+      console.error("Failed to copy branch name:", err);
+    } finally {
+      setIsBranchMenuOpen(false);
+    }
+  }, [task.shadowBranch]);
+
   return (
     <>
       {/* PR buttons - show create or view based on state */}
@@ -310,19 +323,40 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <Button
-              variant="ghost"
-              className="hover:bg-sidebar-accent px-2! w-full justify-start font-normal"
-              asChild
-            >
-              <Link
-                href={`${task.repoUrl}/tree/${task.shadowBranch}`}
-                target="_blank"
+            {/* Branch button with right-click context menu to copy branch name */}
+            <DropdownMenu open={isBranchMenuOpen} onOpenChange={setIsBranchMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="hover:bg-sidebar-accent px-2! w-full justify-start font-normal"
+                  // Open context menu on right click
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setIsBranchMenuOpen(true);
+                  }}
+                >
+                  <Link
+                    href={`${task.repoUrl}/tree/${task.shadowBranch}`}
+                    target="_blank"
+                    className="flex w-full items-center gap-2 justify-start"
+                    // Prevent navigation on right click (link inside button)
+                    onContextMenu={(e) => e.preventDefault()}
+                  >
+                    <GitBranch className="size-4 shrink-0" />
+                    <span className="truncate">{task.shadowBranch}</span>
+                  </Link>
+                </Button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent
+                align="start"
+                className="bg-sidebar-accent border-sidebar-border w-[var(--radix-dropdown-menu-trigger-width)]"
               >
-                <GitBranch className="size-4 shrink-0" />
-                <span className="truncate">{task.shadowBranch}</span>
-              </Link>
-            </Button>
+                <DropdownMenuItem onClick={handleCopyBranch} className="hover:bg-sidebar-border!">
+                  Copy branch name
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarGroupContent>
       </SidebarGroup>
