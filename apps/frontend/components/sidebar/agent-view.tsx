@@ -20,7 +20,7 @@ import {
   SquareCheck,
   SquareX,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { statusColorsConfig } from "./status";
 import { FileExplorer } from "@/components/agent-environment/file-explorer";
 import { FileNode } from "@repo/types";
@@ -199,6 +199,44 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
     return "Index Repo";
   };
 
+  // Context menu state for branch name
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleWindowClick(e: MouseEvent) {
+      // Close menu on any click outside
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenuPos(null);
+      }
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setContextMenuPos(null);
+    }
+    window.addEventListener("click", handleWindowClick);
+    window.addEventListener("contextmenu", handleWindowClick);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("click", handleWindowClick);
+      window.removeEventListener("contextmenu", handleWindowClick);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, []);
+
+  const handleCopyBranch = useCallback(async () => {
+    try {
+      if (!task?.shadowBranch) return;
+      await navigator.clipboard.writeText(task.shadowBranch);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch (err) {
+      console.error("Failed to copy branch name:", err);
+    } finally {
+      setContextMenuPos(null);
+    }
+  }, [task?.shadowBranch]);
+
   return (
     <>
       {/* PR buttons - show create or view based on state */}
@@ -310,10 +348,15 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
           </SidebarMenuItem>
 
           <SidebarMenuItem>
+            {/* Branch button: open github tree on left click, open custom context menu on right click */}
             <Button
               variant="ghost"
               className="hover:bg-sidebar-accent px-2! w-full justify-start font-normal"
               asChild
+              onContextMenu={(e: React.MouseEvent) => {
+                e.preventDefault();
+                setContextMenuPos({ x: e.clientX, y: e.clientY });
+              }}
             >
               <Link
                 href={`${task.repoUrl}/tree/${task.shadowBranch}`}
@@ -323,6 +366,31 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
                 <span className="truncate">{task.shadowBranch}</span>
               </Link>
             </Button>
+
+            {/* Custom context menu rendered at pointer position */}
+            {contextMenuPos && (
+              <div
+                ref={menuRef}
+                style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
+                className="fixed z-50 rounded-md border border-sidebar-border bg-sidebar-accent shadow-md"
+              >
+                <div className="py-1">
+                  <button
+                    onClick={handleCopyBranch}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-sidebar-border"
+                  >
+                    <span>Copy branch name</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Small transient feedback near the branch name when copied */}
+            {copied && (
+              <div className="absolute right-3 mt-1 text-xs text-muted-foreground">
+                Copied
+              </div>
+            )}
           </SidebarMenuItem>
         </SidebarGroupContent>
       </SidebarGroup>
