@@ -1,1 +1,0 @@
-Remove a specific memory by its ID from this repository. Use this to delete outdated, incorrect, or no longer relevant memories. Once removed, memories cannot be recovered, so use with caution.

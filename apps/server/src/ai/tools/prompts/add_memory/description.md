@@ -1,1 +1,0 @@
-Add a memory to remember important details about this repository. Memories are concise notes categorized by type (INFRA, SETUP, STYLES, ARCHITECTURE, TESTING, PATTERNS, BUGS, PERFORMANCE, CONFIG, GENERAL) that persist across tasks in this repository. Use this to capture important insights, patterns, or context discovered during coding work.

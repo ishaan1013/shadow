@@ -1,1 +1,0 @@
-List all memories for this repository. Shows repository-specific memories organized by category with creation dates. Use this to recall important context and patterns from previous work in this repository.
