@@ -1,6 +1,7 @@
 # Shadow
 
-![Shadow Screenshot](https://raw.githubusercontent.com/ishaan1013/shadow/refs/heads/main/apps/frontend/app/opengraph-image.png)
+<img width="2880" height="1620" alt="cover" src="https://github.com/user-attachments/assets/69dfd5f8-0532-4515-a59e-9d43f2243ad8" />
+
 
 An open-source background coding agent. Designed to understand, reason about, and contribute to existing codebases. Licensed for open-source use under MIT License
 
