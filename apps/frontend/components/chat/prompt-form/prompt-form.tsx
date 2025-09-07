@@ -503,7 +503,7 @@ export function PromptForm({
           {!isHome && (
             <div
               className={cn(
-                "ease-out-expo select-none overflow-clip transition-all duration-500",
+                "ease-out-expo duration-800 select-none overflow-clip transition-all",
                 isMessageOptionsOpen
                   ? isStreaming
                     ? "h-[126px]"
