@@ -11,11 +11,14 @@ import { type ModelType } from "@repo/types";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUp,
+  Crosshair,
+  EyeOff,
   GitBranchPlus,
   ListEnd,
   Loader2,
   MessageCircle,
   MessageCircleX,
+  Minimize,
   Square,
   X,
 } from "lucide-react";
@@ -51,6 +54,7 @@ export function PromptForm({
   initialSelectedModel,
   isInitializing = false,
   transition,
+  collapsed = true,
 }: {
   onSubmit?: (message: string, model: ModelType, queue: boolean) => void;
   onCreateStackedPR?: (
@@ -73,6 +77,7 @@ export function PromptForm({
     isPending: boolean;
     startTransition: TransitionStartFunction;
   };
+  collapsed?: boolean;
 }) {
   const { taskId } = useParams<{ taskId: string }>();
   const { isPending, startTransition } = transition || {};
@@ -479,7 +484,7 @@ export function PromptForm({
       <form
         onSubmit={handleSubmit}
         className={cn(
-          "relative z-0 flex w-full flex-col",
+          "relative z-0 flex w-full flex-col items-center",
           !isHome && "bg-background sticky bottom-0 pb-6"
         )}
       >
@@ -493,14 +498,17 @@ export function PromptForm({
         {/* Outer div acts as a border, with a border-radius 1px larger than the inner div and 1px padding */}
         <div
           className={cn(
-            "shadow-highlight/10 relative z-0 rounded-[calc(var(--radius)+1px)] p-px shadow-lg transition-all",
+            "shadow-highlight/10 relative z-0 p-px shadow-lg transition-all",
             "focus-within:ring-ring/5 focus-within:border-sidebar-border focus-within:ring-4",
             "user-message-border hover:shadow-highlight/20 focus-within:shadow-highlight/20",
-            isPending && "opacity-50"
+            isPending && "opacity-50",
+            collapsed
+              ? "rounded-[calc(var(--radius)+1px)]"
+              : "w-full rounded-[calc(var(--radius)+1px)]"
           )}
         >
           {/* Message options */}
-          {!isHome && (
+          {!isHome && !collapsed && (
             <div
               className={cn(
                 "ease-out-expo duration-800 select-none overflow-clip transition-all",
@@ -561,6 +569,7 @@ export function PromptForm({
             </div>
           )}
 
+          {/* New task animation pulse */}
           {isHome && (
             <>
               <div className="bg-background absolute inset-px -z-10 rounded-[calc(var(--radius)+1px)]" />
@@ -571,69 +580,140 @@ export function PromptForm({
             </>
           )}
 
-          <div className="from-card/10 to-card relative flex min-h-24 flex-col rounded-lg bg-gradient-to-t">
-            <div className="bg-background absolute inset-0 -z-20 rounded-[calc(var(--radius)+1px)]" />
-            <Textarea
-              ref={textareaRef}
-              autoFocus
-              value={message}
-              onChange={(e) => {
-                if (!isMessageOptionsOpen && !isPending) {
-                  setMessage(e.target.value);
-                }
-              }}
-              onKeyDown={onKeyDown}
-              onFocus={onFocus}
-              onBlur={onBlur}
-              placeholder={
-                isHome
-                  ? "Build features, fix bugs, and understand codebases..."
-                  : "Follow-up message..."
-              }
-              className="placeholder:text-muted-foreground/50 bg-transparent! max-h-48 flex-1 resize-none border-0 shadow-none focus-visible:ring-0"
+          {/* Inner content */}
+          <div
+            className={cn(
+              "from-card/10 to-card relative flex flex-col bg-gradient-to-t",
+              collapsed ? "rounded-lg" : "min-h-24 rounded-lg"
+            )}
+          >
+            <div
+              className={cn(
+                "bg-background absolute inset-0 -z-20",
+                collapsed
+                  ? "rounded-[calc(var(--radius)+1px)]"
+                  : "rounded-[calc(var(--radius)+1px)]"
+              )}
             />
 
-            {/* Buttons inside the container */}
-            <div
-              className="flex items-center justify-between gap-2 p-2"
-              onClick={() => textareaRef.current?.focus()}
-            >
-              <ModelSelector
-                selectedModel={selectedModel}
-                handleSelectModel={handleSelectModel}
-              />
-
-              <div className="flex items-center gap-2 overflow-hidden">
-                {isHome && (
-                  <GithubConnection
-                    isOpen={isGithubConnectionOpen}
-                    setIsOpen={setIsGithubConnectionOpen}
-                    selectedRepo={repo}
-                    selectedBranch={branch}
-                    setSelectedRepo={setRepo}
-                    setSelectedBranch={setBranch}
-                  />
-                )}
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="submit"
-                    size="iconSm"
-                    disabled={isSubmitButtonDisabled}
-                    className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
-                  >
-                    {isPending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : isStreaming && !message.trim() ? (
-                      <div className="p-0.5">
-                        <Square className="fill-primary-foreground size-3" />
-                      </div>
-                    ) : (
-                      <ArrowUp className="size-4" />
-                    )}
-                  </Button>
+            {collapsed ? (
+              <div className="flex items-center gap-1 p-1">
+                <div className="text-muted-foreground border-r-sidebar-border truncate border-r pl-1.5 pr-2.5 text-sm">
+                  Claude Sonnet 4
                 </div>
+                <div className="flex items-center gap-0.5 p-1 pr-1.5">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="iconSm"
+                        className="hover:bg-accent text-muted-foreground hover:text-foreground"
+                      >
+                        <Crosshair className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent lighter>Focus This Chat</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="iconSm"
+                        className="hover:bg-accent text-muted-foreground hover:text-foreground mr-1.5"
+                      >
+                        <EyeOff className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent lighter>Hide This Chat</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        className="size-5.5 rounded-full px-0"
+                      >
+                        <div className="p-[3px]">
+                          <Square className="fill-primary-foreground size-2.5" />
+                        </div>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent lighter>Stop Streaming</TooltipContent>
+                  </Tooltip>
+                </div>
+                {/* <Button
+                  variant="ghost"
+                  className="hover:bg-accent/75 rounded-full px-4"
+                >
+                  Test2
+                </Button> */}
               </div>
-            </div>
+            ) : (
+              <>
+                <Textarea
+                  ref={textareaRef}
+                  autoFocus
+                  value={message}
+                  onChange={(e) => {
+                    if (!isMessageOptionsOpen && !isPending) {
+                      setMessage(e.target.value);
+                    }
+                  }}
+                  onKeyDown={onKeyDown}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                  placeholder={
+                    isHome
+                      ? "Build features, fix bugs, and understand codebases..."
+                      : "Follow-up message..."
+                  }
+                  className="placeholder:text-muted-foreground/50 bg-transparent! max-h-48 flex-1 resize-none border-0 shadow-none focus-visible:ring-0"
+                />
+
+                {/* Buttons inside the container */}
+                <div
+                  className="flex items-center justify-between gap-2 p-2"
+                  onClick={() => textareaRef.current?.focus()}
+                >
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    handleSelectModel={handleSelectModel}
+                  />
+
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    {isHome && (
+                      <GithubConnection
+                        isOpen={isGithubConnectionOpen}
+                        setIsOpen={setIsGithubConnectionOpen}
+                        selectedRepo={repo}
+                        selectedBranch={branch}
+                        setSelectedRepo={setRepo}
+                        setSelectedBranch={setBranch}
+                      />
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="submit"
+                        size="iconSm"
+                        disabled={isSubmitButtonDisabled}
+                        className="focus-visible:ring-primary focus-visible:ring-offset-input rounded-full focus-visible:ring-2 focus-visible:ring-offset-2"
+                      >
+                        {isPending ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : isStreaming && !message.trim() ? (
+                          <div className="p-0.5">
+                            <Square className="fill-primary-foreground size-3" />
+                          </div>
+                        ) : (
+                          <ArrowUp className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </form>
