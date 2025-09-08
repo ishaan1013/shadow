@@ -607,8 +607,8 @@ export function PromptForm({
             />
 
             {collapsedState?.collapsed ? (
-              <div className="flex items-center gap-1 p-1">
-                <div className="text-muted-foreground border-r-sidebar-border border-r pl-1.5 pr-2.5 text-sm">
+              <div className="animate-in fade-in-0 fill-mode-both flex items-center gap-1 p-1 delay-150 duration-300 ease-out">
+                <div className="text-muted-foreground border-r-sidebar-border whitespace-nowrap border-r pl-1.5 pr-2.5 text-sm">
                   Claude Sonnet 4
                 </div>
                 <div className="flex items-center gap-0.5 p-1 pr-1.5">
