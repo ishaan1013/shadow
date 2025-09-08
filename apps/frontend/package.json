@@ -45,6 +45,7 @@
     "lucide-react": "^0.525.0",
     "marked": "^16.1.1",
     "material-icon-theme": "^5.25.0",
+    "motion": "^12.23.12",
     "next": "15.3.5",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",

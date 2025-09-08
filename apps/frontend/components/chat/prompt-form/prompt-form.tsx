@@ -40,6 +40,7 @@ import { QueuedAction } from "../messages/queued-message";
 import { ModelSelector } from "./model-selector";
 import { generateIssuePrompt } from "@/lib/github/issue-prompt";
 import { useSelectedModel } from "@/hooks/chat/use-selected-model";
+import { motion, useReducedMotion } from "framer-motion";
 
 export function PromptForm({
   onSubmit,
@@ -88,6 +89,7 @@ export function PromptForm({
 
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prefersReducedMotion = useReducedMotion();
   const { data: querySelectedModel } = useSelectedModel();
   const [selectedModel, setSelectedModel] = useState<ModelType | null>(
     initialSelectedModel ?? null
@@ -500,12 +502,20 @@ export function PromptForm({
 
         {/* Wrapper div with textarea styling */}
         {/* Outer div acts as a border, with a border-radius 1px larger than the inner div and 1px padding */}
-        <div
+        <motion.div
+          layout
+          initial={false}
+          animate={{ width: collapsedState?.collapsed ? "auto" : "100%" }}
+          transition={
+            prefersReducedMotion
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 500, damping: 40 }
+          }
           className={cn(
-            "shadow-highlight/10 relative z-0 p-px shadow-lg transition-all",
+            "shadow-highlight/10 relative z-0 p-px shadow-lg",
             "focus-within:ring-ring/5 focus-within:border-sidebar-border focus-within:ring-4",
             "user-message-border hover:shadow-highlight/20 focus-within:shadow-highlight/20",
-            "width-animatable rounded-[calc(var(--radius)+1px)]",
+            "rounded-[calc(var(--radius)+1px)]",
             isPending && "opacity-50",
             collapsedState?.collapsed ? "w-auto" : "w-full"
           )}
@@ -598,7 +608,7 @@ export function PromptForm({
 
             {collapsedState?.collapsed ? (
               <div className="flex items-center gap-1 p-1">
-                <div className="text-muted-foreground border-r-sidebar-border truncate border-r pl-1.5 pr-2.5 text-sm">
+                <div className="text-muted-foreground border-r-sidebar-border border-r pl-1.5 pr-2.5 text-sm">
                   Claude Sonnet 4
                 </div>
                 <div className="flex items-center gap-0.5 p-1 pr-1.5">
@@ -715,7 +725,7 @@ export function PromptForm({
               </>
             )}
           </div>
-        </div>
+        </motion.div>
       </form>
 
       {/* Github issues: only show on home page when repo is selected */}
