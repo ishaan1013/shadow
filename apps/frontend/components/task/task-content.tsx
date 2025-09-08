@@ -7,7 +7,7 @@ import { useTaskMessages } from "@/hooks/tasks/use-task-messages";
 import { useTaskSocketContext } from "@/contexts/task-socket-context";
 import { useParams } from "next/navigation";
 import { ScrollToBottom } from "./scroll-to-bottom";
-import { useCallback, useMemo, memo } from "react";
+import { useCallback, useMemo, memo, useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ModelType } from "@repo/types";
 import {
@@ -17,16 +17,30 @@ import {
 import { useTask } from "@/hooks/tasks/use-task";
 
 function TaskPageContent() {
-  const { taskId } = useParams<{ taskId: string }>();
-
   const queryClient = useQueryClient();
 
+  const { taskId } = useParams<{ taskId: string }>();
   const { task } = useTask(taskId);
 
   const { data: messages = [], error: taskMessagesError } =
     useTaskMessages(taskId);
 
   const sendMessageMutation = useSendMessage();
+
+  const [visibleChats, setVisibleChats] = useState<Set<string>>(new Set());
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "g") {
+        e.preventDefault();
+        setIsCollapsed((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, []);
 
   const {
     streamingPartsMap,
@@ -180,6 +194,21 @@ function TaskPageContent() {
               queryClient.setQueryData(["edit-message-id", taskId], null);
             }}
             isInitializing={task?.status === "INITIALIZING"}
+            collapsedState={{
+              id: "variant1",
+              collapsed: isCollapsed,
+              hide: (id: string) => {
+                setVisibleChats((prev) => {
+                  const newSet = new Set(prev);
+                  newSet.delete(id);
+                  return newSet;
+                });
+              },
+              focus: (id: string) => {
+                // setVisibleChats(new Set([id]));
+                setIsCollapsed(false);
+              },
+            }}
           />
         </>
       )}

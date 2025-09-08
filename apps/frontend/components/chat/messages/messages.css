@@ -104,3 +104,9 @@
     background-position: -200% 0;
   }
 }
+
+/* Width animation from full to auto */
+.width-animatable {
+  interpolate-size: allow-keywords;
+  transition: width 0.3s ease;
+}

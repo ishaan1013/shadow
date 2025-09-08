@@ -18,7 +18,6 @@ import {
   Loader2,
   MessageCircle,
   MessageCircleX,
-  Minimize,
   Square,
   X,
 } from "lucide-react";
@@ -54,7 +53,7 @@ export function PromptForm({
   initialSelectedModel,
   isInitializing = false,
   transition,
-  collapsed = true,
+  collapsedState,
 }: {
   onSubmit?: (message: string, model: ModelType, queue: boolean) => void;
   onCreateStackedPR?: (
@@ -77,7 +76,12 @@ export function PromptForm({
     isPending: boolean;
     startTransition: TransitionStartFunction;
   };
-  collapsed?: boolean;
+  collapsedState?: {
+    id: string;
+    collapsed: boolean;
+    hide: (id: string) => void;
+    focus: (id: string) => void;
+  };
 }) {
   const { taskId } = useParams<{ taskId: string }>();
   const { isPending, startTransition } = transition || {};
@@ -501,14 +505,13 @@ export function PromptForm({
             "shadow-highlight/10 relative z-0 p-px shadow-lg transition-all",
             "focus-within:ring-ring/5 focus-within:border-sidebar-border focus-within:ring-4",
             "user-message-border hover:shadow-highlight/20 focus-within:shadow-highlight/20",
+            "width-animatable rounded-[calc(var(--radius)+1px)]",
             isPending && "opacity-50",
-            collapsed
-              ? "rounded-[calc(var(--radius)+1px)]"
-              : "w-full rounded-[calc(var(--radius)+1px)]"
+            collapsedState?.collapsed ? "w-auto" : "w-full"
           )}
         >
           {/* Message options */}
-          {!isHome && !collapsed && (
+          {!isHome && !collapsedState?.collapsed && (
             <div
               className={cn(
                 "ease-out-expo duration-800 select-none overflow-clip transition-all",
@@ -583,20 +586,17 @@ export function PromptForm({
           {/* Inner content */}
           <div
             className={cn(
-              "from-card/10 to-card relative flex flex-col bg-gradient-to-t",
-              collapsed ? "rounded-lg" : "min-h-24 rounded-lg"
+              "from-card/10 to-card relative flex flex-col rounded-lg bg-gradient-to-t",
+              collapsedState?.collapsed ? "" : "min-h-24"
             )}
           >
             <div
               className={cn(
-                "bg-background absolute inset-0 -z-20",
-                collapsed
-                  ? "rounded-[calc(var(--radius)+1px)]"
-                  : "rounded-[calc(var(--radius)+1px)]"
+                "bg-background absolute inset-0 -z-20 rounded-[calc(var(--radius)+1px)]"
               )}
             />
 
-            {collapsed ? (
+            {collapsedState?.collapsed ? (
               <div className="flex items-center gap-1 p-1">
                 <div className="text-muted-foreground border-r-sidebar-border truncate border-r pl-1.5 pr-2.5 text-sm">
                   Claude Sonnet 4
@@ -609,6 +609,9 @@ export function PromptForm({
                         variant="ghost"
                         size="iconSm"
                         className="hover:bg-accent text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          collapsedState?.focus?.(collapsedState.id)
+                        }
                       >
                         <Crosshair className="size-4" />
                       </Button>
@@ -622,6 +625,9 @@ export function PromptForm({
                         variant="ghost"
                         size="iconSm"
                         className="hover:bg-accent text-muted-foreground hover:text-foreground mr-1.5"
+                        onClick={() =>
+                          collapsedState?.hide?.(collapsedState.id)
+                        }
                       >
                         <EyeOff className="size-4" />
                       </Button>
@@ -639,15 +645,9 @@ export function PromptForm({
                         </div>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent lighter>Stop Streaming</TooltipContent>
+                    <TooltipContent lighter>Stop</TooltipContent>
                   </Tooltip>
                 </div>
-                {/* <Button
-                  variant="ghost"
-                  className="hover:bg-accent/75 rounded-full px-4"
-                >
-                  Test2
-                </Button> */}
               </div>
             ) : (
               <>
