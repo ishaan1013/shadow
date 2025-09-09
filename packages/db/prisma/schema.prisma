@@ -75,42 +75,74 @@ model Verification {
 }
 
 model Task {
-  id     String     @id @default(nanoid())
-  title  String
-  status TaskStatus @default(INITIALIZING)
+  id    String @id @default(nanoid())
+  title String
 
   // Repo full name "owner/repo"
   repoFullName String
   // Repo URL "https://github.com/owner/repo"
   repoUrl      String
 
-  // User's selected LLM model for this task - updated on each user message
-  // Used for context-aware operations (commits, PR generation, etc.)
-  mainModel                   String?
-  workspacePath               String?
-  initStatus                  InitStatus    @default(INACTIVE)
-  scheduledCleanupAt          DateTime?
-  initializationError         String?
-  errorMessage                String?
-  workspaceCleanedUp          Boolean       @default(false)
-  hasBeenInitialized          Boolean       @default(false)
-  createdAt                   DateTime      @default(now())
-  updatedAt                   DateTime      @updatedAt
-  userId                      String
-  baseBranch                  String
-  baseCommitSha               String
-  shadowBranch                String
-  pullRequestNumber           Int?
-  githubIssueId               String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  userId            String
+  baseBranch        String
+  baseCommitSha     String
+  githubIssueId     String?
+  
+  // Task-level status (overall container status)
+  status            TaskStatus @default(INITIALIZING)
+  
+  // Model configuration for this task
+  mainModel         String   @default("claude-3-5-sonnet-20241022")  // Primary model (first selected)
+  models            String[] @default(["claude-3-5-sonnet-20241022"]) // All selected models array
+  
+  // Task-level cleanup scheduling
+  scheduledCleanupAt DateTime?
+  workspaceCleanedUp Boolean @default(false)
+
+  // Relationships
+  variants                    Variant[]     @relation("TaskVariants")
   messages                    ChatMessage[] @relation("TaskMessages")
   user                        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions                    TaskSession[]
   todos                       Todo[]
   memories                    Memory[]
   stackedTaskCreationMessages ChatMessage[] @relation("StackedTask")
 
   codebaseUnderstandingId String?
   codebaseUnderstanding   CodebaseUnderstanding? @relation(fields: [codebaseUnderstandingId], references: [id])
+}
+
+model Variant {
+  id                  String        @id @default(nanoid())
+  taskId              String
+  modelType           String
+  sequence            Int
+  shadowBranch        String
+  workspacePath       String?
+  status              VariantStatus @default(INITIALIZING)
+  initStatus          InitStatus    @default(INACTIVE)
+  scheduledCleanupAt  DateTime?
+  initializationError String?
+  errorMessage        String?
+  workspaceCleanedUp  Boolean       @default(false)
+  hasBeenInitialized  Boolean       @default(false)
+  
+  // PR management per variant
+  pullRequestNumber   Int?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // Relationships
+  task     Task          @relation("TaskVariants", fields: [taskId], references: [id], onDelete: Cascade)
+  messages ChatMessage[] @relation("VariantMessages")
+  sessions TaskSession[]
+  todos    Todo[]
+  memories Memory[]
+
+  @@unique([taskId, sequence])
+  @@index([taskId, status])
+  @@index([status])
 }
 
 model RepositoryIndex {
@@ -133,10 +165,13 @@ model Todo {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   taskId    String
+  variantId String?
   task      Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  variant   Variant?   @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@id([taskId, id])
   @@index([taskId, sequence])
+  @@index([variantId, sequence])
   @@index([taskId, status])
 }
 
@@ -154,12 +189,15 @@ model ChatMessage {
   createdAt           DateTime             @default(now())
   editedAt            DateTime?
   taskId              String
+  variantId           String?
   task                Task                 @relation("TaskMessages", fields: [taskId], references: [id], onDelete: Cascade)
+  variant             Variant?             @relation("VariantMessages", fields: [variantId], references: [id], onDelete: Cascade)
   pullRequestSnapshot PullRequestSnapshot?
   stackedTaskId       String?
   stackedTask         Task?                @relation("StackedTask", fields: [stackedTaskId], references: [id], onDelete: SetNull)
 
   @@index([taskId, sequence])
+  @@index([variantId, sequence])
   @@index([taskId, role, sequence])
   @@index([llmModel, createdAt])
 }
@@ -172,10 +210,10 @@ model TaskSession {
   connectionId String?
   createdAt    DateTime  @default(now())
   endedAt      DateTime?
-  taskId       String
-  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  variantId    String
+  variant      Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
-  @@index([taskId, isActive])
+  @@index([variantId, isActive])
 }
 
 model CodebaseUnderstanding {
@@ -203,17 +241,20 @@ model Memory {
   repoUrl      String
 
   // User and task context
-  userId String
-  taskId String
+  userId    String
+  taskId    String
+  variantId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@index([userId, repoFullName])
   @@index([taskId])
+  @@index([variantId])
   @@index([category])
 }
 
@@ -244,6 +285,14 @@ enum TaskStatus {
   RUNNING
   COMPLETED
   FAILED
+}
+
+enum VariantStatus {
+  INITIALIZING
+  RUNNING
+  COMPLETED
+  FAILED
+  STOPPED
 }
 
 enum PullRequestStatus {

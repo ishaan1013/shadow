@@ -12,13 +12,13 @@ import { errorHandler } from "./middleware/error-handler";
 import { apiKeyAuth } from "./middleware/api-key-auth";
 import { createSocketServer } from "./socket";
 import { getGitHubAccessToken } from "./github/auth/account-service";
-import { updateTaskStatus } from "./utils/task-status";
 import { hasReachedTaskLimit } from "./services/task-limit";
 import { createWorkspaceManager } from "./execution";
 import { filesRouter } from "./files/router";
 import { handleGitHubWebhook } from "./webhooks/github-webhook";
 import { getIndexingStatus } from "./routes/indexing-status";
 import { modelContextService } from "./services/model-context-service";
+import { updateTaskStatus } from "./utils/task-status";
 
 const app = express();
 export const chatService = new ChatService();
@@ -26,9 +26,11 @@ const initializationEngine = new TaskInitializationEngine();
 
 const initiateTaskSchema = z.object({
   message: z.string().min(1, "Message is required"),
-  model: z.enum(Object.values(AvailableModels) as [string, ...string[]], {
-    errorMap: () => ({ message: "Invalid model type" }),
-  }),
+  models: z.array(
+    z.enum(Object.values(AvailableModels) as [string, ...string[]], {
+      errorMap: () => ({ message: "Invalid model type" }),
+    })
+  ).min(1, "At least one model is required").max(3, "Maximum 3 models allowed"),
   userId: z.string().min(1, "User ID is required"),
 });
 
@@ -134,7 +136,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       });
     }
 
-    const { message, model, userId } = validation.data;
+    const { message, models, userId } = validation.data;
 
     // Check task limit before processing (production only)
     const isAtLimit = await hasReachedTaskLimit(userId);
@@ -148,6 +150,9 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
 
     const task = await prisma.task.findUnique({
       where: { id: taskId },
+      include: {
+        variants: true,
+      },
     });
 
     if (!task) {
@@ -174,57 +179,86 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
         });
       }
 
-      const initContext = await modelContextService.createContext(
-        taskId,
-        req.headers.cookie,
-        model as ModelType
-      );
-
-      if (!initContext.validateAccess()) {
-        const provider = initContext.getProvider();
-        const providerName =
-          provider === "anthropic"
-            ? "Anthropic"
-            : provider === "openrouter"
-              ? "OpenRouter"
-              : "OpenAI";
-
-        await updateTaskStatus(taskId, "FAILED", "INIT");
-
+      // Validate API keys for all models
+      const invalidModels = [];
+      for (const model of models) {
+        const context = await modelContextService.createContext(
+          taskId,
+          req.headers.cookie,
+          model as ModelType
+        );
+        
+        if (!context.validateAccess()) {
+          invalidModels.push({
+            model,
+            provider: context.getProvider(),
+          });
+        }
+      }
+      
+      if (invalidModels.length > 0) {
+        const errorMessages = invalidModels.map(({ model, provider }) => {
+          const providerName =
+            provider === "anthropic"
+              ? "Anthropic"
+              : provider === "openrouter"
+                ? "OpenRouter"
+                : "OpenAI";
+          return `${providerName} API key required for ${model}`;
+        });
+        
         return res.status(400).json({
-          error: `${providerName} API key required`,
-          details: `Please configure your ${providerName} API key in settings to use ${model}.`,
+          error: "Missing API keys",
+          details: errorMessages.join(", "),
         });
       }
 
-      await updateTaskStatus(taskId, "INITIALIZING", "INIT");
       console.log(
-        `⏳ [TASK_INITIATE] Task ${taskId} status set to INITIALIZING - starting initialization...`
+        `⏳ [TASK_INITIATE] Task ${taskId} starting initialization for ${models.length} variants...`
       );
 
-      const initSteps = await initializationEngine.getDefaultStepsForTask();
-      await initializationEngine.initializeTask(
-        taskId,
-        initSteps,
-        userId,
-        initContext
-      );
-
-      const updatedTask = await prisma.task.findUnique({
-        where: { id: taskId },
-        select: { workspacePath: true },
+      // Initialize all variants in parallel
+      const initPromises = task.variants.map(async (variant) => {
+        const model = variant.modelType as ModelType;
+        const variantContext = await modelContextService.createContext(
+          taskId,
+          req.headers.cookie,
+          model
+        );
+        
+        try {
+          const initSteps = await initializationEngine.getDefaultStepsForTask();
+          await initializationEngine.initializeTask(
+            variant.id,
+            initSteps,
+            userId,
+            variantContext
+          );
+          
+          // Process initial user message for this variant
+          await chatService.processUserMessage({
+            taskId,
+            variantId: variant.id,
+            userMessage: message,
+            context: variantContext,
+            enableTools: true,
+            skipUserMessageSave: true,
+          });
+          
+          return { success: true, variantId: variant.id };
+        } catch (error) {
+          console.error(`[TASK_INITIATE] Variant ${variant.id} failed:`, error);
+          return { success: false, variantId: variant.id, error };
+        }
       });
-
-      await updateTaskStatus(taskId, "RUNNING", "INIT");
-
-      await chatService.processUserMessage({
-        taskId,
-        userMessage: message,
-        context: initContext,
-        enableTools: true,
-        skipUserMessageSave: true,
-        workspacePath: updatedTask?.workspacePath || undefined,
-      });
+      
+      const results = await Promise.allSettled(initPromises);
+      const successfulVariants = results
+        .map((result, index) => ({ result, variant: task.variants[index] }))
+        .filter(({ result }) => result.status === 'fulfilled' && result.value.success)
+        .map(({ variant }) => variant.id);
+        
+      console.log(`✅ [TASK_INITIATE] Task ${taskId} initialized ${successfulVariants.length}/${task.variants.length} variants successfully`);
 
       res.json({
         success: true,
@@ -375,17 +409,16 @@ app.post("/api/tasks/:taskId/pull-request", async (req, res) => {
 
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: {
-        id: true,
-        userId: true,
-        repoFullName: true,
-        shadowBranch: true,
-        baseBranch: true,
-        title: true,
-        status: true,
-        repoUrl: true,
-        pullRequestNumber: true,
-        workspacePath: true,
+      include: {
+        variants: {
+          select: {
+            id: true,
+            shadowBranch: true,
+            workspacePath: true,
+            pullRequestNumber: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -405,15 +438,22 @@ app.post("/api/tasks/:taskId/pull-request", async (req, res) => {
       });
     }
 
-    if (task.pullRequestNumber) {
+    // Check if any variants already have PRs
+    const variantsWithPRs = task.variants.filter(v => v.pullRequestNumber);
+    const variantsWithoutPRs = task.variants.filter(v => !v.pullRequestNumber);
+
+    if (variantsWithoutPRs.length === 0) {
       console.log(
-        `[PR_CREATION] Task ${taskId} already has PR #${task.pullRequestNumber}`
+        `[PR_CREATION] All variants for task ${taskId} already have PRs`
       );
       return res.json({
         success: true,
-        prNumber: task.pullRequestNumber,
-        prUrl: `${task.repoUrl}/pull/${task.pullRequestNumber}`,
-        message: "Pull request already exists",
+        existingPRs: variantsWithPRs.map(v => ({
+          variantId: v.id,
+          prNumber: v.pullRequestNumber,
+          prUrl: `${task.repoUrl}/pull/${v.pullRequestNumber}`,
+        })),
+        message: "Pull requests already exist for all variants",
       });
     }
 
@@ -447,42 +487,69 @@ app.post("/api/tasks/:taskId/pull-request", async (req, res) => {
       req.headers.cookie
     );
 
-    if (modelContext) {
-      await chatService.createPRIfNeeded(
-        taskId,
-        task.workspacePath || undefined,
-        latestAssistantMessage.id,
-        modelContext
-      );
-    } else {
-      // Fallback if context unavailable
-      await chatService.createPRIfNeeded(
-        taskId,
-        task.workspacePath || undefined,
-        latestAssistantMessage.id
-      );
+    // Create PRs for all variants that don't have them yet
+    const prCreationResults = [];
+
+    for (const variant of variantsWithoutPRs) {
+      try {
+        if (modelContext) {
+          await chatService.createPRIfNeeded(
+            taskId,
+            variant.id,
+            variant.workspacePath || undefined,
+            latestAssistantMessage.id,
+            modelContext
+          );
+        } else {
+          // Fallback if context unavailable
+          await chatService.createPRIfNeeded(
+            taskId,
+            variant.id,
+            variant.workspacePath || undefined,
+            latestAssistantMessage.id
+          );
+        }
+
+        // Get the updated variant to check if PR was created
+        const updatedVariant = await prisma.variant.findUnique({
+          where: { id: variant.id },
+          select: { pullRequestNumber: true },
+        });
+
+        if (updatedVariant?.pullRequestNumber) {
+          prCreationResults.push({
+            variantId: variant.id,
+            prNumber: updatedVariant.pullRequestNumber,
+            prUrl: `${task.repoUrl}/pull/${updatedVariant.pullRequestNumber}`,
+            success: true,
+          });
+        } else {
+          prCreationResults.push({
+            variantId: variant.id,
+            success: false,
+            error: "PR creation completed but no PR number found",
+          });
+        }
+      } catch (error) {
+        prCreationResults.push({
+          variantId: variant.id,
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
     }
 
-    const updatedTask = await prisma.task.findUnique({
-      where: { id: taskId },
-      select: {
-        pullRequestNumber: true,
-        repoUrl: true,
-      },
-    });
-
-    if (!updatedTask?.pullRequestNumber) {
-      throw new Error("PR creation completed but no PR number found");
-    }
+    const successfulPRs = prCreationResults.filter(r => r.success);
+    const failedPRs = prCreationResults.filter(r => !r.success);
 
     console.log(
-      `[PR_CREATION] Successfully created PR #${updatedTask.pullRequestNumber} for task ${taskId}`
+      `[PR_CREATION] Created ${successfulPRs.length} PRs for task ${taskId}, ${failedPRs.length} failed`
     );
 
     res.json({
-      success: true,
-      prNumber: updatedTask.pullRequestNumber,
-      prUrl: `${updatedTask.repoUrl}/pull/${updatedTask.pullRequestNumber}`,
+      success: successfulPRs.length > 0,
+      createdPRs: successfulPRs,
+      failedPRs,
       messageId: latestAssistantMessage.id,
     });
   } catch (error) {

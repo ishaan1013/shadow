@@ -36,8 +36,13 @@ import {
 import config from "../config";
 import { getGitHubAppEmail, getGitHubAppName } from "../config/shared";
 import {
+  updateVariantStatus,
+  updateVariantActivity,
+  scheduleVariantCleanup,
+  cancelVariantCleanup,
+} from "../utils/variant-status";
+import {
   updateTaskStatus,
-  updateTaskActivity,
   scheduleTaskCleanup,
   cancelTaskCleanup,
 } from "../utils/task-status";
@@ -150,8 +155,8 @@ export class ChatService {
       metadata,
     });
 
-    // Update task activity timestamp when user sends a message
-    await updateTaskActivity(taskId, "MESSAGE");
+    // TODO: Update variant activity timestamp when user sends a message
+    // await updateVariantActivity(variantId, "MESSAGE");
 
     return message;
   }
@@ -233,36 +238,40 @@ export class ChatService {
    * Commit changes to git if there are any changes after an LLM response
    */
   private async commitChangesIfAny(
-    taskId: string,
+    variantId: string,
     context: TaskModelContext,
     _workspacePath?: string
   ): Promise<boolean> {
     try {
-      // Get task info including user and workspace details
-      const task = await prisma.task.findUnique({
-        where: { id: taskId },
-        include: { user: true },
+      // Get variant info including task and user details
+      const variant = await prisma.variant.findUnique({
+        where: { id: variantId },
+        include: {
+          task: {
+            include: { user: true },
+          },
+        },
       });
 
-      if (!task) {
-        console.warn(`[CHAT] Task not found for git commit: ${taskId}`);
+      if (!variant) {
+        console.warn(`[CHAT] Variant not found for git commit: ${variantId}`);
         return false;
       }
 
-      if (!task.shadowBranch) {
+      if (!variant.shadowBranch) {
         console.warn(
-          `[CHAT] No shadow branch configured for task ${taskId}, skipping git commit`
+          `[CHAT] No shadow branch configured for variant ${variantId}, skipping git commit`
         );
         return false;
       }
 
       // Use unified git service for both local and remote modes
-      const gitService = await createGitService(taskId);
+      const gitService = await createGitService(variant.taskId);
 
       // Check if there are any uncommitted changes
       const hasChanges = await gitService.hasChanges();
       if (!hasChanges) {
-        console.log(`[CHAT] No changes to commit for task ${taskId}`);
+        console.log(`[CHAT] No changes to commit for variant ${variantId}`);
         return false;
       }
 
@@ -281,7 +290,7 @@ export class ChatService {
       }
 
       console.log(
-        `[CHAT] Generated commit message for task ${taskId}: "${commitMessage}"`
+        `[CHAT] Generated commit message for variant ${variantId}: "${commitMessage}"`
       );
 
       // Commit changes with Shadow as author and user as co-author
@@ -291,44 +300,48 @@ export class ChatService {
           email: getGitHubAppEmail(config),
         },
         coAuthor: {
-          name: task.user.name,
-          email: task.user.email,
+          name: variant.task.user.name,
+          email: variant.task.user.email,
         },
         message: commitMessage,
       });
 
       if (!commitResult.success) {
         console.error(
-          `[CHAT] Failed to commit changes for task ${taskId}: ${commitResult.message}`
+          `[CHAT] Failed to commit changes for variant ${variantId}: ${commitResult.message}`
         );
         return false;
       }
 
-      console.log(`[CHAT] Successfully committed changes for task ${taskId}`);
+      console.log(
+        `[CHAT] Successfully committed changes for variant ${variantId}`
+      );
 
       // Push the commit to remote
       try {
         const pushResult = await gitService.pushBranch(
-          task.shadowBranch,
+          variant.shadowBranch,
           false
         );
         if (!pushResult.success) {
           console.warn(
-            `[CHAT] Failed to push changes for task ${taskId}: ${pushResult.message}`
+            `[CHAT] Failed to push changes for variant ${variantId}: ${pushResult.message}`
           );
           // Don't fail the operation - commit succeeded even if push failed
         } else {
-          console.log(`[CHAT] Successfully pushed changes for task ${taskId}`);
+          console.log(
+            `[CHAT] Successfully pushed changes for variant ${variantId}`
+          );
         }
       } catch (pushError) {
-        console.warn(`[CHAT] Push failed for task ${taskId}:`, pushError);
+        console.warn(`[CHAT] Push failed for variant ${variantId}:`, pushError);
         // Don't throw - commit succeeded even if push failed
       }
 
       return true;
     } catch (error) {
       console.error(
-        `[CHAT] Failed to commit changes for task ${taskId}:`,
+        `[CHAT] Failed to commit changes for variant ${variantId}:`,
         error
       );
       // Don't throw here - we don't want git failures to break the chat flow
@@ -341,6 +354,7 @@ export class ChatService {
    */
   async createPRIfNeeded(
     taskId: string,
+    variantId: string,
     workspacePath?: string,
     messageId?: string,
     context?: TaskModelContext
@@ -362,6 +376,7 @@ export class ChatService {
 
     return this._createPRIfNeededInternal(
       taskId,
+      variantId,
       workspacePath,
       messageId,
       modelContext
@@ -373,37 +388,42 @@ export class ChatService {
    */
   private async _createPRIfNeededInternal(
     taskId: string,
+    variantId: string,
     workspacePath?: string,
     messageId?: string,
     context?: TaskModelContext
   ): Promise<void> {
     try {
-      const task = await prisma.task.findUnique({
-        where: { id: taskId },
-        include: { user: true },
+      const variant = await prisma.variant.findUnique({
+        where: { id: variantId },
+        include: {
+          task: {
+            include: { user: true },
+          },
+        },
       });
 
-      if (!task) {
-        console.warn(`[CHAT] Task not found for PR creation: ${taskId}`);
+      if (!variant) {
+        console.warn(`[CHAT] Variant not found for PR creation: ${variantId}`);
         return;
       }
 
-      if (!task.shadowBranch) {
+      if (!variant.shadowBranch) {
         console.warn(
-          `[CHAT] No shadow branch configured for task ${taskId}, skipping PR creation`
+          `[CHAT] No shadow branch configured for variant ${variantId}, skipping PR creation`
         );
         return;
       }
 
-      const resolvedWorkspacePath = workspacePath || task.workspacePath;
+      const resolvedWorkspacePath = workspacePath || variant.workspacePath;
       if (!resolvedWorkspacePath) {
         console.warn(
-          `[CHAT] No workspace path available for task ${taskId}, skipping PR creation`
+          `[CHAT] No workspace path available for variant ${variantId}, skipping PR creation`
         );
         return;
       }
 
-      const gitService = await createGitService(taskId);
+      const gitService = await createGitService(variant.taskId);
       const prManager = new PRManager(gitService, this.llmService);
 
       if (!messageId) {
@@ -423,12 +443,12 @@ export class ChatService {
       await prManager.createPRIfNeeded(
         {
           taskId,
-          repoFullName: task.repoFullName,
-          shadowBranch: task.shadowBranch,
-          baseBranch: task.baseBranch,
-          userId: task.userId,
-          taskTitle: task.title,
-          wasTaskCompleted: task.status === "COMPLETED",
+          repoFullName: variant.task.repoFullName,
+          shadowBranch: variant.shadowBranch,
+          baseBranch: variant.task.baseBranch,
+          userId: variant.task.userId,
+          taskTitle: variant.task.title,
+          wasTaskCompleted: variant.status === "COMPLETED",
           messageId,
         },
         context
@@ -444,6 +464,7 @@ export class ChatService {
    */
   private async createPRIfUserEnabled(
     taskId: string,
+    variantId: string,
     workspacePath?: string,
     messageId?: string,
     context?: TaskModelContext
@@ -487,7 +508,13 @@ export class ChatService {
       });
 
       // Use the existing createPRIfNeeded method
-      await this.createPRIfNeeded(taskId, workspacePath, messageId, context);
+      await this.createPRIfNeeded(
+        taskId,
+        variantId,
+        workspacePath,
+        messageId,
+        context
+      );
     } catch (error) {
       console.error(
         `[CHAT] Failed to check user auto-PR setting for task ${taskId}:`,
@@ -520,8 +547,6 @@ export class ChatService {
           select: {
             id: true,
             title: true,
-            shadowBranch: true,
-            status: true,
           },
         },
       },
@@ -556,22 +581,33 @@ export class ChatService {
       // Always cancel any scheduled cleanup when user sends follow-up message
       await cancelTaskCleanup(taskId);
 
-      const task = await prisma.task.findUnique({
+      // For multi-variant tasks, we need to check if any variants need re-initialization
+      const taskWithVariants = await prisma.task.findUnique({
         where: { id: taskId },
-        select: {
-          initStatus: true,
+        include: {
+          variants: {
+            select: {
+              id: true,
+              initStatus: true,
+              status: true,
+            },
+          },
         },
       });
 
-      if (!task) {
+      if (!taskWithVariants) {
         console.warn(`[CHAT] Task not found for follow-up logic: ${taskId}`);
         return;
       }
 
-      // Handle tasks with inactive workspaces (VM spun down)
-      if (task.initStatus === "INACTIVE") {
+      // Handle variants with inactive workspaces (VMs spun down)
+      const inactiveVariants = taskWithVariants.variants.filter(
+        (v) => v.initStatus === "INACTIVE"
+      );
+
+      if (inactiveVariants.length > 0) {
         console.log(
-          `[CHAT] Task ${taskId} is inactive, re-initializing workspace...`
+          `[CHAT] Task ${taskId} has ${inactiveVariants.length} inactive variants, re-initializing them...`
         );
 
         // Set task to INITIALIZING to indicate re-initialization is happening
@@ -579,12 +615,31 @@ export class ChatService {
 
         const initializationEngine = new TaskInitializationEngine();
         const initSteps = await initializationEngine.getDefaultStepsForTask();
-        await initializationEngine.initializeTask(
-          taskId,
-          initSteps,
-          userId,
-          context
-        );
+
+        // Re-initialize each inactive variant
+        for (const variant of inactiveVariants) {
+          try {
+            await initializationEngine.initializeTask(
+              variant.id,
+              initSteps,
+              userId,
+              context
+            );
+          } catch (error) {
+            console.error(
+              `Failed to re-initialize variant ${variant.id}:`,
+              error
+            );
+            await updateVariantStatus(
+              variant.id,
+              "FAILED",
+              "CHAT",
+              error instanceof Error
+                ? error.message
+                : "Re-initialization failed"
+            );
+          }
+        }
 
         await updateTaskStatus(taskId, "RUNNING", "CHAT");
       }
@@ -612,6 +667,7 @@ export class ChatService {
    */
   async processUserMessage({
     taskId,
+    variantId,
     userMessage,
     context,
     enableTools = true,
@@ -620,6 +676,7 @@ export class ChatService {
     queue = false,
   }: {
     taskId: string;
+    variantId?: string;
     userMessage: string;
     context: TaskModelContext;
     enableTools?: boolean;
@@ -635,6 +692,7 @@ export class ChatService {
 
     return this._processUserMessageInternal({
       taskId,
+      variantId,
       userMessage,
       context,
       enableTools,
@@ -649,6 +707,7 @@ export class ChatService {
    */
   private async _processUserMessageInternal({
     taskId,
+    variantId,
     userMessage,
     context,
     enableTools = true,
@@ -657,6 +716,7 @@ export class ChatService {
     queue = false,
   }: {
     taskId: string;
+    variantId?: string;
     userMessage: string;
     context: TaskModelContext;
     enableTools?: boolean;
@@ -1211,43 +1271,59 @@ These are specific instructions from the user that should be followed throughout
         await updateTaskStatus(taskId, "COMPLETED", "CHAT");
         await scheduleTaskCleanup(taskId, 15);
 
-        // Update task activity timestamp when assistant completes response
-        await updateTaskActivity(taskId, "CHAT");
+        // TODO: Update variant activity timestamp when assistant completes response
+        // await updateVariantActivity(variantId, "CHAT");
 
         // Commit changes if there are any (only for successfully completed responses)
-        try {
-          const changesCommitted = await this.commitChangesIfAny(
-            taskId,
-            context,
-            workspacePath
-          );
-
-          // Create PR if changes were committed and user has auto-PR enabled
-          if (changesCommitted && assistantMessageId) {
-            await this.createPRIfUserEnabled(
-              taskId,
-              workspacePath,
-              assistantMessageId,
-              context
+        if (variantId) {
+          try {
+            const changesCommitted = await this.commitChangesIfAny(
+              variantId,
+              context,
+              workspacePath
             );
-          }
 
-          // Create checkpoint after successful completion and commit
-          if (changesCommitted && assistantMessageId) {
-            await checkpointService.createCheckpoint(
-              taskId,
-              assistantMessageId
+            // Create PR if changes were committed and user has auto-PR enabled
+            if (changesCommitted && assistantMessageId) {
+              await this.createPRIfUserEnabled(
+                taskId,
+                variantId,
+                workspacePath,
+                assistantMessageId,
+                context
+              );
+            }
+
+            // Create checkpoint after successful completion and commit
+            if (changesCommitted && assistantMessageId) {
+              await checkpointService.createCheckpoint(
+                taskId,
+                assistantMessageId
+              );
+            }
+          } catch (error) {
+            console.error(
+              `[CHAT] Failed to commit changes for task ${taskId}:`,
+              error
             );
+            // Don't fail the entire response for git commit failures
           }
-        } catch (error) {
-          console.error(
-            `[CHAT] Failed to commit changes for task ${taskId}:`,
-            error
+        } else {
+          console.warn(
+            `[CHAT] No variantId provided, skipping commit for taskId: ${taskId}`
           );
-          // Don't fail the entire response for git commit failures
         }
       }
+    } catch (error) {
+      console.error(
+        `[CHAT] Failed to commit/checkpoint for variant ${variantId}:`,
+        error
+      );
+      // Non-blocking - don't throw, let chat continue even if git operations fail
+    }
 
+    // Clean up and finalization
+    try {
       // Clean up stream tracking
       this.activeStreams.delete(taskId);
       this.stopRequested.delete(taskId);
@@ -1271,8 +1347,16 @@ These are specific instructions from the user that should be followed throughout
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
 
-      // Update task status to failed when stream processing fails
-      await updateTaskStatus(taskId, "FAILED", "CHAT", errorMessage);
+      // Update variant status to failed when stream processing fails
+      // Note: This is in the outer catch block so variantId may not be available
+      if (variantId) {
+        await updateVariantStatus(variantId, "FAILED", "CHAT", errorMessage);
+      } else {
+        // For backward compatibility, log the error
+        console.error(
+          `[CHAT] Stream processing failed for task ${taskId}: ${errorMessage}`
+        );
+      }
 
       // Emit error chunk
       emitStreamChunk(
@@ -1305,6 +1389,7 @@ These are specific instructions from the user that should be followed throughout
     }
   }
 
+  // Process any queued actions for a task
   private async processQueuedActions(taskId: string): Promise<void> {
     const queuedAction = this.queuedActions.get(taskId);
     if (!queuedAction) {
@@ -1460,8 +1545,8 @@ These are specific instructions from the user that should be followed throughout
       },
     });
 
-    // Update task activity timestamp when user edits a message
-    await updateTaskActivity(taskId, "MESSAGE");
+    // TODO: Update variant activity timestamp when user edits a message
+    // await updateVariantActivity(variantId, "MESSAGE");
 
     // Get the sequence of the edited message
     const editedMessage = await prisma.chatMessage.findUnique({
@@ -1590,14 +1675,19 @@ These are specific instructions from the user that should be followed throughout
     newTaskId?: string;
   }): Promise<void> {
     try {
-      // Get parent task details
+      // Get parent task details with variant info
       const parentTask = await prisma.task.findUnique({
         where: { id: parentTaskId },
         select: {
           repoFullName: true,
           repoUrl: true,
-          shadowBranch: true,
           userId: true,
+          variants: {
+            select: {
+              shadowBranch: true,
+            },
+            take: 1, // Just need one variant's shadow branch for reference
+          },
         },
       });
 
@@ -1634,8 +1724,7 @@ These are specific instructions from the user that should be followed throughout
           title,
           repoFullName: parentTask.repoFullName,
           repoUrl: parentTask.repoUrl,
-          baseBranch: parentTask.shadowBranch, // Use parent's shadow branch as base
-          shadowBranch,
+          baseBranch: parentTask.variants[0]?.shadowBranch || "main", // Use parent's shadow branch as base
           baseCommitSha: "pending",
           status: "INITIALIZING",
           user: {

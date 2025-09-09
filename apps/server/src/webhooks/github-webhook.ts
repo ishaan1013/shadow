@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Request, Response } from "express";
 import { prisma } from "@repo/db";
-import { updateTaskStatus } from "../utils/task-status";
+import { updateVariantStatus } from "../utils/variant-status";
 import config from "../config";
 import {
   GitHubPullRequestWebhookSchema,
@@ -49,30 +49,32 @@ async function processPullRequestClosed(
   const isMerged = payload.pull_request.merged;
   const action = isMerged ? "merged" : "closed";
 
-  // Find all tasks associated with this PR
-  const tasks = await prisma.task.findMany({
+  // Find all variants associated with this PR
+  const variants = await prisma.variant.findMany({
     where: {
       pullRequestNumber: prNumber,
-      repoFullName: repoFullName,
-      status: { not: "ARCHIVED" },
+      task: {
+        repoFullName: repoFullName,
+      },
+      status: { not: "STOPPED" },
     },
-    select: { id: true },
+    select: { id: true, taskId: true },
   });
 
-  if (tasks.length === 0) {
-    console.log(`[WEBHOOK] No tasks found for PR #${prNumber}`);
+  if (variants.length === 0) {
+    console.log(`[WEBHOOK] No active variants found for PR #${prNumber}`);
     return 0;
   }
 
-  // Update all found tasks to ARCHIVED status
+  // Update all found variants to STOPPED status
   await Promise.all(
-    tasks.map((task) => updateTaskStatus(task.id, "ARCHIVED", "WEBHOOK"))
+    variants.map((variant) => updateVariantStatus(variant.id, "STOPPED", "WEBHOOK"))
   );
 
   console.log(
-    `[WEBHOOK] Archived ${tasks.length} tasks for PR #${prNumber} (${action})`
+    `[WEBHOOK] Archived ${variants.length} variants for PR #${prNumber} (${action})`
   );
-  return tasks.length;
+  return variants.length;
 }
 
 /**

@@ -1,12 +1,12 @@
-import { prisma, TaskStatus, InitStatus } from "@repo/db";
+import { prisma, TaskStatus } from "@repo/db";
 import { emitTaskStatusUpdate } from "../socket";
-import config from "@/config";
 
 /**
  * Updates a task's status in the database and emits a real-time update
  * @param taskId - The task ID to update
  * @param status - The new status for the task
  * @param context - Optional context for logging (e.g., "CHAT", "SOCKET", "INIT")
+ * @param errorMessage - Optional error message for FAILED status
  */
 export async function updateTaskStatus(
   taskId: string,
@@ -15,13 +15,9 @@ export async function updateTaskStatus(
   errorMessage?: string
 ): Promise<void> {
   try {
-    await prisma.task.update({
+    const task = await prisma.task.update({
       where: { id: taskId },
-      data: {
-        status,
-        errorMessage:
-          status === "FAILED" ? errorMessage || "Unknown error" : null,
-      },
+      data: { status },
     });
 
     // Log the status change
@@ -31,8 +27,13 @@ export async function updateTaskStatus(
       `${logPrefix} Task ${taskId} status updated to ${status}${errorSuffix}`
     );
 
-    // Emit real-time update to all connected clients
-    emitTaskStatusUpdate(taskId, status);
+    // Emit real-time update to all connected clients for this task
+    emitTaskStatusUpdate(taskId, {
+      taskId,
+      status,
+      errorMessage: errorMessage || undefined,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
     console.error(
       `Failed to update task ${taskId} status to ${status}:`,
@@ -43,105 +44,12 @@ export async function updateTaskStatus(
 }
 
 /**
- * Set task initialization status
- */
-export async function setInitStatus(
-  taskId: string,
-  status: InitStatus
-): Promise<void> {
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      initStatus: status,
-      initializationError: null, // Clear any previous errors
-    },
-  });
-}
-
-/**
- * Set task as completed with final step
- */
-export async function setTaskCompleted(
-  taskId: string,
-  status: InitStatus
-): Promise<void> {
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      initStatus: status,
-      initializationError: null,
-    },
-  });
-}
-
-/**
- * Set task as failed with error message
- */
-export async function setTaskFailed(
-  taskId: string,
-  step: InitStatus,
-  error: string
-): Promise<void> {
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      initStatus: step, // Keep the step where failure occurred
-      initializationError: error,
-    },
-  });
-}
-
-/**
- * Clear task progress (reset to not started state)
- */
-export async function clearTaskProgress(taskId: string): Promise<void> {
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      initStatus: "INACTIVE",
-      initializationError: null,
-    },
-  });
-}
-
-/**
- * Updates a task's updatedAt timestamp to reflect recent activity
- * @param taskId - The task ID to update
- * @param context - Optional context for logging (e.g., "MESSAGE", "CHAT", "TOOL")
- */
-export async function updateTaskActivity(
-  taskId: string,
-  context?: string
-): Promise<void> {
-  try {
-    await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        updatedAt: new Date(),
-      },
-    });
-
-    const logPrefix = context ? `[${context}]` : "[ACTIVITY]";
-    console.log(`${logPrefix} Task ${taskId} activity timestamp updated`);
-  } catch (error) {
-    console.error(`Failed to update task ${taskId} activity timestamp:`, error);
-  }
-}
-
-/**
  * Schedule task for cleanup (remote mode only)
  */
 export async function scheduleTaskCleanup(
   taskId: string,
   delayMinutes: number
 ): Promise<void> {
-  if (config.nodeEnv !== "production") {
-    console.log(
-      `[TASK_CLEANUP] Skipping cleanup (non-production mode): ${taskId}`
-    );
-    return;
-  }
-
   const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
 
   try {
@@ -172,18 +80,4 @@ export async function cancelTaskCleanup(taskId: string): Promise<void> {
   });
 
   console.log(`[TASK_CLEANUP] Cancelled cleanup for task ${taskId}`);
-}
-
-/**
- * Mark task as having been initialized for the first time
- */
-export async function setTaskInitialized(taskId: string): Promise<void> {
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      hasBeenInitialized: true,
-    },
-  });
-
-  console.log(`[TASK_STATUS] Task ${taskId} marked as initialized`);
 }

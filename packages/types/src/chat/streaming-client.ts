@@ -135,8 +135,9 @@ export interface StreamChunk {
 
 // Initialization progress tracking
 export interface InitializationProgress {
-  type: "init-start" | "step-start" | "init-complete" | "init-error";
+  type: "init-start" | "step-start" | "step-progress" | "init-complete" | "init-error";
   taskId: string;
+  variantId?: string; // Support for variant-specific initialization
 
   // Current step info
   currentStep?: InitStatus;

@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import { z, ZodIssue } from "zod";
 import { generateTaskTitleAndBranch } from "./generate-title-branch";
-import { generateTaskId, MAX_TASKS_PER_USER_PRODUCTION } from "@repo/types";
+import { generateTaskId, generateVariantId, generateShadowBranch, MAX_TASKS_PER_USER_PRODUCTION } from "@repo/types";
 import { makeBackendRequest } from "../make-backend-request";
 
 const createTaskSchema = z.object({
@@ -14,7 +14,7 @@ const createTaskSchema = z.object({
     .string()
     .min(1, "Message is required")
     .max(100000, "Message too long"),
-  model: z.string().min(1, "Model is required"),
+  models: z.array(z.string()).min(1, "At least one model is required").max(3, "Maximum 3 models allowed"),
   repoFullName: z.string().min(1, "Repository name is required"),
   repoUrl: z
     .string()
@@ -34,9 +34,12 @@ export async function createTask(formData: FormData) {
     throw new Error("Unauthorized");
   }
 
+  const modelsData = formData.get("models") as string;
+  const models = modelsData ? JSON.parse(modelsData) : [];
+  
   const rawData = {
     message: formData.get("message") as string,
-    model: formData.get("model") as string,
+    models: Array.isArray(models) ? models : [models].filter(Boolean),
     repoFullName: formData.get("repoFullName") as string,
     repoUrl: formData.get("repoUrl") as string,
     baseBranch: (formData.get("baseBranch") as string) || "main",
@@ -49,7 +52,7 @@ export async function createTask(formData: FormData) {
     throw new Error(`Validation failed: ${errorMessage}`);
   }
 
-  const { message, model, repoUrl, baseBranch, repoFullName } = validation.data;
+  const { message, models, repoUrl, baseBranch, repoFullName } = validation.data;
 
   // Check task limit in production only
   if (process.env.NODE_ENV === "production") {
@@ -72,12 +75,29 @@ export async function createTask(formData: FormData) {
 
   try {
     // Generate a title for the task
-    const { title, shadowBranch } = await generateTaskTitleAndBranch(
+    const { title } = await generateTaskTitleAndBranch(
       taskId,
       message
     );
 
-    // Create the task
+    // Create variants data
+    const variantsData = models.map((model, index) => {
+      const variantId = generateVariantId();
+      const shadowBranch = generateShadowBranch(taskId, index + 1);
+      
+      return {
+        id: variantId,
+        modelType: model,
+        sequence: index + 1,
+        shadowBranch,
+        status: "INITIALIZING" as const,
+        initStatus: "INACTIVE" as const,
+        hasBeenInitialized: false,
+        workspaceCleanedUp: false,
+      };
+    });
+
+    // Create the task with variants and initial messages
     task = await prisma.task.create({
       data: {
         id: taskId,
@@ -85,22 +105,27 @@ export async function createTask(formData: FormData) {
         repoFullName,
         repoUrl,
         baseBranch,
-        shadowBranch,
         baseCommitSha: "pending",
-        status: "INITIALIZING",
         user: {
           connect: {
             id: session.user.id,
           },
         },
+        variants: {
+          create: variantsData,
+        },
         messages: {
-          create: {
+          create: variantsData.map((variant, index) => ({
             content: message,
             role: MessageRole.USER,
             sequence: 1,
-            llmModel: model,
-          },
+            llmModel: variant.modelType,
+            variantId: variant.id,
+          })),
         },
+      },
+      include: {
+        variants: true,
       },
     });
 
@@ -122,7 +147,7 @@ export async function createTask(formData: FormData) {
             },
             body: JSON.stringify({
               message,
-              model,
+              models,
               userId: session.user.id,
             }),
           }

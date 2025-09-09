@@ -7,17 +7,18 @@ import {
   TerminalHistoryResponse,
   ModelType,
   ApiKeys,
+  VariantStatusUpdateEvent,
 } from "@repo/types";
 import http from "http";
 import { Server, Socket } from "socket.io";
 import { chatService } from "./app";
 import config, { getCorsOrigins } from "./config";
-import { updateTaskStatus } from "./utils/task-status";
 import { createToolExecutor } from "./execution";
 import { setupSidecarNamespace } from "./services/sidecar-socket-handler";
 import { parseApiKeysFromCookies } from "./utils/cookie-parser";
 import { modelContextService } from "./services/model-context-service";
 import { ensureTaskInfrastructureExists } from "./utils/infrastructure-check";
+import { updateTaskStatus } from "./utils/task-status";
 
 interface ConnectionState {
   lastSeen: number;
@@ -802,6 +803,13 @@ export async function emitTaskStatusUpdate(
 
     console.log(`[SOCKET] Emitting task status update:`, statusUpdateEvent);
     emitToTask(taskId, "task-status-updated", statusUpdateEvent);
+  }
+}
+
+export function emitVariantStatusUpdate(taskId: string, data: VariantStatusUpdateEvent) {
+  if (io) {
+    console.log(`[SOCKET] Emitting variant status update:`, data);
+    emitToTask(taskId, "variant-status-updated", data);
   }
 }
 

@@ -1,4 +1,4 @@
-import { TaskStatus, InitStatus, PullRequestSnapshot } from "@repo/db";
+import { TaskStatus, InitStatus, VariantStatus, PullRequestSnapshot } from "@repo/db";
 import type { Message } from "../chat/messages";
 import type { StreamChunk } from "../chat/streaming-client";
 import type { ModelType } from "../llm/models";
@@ -20,6 +20,15 @@ export interface TerminalEntry {
 export interface TaskStatusUpdateEvent {
   taskId: string;
   status: TaskStatus;
+  initStatus?: InitStatus;
+  timestamp: string;
+  errorMessage?: string;
+}
+
+export interface VariantStatusUpdateEvent {
+  taskId: string;
+  variantId: string;
+  status: VariantStatus;
   initStatus?: InitStatus;
   timestamp: string;
   errorMessage?: string;
@@ -80,6 +89,7 @@ export interface ServerToClientEvents {
   "terminal-error": (data: { error: string }) => void;
 
   "task-status-updated": (data: TaskStatusUpdateEvent) => void;
+  "variant-status-updated": (data: VariantStatusUpdateEvent) => void;
   "auto-pr-status": (data: AutoPRStatusEvent) => void;
   "queued-action-processing": (data: {
     taskId: string;
