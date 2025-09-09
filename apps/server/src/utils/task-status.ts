@@ -15,7 +15,7 @@ export async function updateTaskStatus(
   errorMessage?: string
 ): Promise<void> {
   try {
-    const task = await prisma.task.update({
+    await prisma.task.update({
       where: { id: taskId },
       data: { status },
     });
@@ -28,12 +28,7 @@ export async function updateTaskStatus(
     );
 
     // Emit real-time update to all connected clients for this task
-    emitTaskStatusUpdate(taskId, {
-      taskId,
-      status,
-      errorMessage: errorMessage || undefined,
-      timestamp: new Date().toISOString(),
-    });
+    emitTaskStatusUpdate(taskId, status);
   } catch (error) {
     console.error(
       `Failed to update task ${taskId} status to ${status}:`,
@@ -80,4 +75,30 @@ export async function cancelTaskCleanup(taskId: string): Promise<void> {
   });
 
   console.log(`[TASK_CLEANUP] Cancelled cleanup for task ${taskId}`);
+}
+
+/**
+ * Reset cleanup timer when any variant in a task gets activity
+ * This implements the requirement: "inactivity period should be reset after any single variant gets a new msg"
+ */
+export async function resetTaskCleanupTimer(
+  taskId: string,
+  delayMinutes: number = 30
+): Promise<void> {
+  const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+
+  try {
+    await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        scheduledCleanupAt: scheduledAt,
+      },
+    });
+
+    console.log(
+      `[TASK_CLEANUP] Reset cleanup timer for task ${taskId} to ${scheduledAt.toISOString()}`
+    );
+  } catch (error) {
+    console.error(`Failed to reset cleanup timer for task ${taskId}:`, error);
+  }
 }

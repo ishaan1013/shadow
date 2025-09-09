@@ -101,26 +101,35 @@ export function getAgentMode(): AgentMode {
 /**
  * Create a git service based on the configured agent mode
  * Provides unified git operations interface for both local and remote execution
+ * Now variant-first: takes variantId and derives workspace info from the variant
  */
-export async function createGitService(taskId: string): Promise<GitService> {
+export async function createGitService(variantId: string): Promise<GitService> {
   const agentMode = getAgentMode();
 
+  // Get variant info (includes taskId for remote mode and workspacePath for local mode)
+  const variant = await prisma.variant.findUnique({
+    where: { id: variantId },
+    select: {
+      workspacePath: true,
+      taskId: true,
+    },
+  });
+
+  if (!variant) {
+    throw new Error(`Variant ${variantId} not found`);
+  }
+
   if (agentMode === "remote") {
-    // For remote mode, use the tool executor to wrap git operations
-    const toolExecutor = await createToolExecutor(taskId);
+    // For remote mode, use the tool executor to wrap git operations (needs taskId for VM pod discovery)
+    const toolExecutor = await createToolExecutor(variant.taskId);
     return new RemoteGitService(toolExecutor as RemoteToolExecutor);
   } else {
-    // For local mode, get workspace path and create GitManager
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
-      select: { workspacePath: true },
-    });
-
-    if (!task?.workspacePath) {
-      throw new Error(`Task ${taskId} not found or has no workspace path`);
+    // For local mode, use variant's workspace path
+    if (!variant.workspacePath) {
+      throw new Error(`Variant ${variantId} has no workspace path`);
     }
 
-    const gitManager = new GitManager(task.workspacePath);
+    const gitManager = new GitManager(variant.workspacePath);
     return new LocalGitService(gitManager);
   }
 }

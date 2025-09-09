@@ -7,28 +7,41 @@ import { buildFileTree } from "./build-tree";
 
 const router = Router();
 
-// Get file tree for a task workspace
-router.get("/:taskId/files/tree", async (req, res) => {
+// Get file tree for a variant workspace
+router.get("/:taskId/:variantId/files/tree", async (req, res) => {
   try {
-    const { taskId } = req.params;
+    const { taskId, variantId } = req.params;
 
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
+    // Get the specific variant and verify it belongs to the task
+    const variant = await prisma.variant.findUnique({
+      where: { id: variantId },
       select: {
         id: true,
-        status: true,
         workspacePath: true,
+        initStatus: true,
+        task: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
       },
     });
 
-    if (!task) {
+    if (!variant || variant.task.id !== taskId) {
       return res.status(404).json({
         success: false,
-        error: "Task not found",
+        error: "Variant not found or does not belong to the specified task",
       });
     }
 
-    if (!task.workspacePath || task.status === "INITIALIZING") {
+    if (
+      !variant.workspacePath ||
+      variant.task.status === "INITIALIZING" ||
+      variant.initStatus === "PREPARE_WORKSPACE" ||
+      variant.initStatus === "CREATE_VM" ||
+      variant.initStatus === "WAIT_VM_READY"
+    ) {
       return res.json({
         success: true,
         tree: [],
@@ -53,10 +66,10 @@ router.get("/:taskId/files/tree", async (req, res) => {
   }
 });
 
-// Get file content for a task workspace
-router.get("/:taskId/files/content", async (req, res) => {
+// Get file content for a variant workspace
+router.get("/:taskId/:variantId/files/content", async (req, res) => {
   try {
-    const { taskId } = req.params;
+    const { taskId, variantId } = req.params;
     const filePath = req.query.path as string;
 
     if (!filePath) {
@@ -66,25 +79,37 @@ router.get("/:taskId/files/content", async (req, res) => {
       });
     }
 
-    // Verify task exists
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
+    // Get the specific variant and verify it belongs to the task
+    const variant = await prisma.variant.findUnique({
+      where: { id: variantId },
       select: {
         id: true,
-        status: true,
         workspacePath: true,
+        initStatus: true,
+        task: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
       },
     });
 
-    if (!task) {
+    if (!variant || variant.task.id !== taskId) {
       return res.status(404).json({
         success: false,
-        error: "Task not found",
+        error: "Variant not found or does not belong to the specified task",
       });
     }
 
     // Check if workspace is ready
-    if (!task.workspacePath || task.status === "INITIALIZING") {
+    if (
+      !variant.workspacePath ||
+      variant.task.status === "INITIALIZING" ||
+      variant.initStatus === "PREPARE_WORKSPACE" ||
+      variant.initStatus === "CREATE_VM" ||
+      variant.initStatus === "WAIT_VM_READY"
+    ) {
       return res.status(400).json({
         success: false,
         error: "Workspace is still initializing",
@@ -153,36 +178,46 @@ router.get("/:taskId/files/content", async (req, res) => {
   }
 });
 
-// GET /api/tasks/:taskId/file-changes - Get git-based file changes
-router.get("/:taskId/file-changes", async (req, res) => {
+// GET /api/tasks/:taskId/:variantId/file-changes - Get git-based file changes
+router.get("/:taskId/:variantId/file-changes", async (req, res) => {
   const startTime = Date.now();
   try {
-    const { taskId } = req.params;
+    const { taskId, variantId } = req.params;
 
-    // Validate task exists and get full status
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
+    // Get the specific variant with task info
+    const variant = await prisma.variant.findUnique({
+      where: { id: variantId },
       select: {
         id: true,
         workspacePath: true,
-        status: true,
-        baseBranch: true,
         shadowBranch: true,
-        repoFullName: true,
         initStatus: true,
-        userId: true,
+        task: {
+          select: {
+            id: true,
+            status: true,
+            baseBranch: true,
+            repoFullName: true,
+            userId: true,
+          },
+        },
       },
     });
 
-    if (!task) {
+    if (!variant || variant.task.id !== taskId) {
       return res.status(404).json({
         success: false,
-        error: "Task not found",
+        error: "Variant not found or does not belong to the specified task",
       });
     }
 
     // Don't return file changes if task is still initializing
-    if (task.status === "INITIALIZING") {
+    if (
+      variant.task.status === "INITIALIZING" ||
+      variant.initStatus === "PREPARE_WORKSPACE" ||
+      variant.initStatus === "CREATE_VM" ||
+      variant.initStatus === "WAIT_VM_READY"
+    ) {
       return res.json({
         success: true,
         fileChanges: [],
@@ -190,9 +225,9 @@ router.get("/:taskId/file-changes", async (req, res) => {
       });
     }
 
-    // If task workspace is INACTIVE (cleaned up), use GitHub API
-    if (task.initStatus === "INACTIVE") {
-      if (!task.repoFullName || !task.shadowBranch) {
+    // If variant workspace is INACTIVE (cleaned up), use GitHub API
+    if (variant.initStatus === "INACTIVE") {
+      if (!variant.task.repoFullName || !variant.shadowBranch) {
         return res.json({
           success: true,
           fileChanges: [],
@@ -201,10 +236,10 @@ router.get("/:taskId/file-changes", async (req, res) => {
       }
 
       const { fileChanges, diffStats } = await getGitHubFileChanges(
-        task.repoFullName,
-        task.baseBranch,
-        task.shadowBranch,
-        task.userId
+        variant.task.repoFullName,
+        variant.task.baseBranch,
+        variant.shadowBranch,
+        variant.task.userId
       );
 
       return res.json({
@@ -219,7 +254,7 @@ router.get("/:taskId/file-changes", async (req, res) => {
       const gitService = await createGitService(taskId);
 
       const { fileChanges, diffStats } = await gitService.getFileChanges(
-        task.baseBranch
+        variant.task.baseBranch
       );
 
       res.json({

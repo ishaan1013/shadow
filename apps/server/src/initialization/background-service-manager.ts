@@ -111,8 +111,13 @@ export class BackgroundServiceManager {
           repoFullName: true,
           repoUrl: true,
           userId: true,
-          workspacePath: true,
           codebaseUnderstandingId: true,
+          variants: {
+            select: {
+              workspacePath: true,
+            },
+            take: 1,
+          },
         },
       });
 
@@ -120,7 +125,8 @@ export class BackgroundServiceManager {
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      if (!task.workspacePath) {
+      const workspacePath = task.variants[0]?.workspacePath;
+      if (!workspacePath) {
         throw new Error(`Workspace path not found for task: ${taskId}`);
       }
 
@@ -144,7 +150,7 @@ export class BackgroundServiceManager {
       }
 
       console.log(
-        `[SHADOW-WIKI] Task details - Repo: ${task.repoFullName}, Workspace: ${task.workspacePath}`
+        `[SHADOW-WIKI] Task details - Repo: ${task.repoFullName}, Workspace: ${workspacePath}`
       );
       console.log(
         `[SHADOW-WIKI] Using model: ${context.getMainModel()} for analysis`

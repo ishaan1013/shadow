@@ -37,9 +37,9 @@ export class PRManager {
       // Get git metadata
       const commitSha = await this.gitService.getCurrentCommitSha();
 
-      // Check if PR already exists
+      // Check if PR already exists (variant-aware)
       const existingPRNumber = await this.prService.getExistingPRNumber(
-        options.taskId
+        options.variantId
       );
 
       if (!existingPRNumber) {
@@ -227,7 +227,6 @@ export class PRManager {
     }
   }
 
-
   /**
    * Emit completion event with PR snapshot data
    */
@@ -248,15 +247,41 @@ export class PRManager {
         return;
       }
 
-      // Get the PR number from task in database (updated during PR creation)
-      const task = await import("@repo/db").then((db) =>
-        db.prisma.task.findUnique({
-          where: { id: options.taskId },
-          select: { pullRequestNumber: true, repoUrl: true },
-        })
-      );
+      // Get the PR number from variant in database (updated during PR creation)
+      const db = await import("@repo/db");
+      let taskPRNumber: number | null = null;
+      let repoUrl: string | undefined = undefined;
 
-      const finalPRNumber = prNumber || task?.pullRequestNumber;
+      if (options.variantId) {
+        // Multi-variant mode: get PR from specific variant
+        const variant = await db.prisma.variant.findUnique({
+          where: { id: options.variantId },
+          select: {
+            pullRequestNumber: true,
+            task: {
+              select: { repoUrl: true },
+            },
+          },
+        });
+        taskPRNumber = variant?.pullRequestNumber || null;
+        repoUrl = variant?.task.repoUrl;
+      } else {
+        // Legacy fallback: get from first variant
+        const task = await db.prisma.task.findUnique({
+          where: { id: options.taskId },
+          select: {
+            repoUrl: true,
+            variants: {
+              select: { pullRequestNumber: true },
+              take: 1,
+            },
+          },
+        });
+        taskPRNumber = task?.variants[0]?.pullRequestNumber || null;
+        repoUrl = task?.repoUrl;
+      }
+
+      const finalPRNumber = prNumber || taskPRNumber;
       if (!finalPRNumber) {
         console.warn(
           `[PR_MANAGER] No PR number available for task ${options.taskId}`
@@ -265,9 +290,9 @@ export class PRManager {
       }
 
       // Construct PR URL
-      const repoUrl =
-        task?.repoUrl || `https://github.com/${options.repoFullName}`;
-      const prUrl = `${repoUrl}/pull/${finalPRNumber}`;
+      const finalRepoUrl =
+        repoUrl || `https://github.com/${options.repoFullName}`;
+      const prUrl = `${finalRepoUrl}/pull/${finalPRNumber}`;
 
       emitToTask(options.taskId, "auto-pr-status", {
         taskId: options.taskId,

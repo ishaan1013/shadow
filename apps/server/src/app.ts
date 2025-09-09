@@ -255,8 +255,8 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
       const results = await Promise.allSettled(initPromises);
       const successfulVariants = results
         .map((result, index) => ({ result, variant: task.variants[index] }))
-        .filter(({ result }) => result.status === 'fulfilled' && result.value.success)
-        .map(({ variant }) => variant.id);
+        .filter(({ result, variant }) => variant && result.status === 'fulfilled' && result.value.success)
+        .map(({ variant }) => variant!.id);
         
       console.log(`✅ [TASK_INITIATE] Task ${taskId} initialized ${successfulVariants.length}/${task.variants.length} variants successfully`);
 
@@ -318,12 +318,14 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
 
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: {
-        id: true,
-        status: true,
-        workspacePath: true,
-        workspaceCleanedUp: true,
-        repoUrl: true,
+      include: {
+        variants: {
+          select: {
+            id: true,
+            workspacePath: true,
+            workspaceCleanedUp: true,
+          },
+        },
       },
     });
 
@@ -335,56 +337,94 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
       });
     }
 
-    if (task.workspaceCleanedUp) {
-      console.log(`[TASK_CLEANUP] Task ${taskId} workspace already cleaned up`);
+    // Check if all variants are already cleaned up
+    const variantsNeedingCleanup = task.variants.filter(v => !v.workspaceCleanedUp);
+    
+    if (variantsNeedingCleanup.length === 0) {
+      console.log(`[TASK_CLEANUP] All variants for task ${taskId} already cleaned up`);
       return res.json({
         success: true,
-        message: "Workspace already cleaned up",
+        message: "All workspaces already cleaned up",
         alreadyCleanedUp: true,
         task: {
           id: taskId,
           status: task.status,
-          workspaceCleanedUp: true,
+          workspaceCleanedUp: task.workspaceCleanedUp,
         },
       });
     }
 
     const workspaceManager = createWorkspaceManager();
-
     console.log(
-      `[TASK_CLEANUP] Cleaning up workspace for task ${taskId} using ${workspaceManager.isRemote() ? "remote" : "local"} mode`
+      `[TASK_CLEANUP] Cleaning up ${variantsNeedingCleanup.length} variant workspaces for task ${taskId} using ${workspaceManager.isRemote() ? "remote" : "local"} mode`
     );
 
-    const cleanupResult = await workspaceManager.cleanupWorkspace(taskId);
+    // Clean up each variant workspace
+    const cleanupResults = [];
+    for (const variant of variantsNeedingCleanup) {
+      try {
+        const cleanupResult = await workspaceManager.cleanupWorkspace(variant.id);
+        
+        if (cleanupResult.success) {
+          // Mark variant as cleaned up
+          await prisma.variant.update({
+            where: { id: variant.id },
+            data: { workspaceCleanedUp: true },
+          });
+          
+          cleanupResults.push({
+            variantId: variant.id,
+            success: true,
+            message: cleanupResult.message,
+          });
+        } else {
+          cleanupResults.push({
+            variantId: variant.id,
+            success: false,
+            error: cleanupResult.message,
+          });
+        }
+      } catch (error) {
+        cleanupResults.push({
+          variantId: variant.id,
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
 
-    if (!cleanupResult.success) {
-      console.error(
-        `[TASK_CLEANUP] Cleanup failed for task ${taskId}:`,
-        cleanupResult.message
-      );
-      return res.status(500).json({
-        success: false,
-        error: "Workspace cleanup failed",
-        details: cleanupResult.message,
+    const successfulCleanups = cleanupResults.filter(r => r.success);
+    const failedCleanups = cleanupResults.filter(r => !r.success);
+
+    // Update task cleanup status if all variants are now cleaned up
+    const allVariantsCleanedUp = await prisma.variant.count({
+      where: {
+        taskId,
+        workspaceCleanedUp: false,
+      },
+    }) === 0;
+
+    if (allVariantsCleanedUp) {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { workspaceCleanedUp: true },
       });
     }
 
-    await prisma.task.update({
-      where: { id: taskId },
-      data: { workspaceCleanedUp: true },
-    });
-
     res.json({
-      success: true,
-      message: cleanupResult.message,
+      success: successfulCleanups.length > 0,
+      message: `Cleaned up ${successfulCleanups.length}/${cleanupResults.length} variant workspaces`,
       task: {
         id: taskId,
         status: task.status,
-        workspaceCleanedUp: true,
+        workspaceCleanedUp: allVariantsCleanedUp,
       },
       cleanupDetails: {
         mode: workspaceManager.isRemote() ? "remote" : "local",
-        workspacePath: task.workspacePath,
+        variantResults: cleanupResults,
+        totalVariants: task.variants.length,
+        cleanedUp: successfulCleanups.length,
+        failed: failedCleanups.length,
       },
     });
   } catch (error) {

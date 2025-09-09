@@ -41,6 +41,7 @@ export interface PRMetadata {
 
 export interface CreatePROptions {
   taskId: string;
+  variantId: string; // Required for multi-variant support
   repoFullName: string;
   shadowBranch: string;
   baseBranch: string;

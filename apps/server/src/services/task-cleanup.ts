@@ -87,11 +87,47 @@ export class TaskCleanupService {
   }
 
   /**
-   * Clean up a specific task
+   * Clean up a specific task (multi-variant aware)
+   * Cleans up all variants in the task that aren't already inactive
    */
   private async cleanupTask(taskId: string): Promise<void> {
     try {
       console.log(`[TASK_CLEANUP] Cleaning up task ${taskId}`);
+
+      // Get all variants for this task that need cleanup
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        include: {
+          variants: {
+            select: {
+              id: true,
+              initStatus: true,
+            },
+          },
+        },
+      });
+
+      if (!task) {
+        console.warn(`[TASK_CLEANUP] Task ${taskId} not found`);
+        return;
+      }
+
+      // Filter variants that need cleanup (not already inactive)
+      const variantsToCleanup = task.variants.filter(
+        (variant) => variant.initStatus !== "INACTIVE"
+      );
+
+      if (variantsToCleanup.length === 0) {
+        console.log(
+          `[TASK_CLEANUP] All variants for task ${taskId} already inactive`
+        );
+        await this.clearCleanupSchedule(taskId);
+        return;
+      }
+
+      console.log(
+        `[TASK_CLEANUP] Cleaning up ${variantsToCleanup.length} variants for task ${taskId}`
+      );
 
       // Get workspace manager for cleanup operations
       const workspaceManager = createWorkspaceManager();
@@ -99,13 +135,23 @@ export class TaskCleanupService {
       // Clean up server memory structures first
       MemoryCleanupService.cleanupTaskMemory(taskId);
 
-      // Cleanup workspace/VM resources
-      await workspaceManager.cleanupWorkspace(taskId);
+      // Cleanup workspace/VM resources for the task
+      try {
+        await workspaceManager.cleanupWorkspace(taskId);
+      } catch (workspaceError) {
+        console.warn(
+          `[TASK_CLEANUP] Failed to cleanup workspace for task ${taskId}:`,
+          workspaceError
+        );
+        // Continue with database cleanup
+      }
 
-      // Update TaskSession to mark as inactive
+      // Update TaskSessions to mark as inactive (using variantId)
       await prisma.taskSession.updateMany({
         where: {
-          taskId,
+          variantId: {
+            in: variantsToCleanup.map((v) => v.id),
+          },
           isActive: true,
         },
         data: {
@@ -114,35 +160,48 @@ export class TaskCleanupService {
         },
       });
 
-      // Set initStatus to INACTIVE (VM spun down) and clear cleanup schedule
+      // Set initStatus to INACTIVE for all variants and clear cleanup schedule
       // Keep original task status (COMPLETED/STOPPED) so user can resume later
-      await prisma.task.update({
-        where: { id: taskId },
+      await prisma.variant.updateMany({
+        where: {
+          id: {
+            in: variantsToCleanup.map((v) => v.id),
+          },
+        },
         data: {
           initStatus: "INACTIVE",
-          scheduledCleanupAt: null,
         },
       });
 
-      console.log(`[TASK_CLEANUP] Successfully cleaned up task ${taskId}`);
+      await this.clearCleanupSchedule(taskId);
+
+      console.log(
+        `[TASK_CLEANUP] Successfully cleaned up ${variantsToCleanup.length} variants for task ${taskId}`
+      );
     } catch (error) {
       console.error(`[TASK_CLEANUP] Failed to cleanup task ${taskId}:`, error);
 
       // Clear the cleanup schedule even if cleanup failed to prevent infinite retries
-      // The task will remain in COMPLETED state but won't be retried
-      await prisma.task
-        .update({
-          where: { id: taskId },
-          data: {
-            scheduledCleanupAt: null,
-          },
-        })
-        .catch((updateError) => {
-          console.error(
-            `[TASK_CLEANUP] Failed to clear cleanup schedule for task ${taskId}:`,
-            updateError
-          );
-        });
+      await this.clearCleanupSchedule(taskId);
+    }
+  }
+
+  /**
+   * Clear the cleanup schedule for a task
+   */
+  private async clearCleanupSchedule(taskId: string): Promise<void> {
+    try {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: {
+          scheduledCleanupAt: null,
+        },
+      });
+    } catch (updateError) {
+      console.error(
+        `[TASK_CLEANUP] Failed to clear cleanup schedule for task ${taskId}:`,
+        updateError
+      );
     }
   }
 }

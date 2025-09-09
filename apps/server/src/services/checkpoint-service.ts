@@ -1,8 +1,5 @@
 import { prisma } from "@repo/db";
-import {
-  CheckpointData,
-  MessageMetadata,
-} from "@repo/types";
+import { CheckpointData, MessageMetadata } from "@repo/types";
 import type { Todo } from "@repo/db";
 import { emitStreamChunk } from "../socket";
 import { createToolExecutor, createGitService } from "../execution";
@@ -94,9 +91,11 @@ export class CheckpointService {
 
   /**
    * Restore workspace to the state at a specific message
+   * Now variant-specific for proper workspace restoration
    */
   async restoreCheckpoint(
     taskId: string,
+    variantId: string,
     targetMessageId: string
   ): Promise<void> {
     console.log(
@@ -117,7 +116,7 @@ export class CheckpointService {
         console.log(
           `[CHECKPOINT] 📍 No checkpoint found - restoring to initial repository state for message ${targetMessageId}`
         );
-        await this.restoreToInitialState(taskId);
+        await this.restoreToInitialState(taskId, variantId);
         return;
       }
 
@@ -176,7 +175,7 @@ export class CheckpointService {
 
       // Wait for git state to settle, then recompute and emit file state
       await new Promise((resolve) => setTimeout(resolve, 150));
-      await this.recomputeAndEmitFileState(taskId);
+      await this.recomputeAndEmitFileState(taskId, variantId);
 
       // Resume filesystem watcher after fs-override has been sent
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -253,31 +252,40 @@ export class CheckpointService {
 
   /**
    * Recompute and emit complete file state after checkpoint restoration
+   * Now variant-specific instead of using arbitrary first variant
    */
-  private async recomputeAndEmitFileState(taskId: string): Promise<void> {
+  private async recomputeAndEmitFileState(
+    taskId: string,
+    variantId: string
+  ): Promise<void> {
     try {
       console.log(
-        `[CHECKPOINT] 📊 Recomputing file state after restoration...`
+        `[CHECKPOINT] 📊 Recomputing file state after restoration for variant ${variantId}...`
       );
 
-      // Get task details for workspace path and base branch
-      const task = await prisma.task.findUnique({
-        where: { id: taskId },
-        select: { workspacePath: true, baseBranch: true },
+      // Get specific variant and task details
+      const variant = await prisma.variant.findUnique({
+        where: { id: variantId },
+        select: {
+          workspacePath: true,
+          task: {
+            select: { baseBranch: true },
+          },
+        },
       });
 
-      if (!task?.workspacePath) {
+      if (!variant?.workspacePath) {
         console.warn(
-          `[CHECKPOINT] ❌ Missing workspace path for file state computation`
+          `[CHECKPOINT] ❌ Missing workspace path for variant ${variantId} file state computation`
         );
         return;
       }
 
       // Create git service and compute current file changes
       console.log(`[CHECKPOINT] 📁 Computing file changes from GitService...`);
-      const gitService = await createGitService(taskId);
+      const gitService = await createGitService(variantId);
       const { fileChanges, diffStats } = await gitService.getFileChanges(
-        task.baseBranch
+        variant.task.baseBranch
       );
       console.log(`[CHECKPOINT] ✅ Found ${fileChanges.length} file changes`);
       console.log(
@@ -286,7 +294,7 @@ export class CheckpointService {
 
       // Get current codebase tree using tool executor
       console.log(`[CHECKPOINT] 🌳 Computing codebase tree...`);
-      const toolExecutor = await createToolExecutor(taskId, task.workspacePath);
+      const toolExecutor = await createToolExecutor(taskId, variant.workspacePath);
       const treeResult = await toolExecutor.listDirectoryRecursive(".");
 
       const codebaseTree = treeResult.success
@@ -375,8 +383,9 @@ export class CheckpointService {
 
   /**
    * Restore workspace to initial repository state (before any assistant changes)
+   * Now variant-specific for proper workspace restoration
    */
-  private async restoreToInitialState(taskId: string): Promise<void> {
+  private async restoreToInitialState(taskId: string, variantId: string): Promise<void> {
     console.log(
       `[CHECKPOINT] 🏁 Restoring to initial repository state for task ${taskId}`
     );
@@ -431,7 +440,7 @@ export class CheckpointService {
 
       // Wait for git state to settle, then recompute and emit file state
       await new Promise((resolve) => setTimeout(resolve, 150));
-      await this.recomputeAndEmitFileState(taskId);
+      await this.recomputeAndEmitFileState(taskId, variantId);
 
       // Resume filesystem watcher after fs-override has been sent
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -503,14 +512,17 @@ export class CheckpointService {
         try {
           // Call sidecar API to pause filesystem watcher
           // Access the sidecar URL using established pattern from codebase
-          const sidecarUrl = "sidecarUrl" in toolExecutor 
-            ? (toolExecutor as { sidecarUrl: string }).sidecarUrl 
-            : null;
+          const sidecarUrl =
+            "sidecarUrl" in toolExecutor
+              ? (toolExecutor as { sidecarUrl: string }).sidecarUrl
+              : null;
           if (!sidecarUrl) {
-            console.warn(`[CHECKPOINT] No sidecar URL available for task ${taskId}`);
+            console.warn(
+              `[CHECKPOINT] No sidecar URL available for task ${taskId}`
+            );
             return;
           }
-          
+
           const response = await fetch(`${sidecarUrl}/api/watcher/pause`, {
             method: "POST",
             headers: {
@@ -563,14 +575,17 @@ export class CheckpointService {
         try {
           // Call sidecar API to resume filesystem watcher
           // Access the sidecar URL using established pattern from codebase
-          const sidecarUrl = "sidecarUrl" in toolExecutor 
-            ? (toolExecutor as { sidecarUrl: string }).sidecarUrl 
-            : null;
+          const sidecarUrl =
+            "sidecarUrl" in toolExecutor
+              ? (toolExecutor as { sidecarUrl: string }).sidecarUrl
+              : null;
           if (!sidecarUrl) {
-            console.warn(`[CHECKPOINT] No sidecar URL available for task ${taskId}`);
+            console.warn(
+              `[CHECKPOINT] No sidecar URL available for task ${taskId}`
+            );
             return;
           }
-          
+
           const response = await fetch(`${sidecarUrl}/api/watcher/resume`, {
             method: "POST",
             headers: {

@@ -37,14 +37,10 @@ import config from "../config";
 import { getGitHubAppEmail, getGitHubAppName } from "../config/shared";
 import {
   updateVariantStatus,
-  updateVariantActivity,
-  scheduleVariantCleanup,
-  cancelVariantCleanup,
 } from "../utils/variant-status";
 import {
   updateTaskStatus,
-  scheduleTaskCleanup,
-  cancelTaskCleanup,
+  resetTaskCleanupTimer,
 } from "../utils/task-status";
 import { createGitService } from "../execution";
 import { memoryService } from "../services/memory-service";
@@ -443,6 +439,7 @@ export class ChatService {
       await prManager.createPRIfNeeded(
         {
           taskId,
+          variantId,
           repoFullName: variant.task.repoFullName,
           shadowBranch: variant.shadowBranch,
           baseBranch: variant.task.baseBranch,
@@ -578,8 +575,8 @@ export class ChatService {
     context: TaskModelContext
   ): Promise<void> {
     try {
-      // Always cancel any scheduled cleanup when user sends follow-up message
-      await cancelTaskCleanup(taskId);
+      // Always reset cleanup timer when user sends follow-up message (multi-variant aware)
+      await resetTaskCleanupTimer(taskId, 30); // Reset to 30 minutes
 
       // For multi-variant tasks, we need to check if any variants need re-initialization
       const taskWithVariants = await prisma.task.findUnique({
@@ -1263,13 +1260,13 @@ These are specific instructions from the user that should be followed throughout
       // Update task status and schedule cleanup based on how stream ended
       if (hasError) {
         // Error already handled above, just ensure cleanup happens
-        await scheduleTaskCleanup(taskId, 15);
+        await resetTaskCleanupTimer(taskId, 15);
       } else if (wasStoppedEarly) {
         await updateTaskStatus(taskId, "STOPPED", "CHAT");
-        await scheduleTaskCleanup(taskId, 15);
+        await resetTaskCleanupTimer(taskId, 15);
       } else {
         await updateTaskStatus(taskId, "COMPLETED", "CHAT");
-        await scheduleTaskCleanup(taskId, 15);
+        await resetTaskCleanupTimer(taskId, 15);
 
         // TODO: Update variant activity timestamp when assistant completes response
         // await updateVariantActivity(variantId, "CHAT");
@@ -1558,7 +1555,23 @@ These are specific instructions from the user that should be followed throughout
       throw new Error("Edited message not found");
     }
 
-    await checkpointService.restoreCheckpoint(taskId, messageId);
+    // Get the first variant for checkpoint restoration (TODO: Make this variant-specific)
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        variants: {
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    
+    const variantId = task?.variants[0]?.id;
+    if (!variantId) {
+      throw new Error(`No variant found for task ${taskId}`);
+    }
+    
+    await checkpointService.restoreCheckpoint(taskId, variantId, messageId);
     console.log(
       `[CHAT] ✅ Checkpoint restoration completed for message editing`
     );

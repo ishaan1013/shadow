@@ -56,18 +56,28 @@ async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
   try {
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: { workspacePath: true },
+      include: {
+        variants: {
+          select: { id: true, workspacePath: true },
+          take: 1, // Get first variant for now
+        },
+      },
     });
 
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
+    if (!task || task.variants.length === 0) {
+      throw new Error(`Task ${taskId} or variants not found`);
+    }
+
+    const variant = task.variants[0];
+    if (!variant) {
+      throw new Error(`No variants found for task ${taskId}`);
     }
 
     // Create executor based on current mode
     const agentMode = config.agentMode;
     const executor = await createToolExecutor(
-      taskId,
-      task.workspacePath || undefined,
+      variant.id,
+      variant.workspacePath || undefined,
       agentMode
     );
 
@@ -104,17 +114,27 @@ async function clearTerminal(taskId: string): Promise<void> {
   try {
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: { workspacePath: true },
+      include: {
+        variants: {
+          select: { id: true, workspacePath: true },
+          take: 1, // Clear terminal for first variant
+        },
+      },
     });
 
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
+    if (!task || task.variants.length === 0) {
+      throw new Error(`Task ${taskId} or variants not found`);
+    }
+
+    const variant = task.variants[0];
+    if (!variant) {
+      throw new Error(`No variants found for task ${taskId}`);
     }
 
     const agentMode = config.agentMode;
     const executor = await createToolExecutor(
-      taskId,
-      task.workspacePath || undefined,
+      variant.id,
+      variant.workspacePath || undefined,
       agentMode
     );
 
@@ -159,12 +179,18 @@ function startTerminalPolling(taskId: string) {
 
   const interval = setInterval(async () => {
     try {
+      // Query first variant for workspace path (terminal polling uses first variant)
       const task = await prisma.task.findUnique({
         where: { id: taskId },
-        select: { workspacePath: true },
+        include: {
+          variants: {
+            select: { workspacePath: true },
+            take: 1,
+          },
+        },
       });
 
-      if (!task) {
+      if (!task || !task.variants[0]) {
         stopTerminalPolling(taskId);
         return;
       }
@@ -172,7 +198,7 @@ function startTerminalPolling(taskId: string) {
       const agentMode = config.agentMode;
       const executor = await createToolExecutor(
         taskId,
-        task.workspacePath || undefined,
+        task.variants[0].workspacePath || undefined,
         agentMode
       );
 
@@ -394,10 +420,15 @@ export function createSocketServer(
           return;
         }
 
-        // Get task workspace path and user info from database
+        // Get task info and first variant workspace path from database
         const task = await prisma.task.findUnique({
           where: { id: data.taskId },
-          select: { workspacePath: true, userId: true },
+          include: {
+            variants: {
+              select: { workspacePath: true },
+              take: 1,
+            },
+          },
         });
 
         if (!task) {
@@ -440,7 +471,7 @@ export function createSocketServer(
           taskId: data.taskId,
           userMessage: data.message,
           context: modelContext,
-          workspacePath: task?.workspacePath || undefined,
+          workspacePath: task?.variants[0]?.workspacePath || undefined,
           queue: data.queue || false,
         });
       } catch (error) {
@@ -502,10 +533,15 @@ export function createSocketServer(
           return;
         }
 
-        // Get task workspace path and user info from database
+        // Get task info and first variant workspace path from database
         const task = await prisma.task.findUnique({
           where: { id: data.taskId },
-          select: { workspacePath: true, userId: true },
+          include: {
+            variants: {
+              select: { workspacePath: true },
+              take: 1,
+            },
+          },
         });
 
         if (!task) {
@@ -551,7 +587,7 @@ export function createSocketServer(
           newContent: data.message,
           newModel: data.llmModel,
           context: modelContext,
-          workspacePath: task?.workspacePath || undefined,
+          workspacePath: task?.variants[0]?.workspacePath || undefined,
         });
       } catch (error) {
         console.error("Error editing user message:", error);
@@ -773,32 +809,14 @@ export async function emitTaskStatusUpdate(
   initStatus?: InitStatus
 ) {
   if (io) {
-    // If initStatus not provided, fetch current task state including error message
+    // Task-level status updates don't include variant-specific initStatus/errorMessage
     let currentInitStatus = initStatus;
-    let errorMessage: string | undefined;
-
-    if (!currentInitStatus || status === "FAILED") {
-      try {
-        const task = await prisma.task.findUnique({
-          where: { id: taskId },
-          select: { initStatus: true, errorMessage: true },
-        });
-        currentInitStatus = currentInitStatus || task?.initStatus;
-        errorMessage = task?.errorMessage || undefined;
-      } catch (error) {
-        console.error(
-          `[SOCKET] Error fetching task data for ${taskId}:`,
-          error
-        );
-      }
-    }
 
     const statusUpdateEvent = {
       taskId,
       status,
       initStatus: currentInitStatus,
       timestamp: new Date().toISOString(),
-      ...(errorMessage && { errorMessage }),
     };
 
     console.log(`[SOCKET] Emitting task status update:`, statusUpdateEvent);

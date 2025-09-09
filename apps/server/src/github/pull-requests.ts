@@ -31,9 +31,9 @@ export class PRService {
         options.userId
       );
 
-      // Update task with PR number
-      await prisma.task.update({
-        where: { id: options.taskId },
+      // Update variant with PR number
+      await prisma.variant.update({
+        where: { id: options.variantId },
         data: { pullRequestNumber: result.number },
       });
 
@@ -141,14 +141,14 @@ export class PRService {
   }
 
   /**
-   * Check if a task already has a PR
+   * Check if a variant already has a PR
    */
-  async getExistingPRNumber(taskId: string): Promise<number | null> {
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
+  async getExistingPRNumber(variantId: string): Promise<number | null> {
+    const variant = await prisma.variant.findUnique({
+      where: { id: variantId },
+      select: { pullRequestNumber: true },
     });
-
-    return task?.pullRequestNumber || null;
+    return variant?.pullRequestNumber || null;
   }
 
   /**

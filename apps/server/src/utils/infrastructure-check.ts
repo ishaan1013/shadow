@@ -24,10 +24,25 @@ export async function ensureTaskInfrastructureExists(
   }
 
   try {
-    // Step 1: Check if we have an active TaskSession
+    // First get the task's variants to check their sessions
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        variants: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!task || task.variants.length === 0) {
+      console.warn(`[INFRA_CHECK] Task ${taskId} or its variants not found`);
+      return;
+    }
+
+    // Step 1: Check if we have an active TaskSession for any variant
     const activeSession = await prisma.taskSession.findFirst({
       where: {
-        taskId,
+        variantId: { in: task.variants.map((v) => v.id) },
         isActive: true,
       },
       select: {
@@ -35,6 +50,7 @@ export async function ensureTaskInfrastructureExists(
         podName: true,
         podNamespace: true,
         createdAt: true,
+        variantId: true,
       },
     });
 
@@ -92,9 +108,27 @@ async function triggerReinitialization(
 ): Promise<void> {
   console.log(`[INFRA_CHECK] ${taskId}: Starting re-initialization`);
 
+  // Get task variants first
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: {
+      variants: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!task || task.variants.length === 0) {
+    console.warn(
+      `[INFRA_CHECK] Task ${taskId} or variants not found for re-init`
+    );
+    return;
+  }
+
+  // End all active sessions for this task's variants
   await prisma.taskSession.updateMany({
     where: {
-      taskId,
+      variantId: { in: task.variants.map((v) => v.id) },
       isActive: true,
     },
     data: {
@@ -109,9 +143,29 @@ async function triggerReinitialization(
   // Get all remote mode steps and filter out steps not critical for resumption
   const allRemoteSteps = getStepsForMode("remote");
   const stepsToSkip = ["START_BACKGROUND_SERVICES", "COMPLETE_SHADOW_WIKI"];
-  const reinitSteps = allRemoteSteps.filter(step => !stepsToSkip.includes(step));
+  const reinitSteps = allRemoteSteps.filter(
+    (step) => !stepsToSkip.includes(step)
+  );
 
-  await initEngine.initializeTask(taskId, [...reinitSteps], userId, context);
+  // Re-initialize all variants
+  for (const variant of task.variants) {
+    try {
+      await initEngine.initializeTask(
+        variant.id,
+        [...reinitSteps],
+        userId,
+        context
+      );
+      console.log(
+        `[INFRA_CHECK] Variant ${variant.id} re-initialized successfully`
+      );
+    } catch (error) {
+      console.error(
+        `[INFRA_CHECK] Failed to re-initialize variant ${variant.id}:`,
+        error
+      );
+    }
+  }
 
   console.log(
     `[INFRA_CHECK] ${taskId}: Re-initialization completed successfully`

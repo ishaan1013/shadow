@@ -181,53 +181,6 @@ export class TaskInitializationEngine {
     }
   }
 
-  /**
-   * Execute a specific initialization step for a task (legacy method)
-   */
-  private async executeStep(
-    taskId: string,
-    step: InitStatus,
-    userId: string,
-    context: TaskModelContext
-  ): Promise<void> {
-    switch (step) {
-      case "PREPARE_WORKSPACE":
-        await this.executePrepareWorkspace(taskId, userId);
-        break;
-
-      case "CREATE_VM":
-        await this.executeCreateVM(taskId, userId);
-        break;
-
-      case "WAIT_VM_READY":
-        await this.executeWaitVMReady(taskId);
-        break;
-
-      case "VERIFY_VM_WORKSPACE":
-        await this.executeVerifyVMWorkspace(taskId, userId);
-        break;
-
-      case "START_BACKGROUND_SERVICES":
-        await this.executeStartBackgroundServices(taskId, userId, context);
-        break;
-
-      case "INSTALL_DEPENDENCIES":
-        await this.executeInstallDependencies(taskId);
-        break;
-
-      case "COMPLETE_SHADOW_WIKI":
-        await this.executeCompleteShadowWiki(taskId);
-        break;
-
-      case "INACTIVE":
-      case "ACTIVE":
-        // These are state markers, not executable steps
-        break;
-
-      default:
-        throw new Error(`Unknown initialization step: ${step}`);
-    }
-  }
 
   /**
    * Prepare workspace step - local mode only
@@ -285,7 +238,7 @@ export class TaskInitializationEngine {
    * Create VM step - remote mode only
    * Creates remote VM pod (VM startup script handles repository cloning)
    */
-  private async executeCreateVM(variantId: string, userId: string): Promise<void> {
+  private async executeCreateVM(variantId: string, _userId: string): Promise<void> {
     const agentMode = getAgentMode();
     if (agentMode !== "remote") {
       throw new Error(
@@ -313,7 +266,7 @@ export class TaskInitializationEngine {
           repoUrl: task.repoUrl,
           baseBranch: task.baseBranch || "main",
           shadowBranch: variant.shadowBranch,
-          userId,
+          userId: _userId,
         });
 
       if (!workspaceInfo.success) {
@@ -390,82 +343,19 @@ export class TaskInitializationEngine {
   }
 
   // Implementation methods for other steps
-  private async executeVerifyVMWorkspace(variantId: string, userId: string): Promise<void> {
+  private async executeVerifyVMWorkspace(variantId: string, _userId: string): Promise<void> {
     // Similar to existing executeVerifyVMWorkspace but uses variantId
-    const executor = await this.abstractWorkspaceManager.getExecutor(variantId);
-    const listing = await executor.listDirectory(".");
+    const _executor = await this.abstractWorkspaceManager.getExecutor(variantId);
+    const listing = await _executor.listDirectory(".");
     if (!listing.success || !listing.contents || listing.contents.length === 0) {
       throw new Error("Workspace verification failed - workspace appears empty");
     }
   }
 
   private async executeInstallDependencies(variantId: string): Promise<void> {
-    // Similar to existing executeInstallDependencies but uses variantId
-    const executor = await this.abstractWorkspaceManager.getExecutor(variantId);
-    // Implementation details would be the same...
-  }
-
-  private async executeStartBackgroundServices(variantId: string, userId: string, context: TaskModelContext): Promise<void> {
-    // Similar to existing executeStartBackgroundServices but uses variantId
-    const userSettings = await prisma.userSettings.findUnique({
-      where: { userId },
-      select: { enableShadowWiki: true, enableIndexing: true },
-    });
-    // Implementation details would be the same...
-  }
-
-  private async executeCompleteShadowWiki(variantId: string): Promise<void> {
-    // Similar to existing executeCompleteShadowWiki but uses variantId
-    // Implementation details would be the same...
-  }
-
-
-  /**
-   * Verify VM workspace step - Verify workspace is ready and contains repository
-   */
-  private async executeVerifyVMWorkspace(
-    taskId: string,
-    _userId: string
-  ): Promise<void> {
     try {
-      // Get task info
-      const task = await prisma.task.findUnique({
-        where: { id: taskId },
-        select: { repoUrl: true, baseBranch: true },
-      });
-
-      if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
-      }
-
-      const executor = await this.abstractWorkspaceManager.getExecutor(taskId);
-
-      const listing = await executor.listDirectory(".");
-      if (
-        !listing.success ||
-        !listing.contents ||
-        listing.contents.length === 0
-      ) {
-        throw new Error(
-          "Workspace verification failed - workspace appears empty"
-        );
-      }
-    } catch (error) {
-      console.error(
-        `[TASK_INIT] ${taskId}: Failed to verify workspace:`,
-        error
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Install dependencies step - Install project dependencies (npm, pip, etc.)
-   */
-  private async executeInstallDependencies(taskId: string): Promise<void> {
-    try {
-      // Get the executor for this task
-      const executor = await this.abstractWorkspaceManager.getExecutor(taskId);
+      // Get the executor for this variant
+      const executor = await this.abstractWorkspaceManager.getExecutor(variantId);
 
       // Check for package.json and install Node.js dependencies with appropriate package manager
       const packageJsonExists = await this.checkFileExists(
@@ -485,13 +375,13 @@ export class TaskInitializationEngine {
         const bunLockExists = await this.checkFileExists(executor, "bun.lockb");
 
         if (bunLockExists) {
-          await this.runInstallCommand(executor, taskId, "bun install");
+          await this.runInstallCommand(executor, variantId, "bun install");
         } else if (pnpmLockExists) {
-          await this.runInstallCommand(executor, taskId, "pnpm install");
+          await this.runInstallCommand(executor, variantId, "pnpm install");
         } else if (yarnLockExists) {
-          await this.runInstallCommand(executor, taskId, "yarn install");
+          await this.runInstallCommand(executor, variantId, "yarn install");
         } else {
-          await this.runInstallCommand(executor, taskId, "npm install");
+          await this.runInstallCommand(executor, variantId, "npm install");
         }
       }
 
@@ -503,7 +393,7 @@ export class TaskInitializationEngine {
       if (requirementsExists) {
         await this.runInstallCommand(
           executor,
-          taskId,
+          variantId,
           "pip install -r requirements.txt"
         );
       }
@@ -514,16 +404,101 @@ export class TaskInitializationEngine {
         "pyproject.toml"
       );
       if (pyprojectExists) {
-        await this.runInstallCommand(executor, taskId, "pip install -e .");
+        await this.runInstallCommand(executor, variantId, "pip install -e .");
       }
     } catch (error) {
       console.error(
-        `[TASK_INIT] ${taskId}: Dependency installation failed:`,
+        `[VARIANT_INIT] ${variantId}: Dependency installation failed:`,
         error
       );
       // Don't throw error - we want to continue initialization even if deps fail
     }
   }
+
+  private async executeStartBackgroundServices(variantId: string, userId: string, context: TaskModelContext): Promise<void> {
+    try {
+      // Get variant info to determine taskId for background services
+      const variant = await prisma.variant.findUnique({
+        where: { id: variantId },
+        select: { taskId: true },
+      });
+
+      if (!variant) {
+        throw new Error(`Variant ${variantId} not found`);
+      }
+
+      // Get user settings to determine which services to start
+      const userSettings = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: { enableShadowWiki: true, enableIndexing: true },
+      });
+
+      const enableShadowWiki = userSettings?.enableShadowWiki ?? true;
+      const enableIndexing = userSettings?.enableIndexing ?? false;
+
+      // Start background services using the manager
+      await this.backgroundServiceManager.startServices(
+        variant.taskId,
+        { enableShadowWiki, enableIndexing },
+        context
+      );
+    } catch (error) {
+      console.error(
+        `[VARIANT_INIT] ${variantId}: Failed to start background services:`,
+        error
+      );
+      // Don't throw error - we want to continue initialization even if background services fail to start
+    }
+  }
+
+  private async executeCompleteShadowWiki(variantId: string): Promise<void> {
+    try {
+      // Get variant info to determine taskId for background service checking
+      const variant = await prisma.variant.findUnique({
+        where: { id: variantId },
+        select: { taskId: true },
+      });
+
+      if (!variant) {
+        throw new Error(`Variant ${variantId} not found`);
+      }
+
+      const maxWait = 10 * 60 * 1000; // 10 minutes max
+      const checkInterval = 2000; // Check every 2 seconds
+      const startTime = Date.now();
+
+      // Monitor progress and wait for completion
+      while (Date.now() - startTime < maxWait) {
+        // Check if all services are done
+        const allComplete =
+          this.backgroundServiceManager.areAllServicesComplete(variant.taskId);
+
+        if (allComplete) {
+          console.log(
+            `[VARIANT_INIT] ${variantId}: Shadow Wiki and background services completed`
+          );
+          break;
+        }
+
+        await delay(checkInterval);
+      }
+
+      // Check if we timed out
+      if (Date.now() - startTime >= maxWait) {
+        console.warn(
+          `[VARIANT_INIT] ${variantId}: Shadow Wiki completion timed out after ${maxWait / 1000}s`
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[VARIANT_INIT] ${variantId}: Failed to complete Shadow Wiki:`,
+        error
+      );
+      // Don't throw error - we want to continue to ACTIVE even if background services had issues
+    }
+  }
+
+
 
   /**
    * Helper method to check if a file exists in the workspace
@@ -551,7 +526,7 @@ export class TaskInitializationEngine {
    */
   private async runInstallCommand(
     executor: any,
-    taskId: string,
+    variantId: string,
     command: string
   ): Promise<void> {
     try {
@@ -561,81 +536,20 @@ export class TaskInitializationEngine {
       });
 
       if (!result.success) {
-        console.warn(`[TASK_INIT] ${taskId}: Command failed: ${command}`);
+        console.warn(`[VARIANT_INIT] ${variantId}: Command failed: ${command}`);
         console.warn(
-          `[TASK_INIT] ${taskId}: Error: ${result.error || result.stderr}`
+          `[VARIANT_INIT] ${variantId}: Error: ${result.error || result.stderr}`
         );
       }
     } catch (error) {
       console.warn(
-        `[TASK_INIT] ${taskId}: Exception running command "${command}":`,
+        `[VARIANT_INIT] ${variantId}: Exception running command "${command}":`,
         error
       );
     }
   }
 
-  /**
-   * Start background services step - Start Shadow Wiki generation and indexing in parallel
-   */
-  private async executeStartBackgroundServices(
-    taskId: string,
-    userId: string,
-    context: TaskModelContext
-  ): Promise<void> {
-    try {
-      // Get user settings to determine which services to start
-      const userSettings = await prisma.userSettings.findUnique({
-        where: { userId },
-        select: { enableShadowWiki: true, enableIndexing: true },
-      });
 
-      const enableShadowWiki = userSettings?.enableShadowWiki ?? true;
-      const enableIndexing = userSettings?.enableIndexing ?? false;
-
-      // Start background services using the manager
-      await this.backgroundServiceManager.startServices(
-        taskId,
-        { enableShadowWiki, enableIndexing },
-        context
-      );
-    } catch (error) {
-      console.error(
-        `[TASK_INIT] ${taskId}: Failed to start background services:`,
-        error
-      );
-      // Don't throw error - we want to continue initialization even if background services fail to start
-    }
-  }
-
-  /**
-   * Complete Shadow Wiki step - Wait for background services to complete
-   */
-  private async executeCompleteShadowWiki(taskId: string): Promise<void> {
-    try {
-      const maxWait = 10 * 60 * 1000; // 10 minutes max
-      const checkInterval = 2000; // Check every 2 seconds
-      const startTime = Date.now();
-
-      // Monitor progress and wait for completion
-      while (Date.now() - startTime < maxWait) {
-        // Check if all services are done
-        const allComplete =
-          this.backgroundServiceManager.areAllServicesComplete(taskId);
-
-        if (allComplete) {
-          break;
-        }
-
-        await delay(checkInterval);
-      }
-    } catch (error) {
-      console.error(
-        `[TASK_INIT] ${taskId}: Failed to complete Shadow Wiki:`,
-        error
-      );
-      // Don't throw error - we want to continue to ACTIVE even if background services had issues
-    }
-  }
 
   /**
    * Emit progress events via WebSocket
