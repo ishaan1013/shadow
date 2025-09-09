@@ -34,6 +34,9 @@ export interface StreamChunk {
     | "fs-override"
     | "todo-update";
 
+  // Variant context for chat-specific streams
+  variantId?: string;
+
   // For content chunks
   content?: string;
 

@@ -53,6 +53,7 @@ type QueuedMessageAction = {
   type: "message";
   data: {
     message: string;
+    variantId?: string;
     context: TaskModelContext;
     workspacePath?: string;
   };
@@ -681,6 +682,10 @@ export class ChatService {
     workspacePath?: string;
     queue?: boolean;
   }) {
+    // In the new multi-variant architecture, variantId should be provided
+    if (!variantId) {
+      throw new Error("variantId is required in multi-variant mode");
+    }
     // Update task's mainModel to keep it current
     await modelContextService.updateTaskMainModel(
       taskId,
@@ -742,6 +747,7 @@ export class ChatService {
           type: "message",
           data: {
             message: userMessage,
+            variantId,
             context,
             workspacePath,
           },
@@ -879,7 +885,7 @@ These are specific instructions from the user that should be followed throughout
       llmModel: context.getMainModel(),
     });
 
-    startStream(taskId);
+    startStream(variantId, taskId);
 
     // Create AbortController for this stream
     const abortController = new AbortController();
@@ -922,7 +928,7 @@ These are specific instructions from the user that should be followed throughout
           break;
         }
 
-        emitStreamChunk(chunk, taskId);
+        emitStreamChunk(chunk, variantId, taskId);
 
         // Handle text content chunks
         if (chunk.type === "content" && chunk.content) {
@@ -1368,7 +1374,7 @@ These are specific instructions from the user that should be followed throughout
       // Clean up stream tracking on error
       this.activeStreams.delete(taskId);
       this.stopRequested.delete(taskId);
-      handleStreamError(error, taskId);
+      handleStreamError(error, variantId, taskId);
 
       // Clean up MCP manager for this task
       try {
@@ -1426,6 +1432,7 @@ These are specific instructions from the user that should be followed throughout
     // Use the stored TaskModelContext directly
     await this.processUserMessage({
       taskId,
+      variantId: data.variantId,
       userMessage: data.message,
       context: data.context,
       enableTools: true,
@@ -1513,18 +1520,18 @@ These are specific instructions from the user that should be followed throughout
 
   async editUserMessage({
     taskId,
+    variantId,
     messageId,
     newContent,
     newModel,
     context,
-    workspacePath,
   }: {
     taskId: string;
+    variantId: string;
     messageId: string;
     newContent: string;
     newModel: ModelType;
     context: TaskModelContext;
-    workspacePath?: string;
   }): Promise<void> {
     // First, stop any active stream and clear queued messages
     if (this.activeStreams.has(taskId)) {
@@ -1555,21 +1562,9 @@ These are specific instructions from the user that should be followed throughout
       throw new Error("Edited message not found");
     }
 
-    // Get the first variant for checkpoint restoration (TODO: Make this variant-specific)
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
-      select: {
-        variants: {
-          select: { id: true },
-          take: 1,
-        },
-      },
-    });
+    // variantId is provided as parameter - no need to query for first variant
     
-    const variantId = task?.variants[0]?.id;
-    if (!variantId) {
-      throw new Error(`No variant found for task ${taskId}`);
-    }
+    // variantId is now passed as a parameter
     
     await checkpointService.restoreCheckpoint(taskId, variantId, messageId);
     console.log(
@@ -1597,22 +1592,22 @@ These are specific instructions from the user that should be followed throughout
       );
       await this.processUserMessage({
         taskId,
+        variantId,
         userMessage: newContent,
         context: updatedContext,
         enableTools: true,
         skipUserMessageSave: true, // Don't save again, already updated
-        workspacePath,
         queue: false,
       });
     } else {
       // Use existing context
       await this.processUserMessage({
         taskId,
+        variantId,
         userMessage: newContent,
         context,
         enableTools: true,
         skipUserMessageSave: true, // Don't save again, already updated
-        workspacePath,
         queue: false,
       });
     }
@@ -1772,7 +1767,6 @@ These are specific instructions from the user that should be followed throughout
       // Trigger task initialization (similar to the backend initiate endpoint)
       await this.initializeStackedTask(
         taskId,
-        message,
         model,
         userId,
         parentTaskId
@@ -1799,7 +1793,6 @@ These are specific instructions from the user that should be followed throughout
    */
   private async initializeStackedTask(
     taskId: string,
-    message: string,
     model: ModelType,
     _userId: string,
     parentTaskId: string
@@ -1863,14 +1856,9 @@ These are specific instructions from the user that should be followed throughout
             );
           }
 
-          await this.processUserMessage({
-            taskId,
-            userMessage: message,
-            context: newTaskContext,
-            workspacePath: undefined,
-            queue: false,
-            skipUserMessageSave: true, // Don't duplicate message - it's already in parent task
-          });
+          // TODO: For multi-variant support, need to create variants first and use specific variantId
+          // For now, this stacked PR flow needs to be updated for multi-variant architecture
+          throw new Error("Stacked PR creation needs multi-variant support - not yet implemented");
         } catch (error) {
           console.error(
             `[CHAT] Failed to process first message for stacked task ${taskId}:`,

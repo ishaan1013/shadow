@@ -560,6 +560,7 @@ export class TaskInitializationEngine {
         type: "init-progress",
         initProgress: progress,
       },
+      progress.variantId,
       taskId
     );
   }

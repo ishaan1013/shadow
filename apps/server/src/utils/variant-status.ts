@@ -79,6 +79,7 @@ export async function setVariantInitStatus(
         currentStep: status,
       },
     },
+    variantId,
     variant.taskId
   );
 }
@@ -111,6 +112,7 @@ export async function setVariantCompleted(
         variantId,
       },
     },
+    variantId,
     variant.taskId
   );
 }
@@ -146,6 +148,7 @@ export async function setVariantFailed(
         error,
       },
     },
+    variantId,
     variant.taskId
   );
 }

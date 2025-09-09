@@ -124,6 +124,7 @@ function getNextTerminalEntryId(taskId: string): number {
 // Helper function to create and emit terminal entries
 function createAndEmitTerminalEntry(
   taskId: string,
+  variantId: string,
   type: TerminalEntry["type"],
   data: string,
   processId?: number
@@ -140,7 +141,7 @@ function createAndEmitTerminalEntry(
     `[TERMINAL_OUTPUT] Emitting ${type} for task ${taskId}:`,
     data.slice(0, 100)
   );
-  emitTerminalOutput(taskId, entry);
+  emitTerminalOutput(variantId, taskId, entry);
 }
 
 // Helper function to read tool descriptions from markdown files

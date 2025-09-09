@@ -171,7 +171,7 @@ export class CheckpointService {
 
       // Restore todo state
       await this.restoreTodoState(taskId, checkpoint.todoSnapshot);
-      this.emitTodoUpdate(taskId, checkpoint.todoSnapshot);
+      this.emitTodoUpdate(taskId, variantId, checkpoint.todoSnapshot);
 
       // Wait for git state to settle, then recompute and emit file state
       await new Promise((resolve) => setTimeout(resolve, 150));
@@ -325,6 +325,7 @@ export class CheckpointService {
             message: "File state synchronized after checkpoint restoration",
           },
         },
+        variantId,
         taskId
       );
 
@@ -343,7 +344,7 @@ export class CheckpointService {
   /**
    * Emit todo update to frontend via WebSocket
    */
-  private emitTodoUpdate(taskId: string, todos: Todo[]): void {
+  private emitTodoUpdate(taskId: string, variantId: string, todos: Todo[]): void {
     try {
       const todoUpdate = {
         todos: todos.map((todo, index) => ({
@@ -366,6 +367,7 @@ export class CheckpointService {
           type: "todo-update",
           todoUpdate,
         },
+        variantId,
         taskId
       );
 
@@ -436,7 +438,7 @@ export class CheckpointService {
 
       // Clear all todos (initial state has none)
       await this.restoreTodoState(taskId, []); // Empty array = no todos
-      this.emitTodoUpdate(taskId, []);
+      this.emitTodoUpdate(taskId, variantId, []);
 
       // Wait for git state to settle, then recompute and emit file state
       await new Promise((resolve) => setTimeout(resolve, 150));

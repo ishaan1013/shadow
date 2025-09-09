@@ -81,11 +81,12 @@ export interface ServerToClientEvents {
 
   "terminal-history": (data: {
     taskId: string;
+    variantId: string;
     entries: TerminalEntry[];
   }) => void;
   "terminal-history-error": (data: { error: string }) => void;
-  "terminal-output": (data: { taskId: string; entry: TerminalEntry }) => void;
-  "terminal-cleared": (data: { taskId: string }) => void;
+  "terminal-output": (data: { taskId: string; variantId: string; entry: TerminalEntry }) => void;
+  "terminal-cleared": (data: { taskId: string; variantId: string }) => void;
   "terminal-error": (data: { error: string }) => void;
 
   "task-status-updated": (data: TaskStatusUpdateEvent) => void;
@@ -108,18 +109,20 @@ export interface ClientToServerEvents {
 
   "user-message": (data: {
     taskId: string;
+    variantId: string;
     message: string;
     llmModel?: ModelType;
     queue?: boolean;
   }) => void;
   "edit-user-message": (data: {
     taskId: string;
+    variantId: string;
     messageId: string;
     message: string;
     llmModel: ModelType;
   }) => void;
   "get-chat-history": (data: { taskId: string; complete: boolean }) => void;
-  "stop-stream": (data: { taskId: string }) => void;
+  "stop-stream": (data: { taskId: string; variantId: string }) => void;
   "request-history": (data: { taskId: string; fromPosition?: number }) => void;
   "clear-queued-action": (data: { taskId: string }) => void;
   "create-stacked-pr": (data: {
@@ -130,8 +133,8 @@ export interface ClientToServerEvents {
     newTaskId?: string;
   }) => void;
 
-  "get-terminal-history": (data: { taskId: string }) => void;
-  "clear-terminal": (data: { taskId: string }) => void;
+  "get-terminal-history": (data: { taskId: string; variantId: string }) => void;
+  "clear-terminal": (data: { taskId: string; variantId: string }) => void;
 
   heartbeat: () => void;
 }

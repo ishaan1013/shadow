@@ -43,6 +43,8 @@ export function setupSidecarNamespace(io: Server): void {
       });
 
       // Transform to StreamChunk format and broadcast to frontend clients
+      // TODO: Update sidecar protocol to include variantId
+      const variantId = (event as any).variantId || undefined;
       emitStreamChunk({
         type: "fs-change",
         fsChange: {
@@ -52,7 +54,7 @@ export function setupSidecarNamespace(io: Server): void {
           source: event.source,
           isDirectory: event.isDirectory
         }
-      }, event.taskId);
+      }, variantId, event.taskId);
     });
 
     // Handle heartbeat

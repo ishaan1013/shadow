@@ -30,47 +30,37 @@ interface ConnectionState {
 
 export type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
-interface TaskStreamState {
+interface VariantStreamState {
   chunks: StreamChunk[];
   isStreaming: boolean;
 }
 
 const connectionStates = new Map<string, ConnectionState>();
-const taskStreamStates = new Map<string, TaskStreamState>();
+const variantStreamStates = new Map<string, VariantStreamState>();
 let io: Server<ClientToServerEvents, ServerToClientEvents>;
 
-// Helper functions for task stream state management
-function getOrCreateTaskStreamState(taskId: string): TaskStreamState {
-  if (!taskStreamStates.has(taskId)) {
-    taskStreamStates.set(taskId, { chunks: [], isStreaming: false });
+// Helper functions for variant stream state management
+function getOrCreateVariantStreamState(variantId: string): VariantStreamState {
+  if (!variantStreamStates.has(variantId)) {
+    variantStreamStates.set(variantId, { chunks: [], isStreaming: false });
   }
-  return taskStreamStates.get(taskId)!;
+  return variantStreamStates.get(variantId)!;
 }
 
-function cleanupTaskStreamState(taskId: string): void {
-  taskStreamStates.delete(taskId);
-  console.log(`[SOCKET] Cleaned up stream state for task ${taskId}`);
+function cleanupVariantStreamState(variantId: string): void {
+  variantStreamStates.delete(variantId);
+  console.log(`[SOCKET] Cleaned up stream state for variant ${variantId}`);
 }
 
-async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
+async function getTerminalHistory(variantId: string): Promise<TerminalEntry[]> {
   try {
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
-      include: {
-        variants: {
-          select: { id: true, workspacePath: true },
-          take: 1, // Get first variant for now
-        },
-      },
+    const variant = await prisma.variant.findUnique({
+      where: { id: variantId },
+      select: { id: true, workspacePath: true, taskId: true },
     });
 
-    if (!task || task.variants.length === 0) {
-      throw new Error(`Task ${taskId} or variants not found`);
-    }
-
-    const variant = task.variants[0];
     if (!variant) {
-      throw new Error(`No variants found for task ${taskId}`);
+      throw new Error(`Variant ${variantId} not found`);
     }
 
     // Create executor based on current mode
@@ -88,7 +78,7 @@ async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
           ? (executor as { sidecarUrl: string }).sidecarUrl
           : undefined;
       if (!sidecarUrl) {
-        throw new Error(`Sidecar URL not available for remote task ${taskId}`);
+        throw new Error(`Sidecar URL not available for variant ${variantId}`);
       }
 
       const response = await fetch(
@@ -110,25 +100,15 @@ async function getTerminalHistory(taskId: string): Promise<TerminalEntry[]> {
   }
 }
 
-async function clearTerminal(taskId: string): Promise<void> {
+async function clearTerminal(variantId: string): Promise<void> {
   try {
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
-      include: {
-        variants: {
-          select: { id: true, workspacePath: true },
-          take: 1, // Clear terminal for first variant
-        },
-      },
+    const variant = await prisma.variant.findUnique({
+      where: { id: variantId },
+      select: { id: true, workspacePath: true, taskId: true },
     });
 
-    if (!task || task.variants.length === 0) {
-      throw new Error(`Task ${taskId} or variants not found`);
-    }
-
-    const variant = task.variants[0];
     if (!variant) {
-      throw new Error(`No variants found for task ${taskId}`);
+      throw new Error(`Variant ${variantId} not found`);
     }
 
     const agentMode = config.agentMode;
@@ -145,7 +125,7 @@ async function clearTerminal(taskId: string): Promise<void> {
           ? (executor as { sidecarUrl: string }).sidecarUrl
           : undefined;
       if (!sidecarUrl) {
-        throw new Error(`Sidecar URL not available for remote task ${taskId}`);
+        throw new Error(`Sidecar URL not available for variant ${variantId}`);
       }
 
       // Call sidecar terminal clear API
@@ -169,9 +149,9 @@ async function clearTerminal(taskId: string): Promise<void> {
 // Terminal polling for real-time updates (for remote mode)
 const terminalPollingIntervals = new Map<string, NodeJS.Timeout>();
 
-function startTerminalPolling(taskId: string) {
+function startTerminalPolling(variantId: string) {
   // Avoid duplicate polling
-  if (terminalPollingIntervals.has(taskId)) {
+  if (terminalPollingIntervals.has(variantId)) {
     return;
   }
 
@@ -179,26 +159,21 @@ function startTerminalPolling(taskId: string) {
 
   const interval = setInterval(async () => {
     try {
-      // Query first variant for workspace path (terminal polling uses first variant)
-      const task = await prisma.task.findUnique({
-        where: { id: taskId },
-        include: {
-          variants: {
-            select: { workspacePath: true },
-            take: 1,
-          },
-        },
+      // Query specific variant for workspace path
+      const variant = await prisma.variant.findUnique({
+        where: { id: variantId },
+        select: { id: true, workspacePath: true, taskId: true },
       });
 
-      if (!task || !task.variants[0]) {
-        stopTerminalPolling(taskId);
+      if (!variant) {
+        stopTerminalPolling(variantId);
         return;
       }
 
       const agentMode = config.agentMode;
       const executor = await createToolExecutor(
-        taskId,
-        task.variants[0].workspacePath || undefined,
+        variantId,
+        variant.workspacePath || undefined,
         agentMode
       );
 
@@ -210,9 +185,9 @@ function startTerminalPolling(taskId: string) {
             : undefined;
         if (!sidecarUrl) {
           console.error(
-            `[SOCKET] Sidecar URL not available for remote task ${taskId}, stopping polling`
+            `[SOCKET] Sidecar URL not available for variant ${variantId}, stopping polling`
           );
-          stopTerminalPolling(taskId);
+          stopTerminalPolling(variantId);
           return;
         }
 
@@ -228,26 +203,26 @@ function startTerminalPolling(taskId: string) {
           newEntries.forEach((entry: TerminalEntry) => {
             if (entry.id > lastSeenId) {
               lastSeenId = entry.id;
-              emitToTask(taskId, "terminal-output", { taskId, entry });
+              emitTerminalOutput(variantId, variant.taskId, entry);
             }
           });
         }
       }
     } catch (error) {
-      console.error(`Terminal polling error for task ${taskId}:`, error);
+      console.error(`Terminal polling error for variant ${variantId}:`, error);
     }
   }, 1000); // Poll every second
 
-  terminalPollingIntervals.set(taskId, interval);
-  console.log(`[SOCKET] Started terminal polling for task ${taskId}`);
+  terminalPollingIntervals.set(variantId, interval);
+  console.log(`[SOCKET] Started terminal polling for variant ${variantId}`);
 }
 
-function stopTerminalPolling(taskId: string) {
-  const interval = terminalPollingIntervals.get(taskId);
+function stopTerminalPolling(variantId: string) {
+  const interval = terminalPollingIntervals.get(variantId);
   if (interval) {
     clearInterval(interval);
-    terminalPollingIntervals.delete(taskId);
-    console.log(`[SOCKET] Stopped terminal polling for task ${taskId}`);
+    terminalPollingIntervals.delete(variantId);
+    console.log(`[SOCKET] Stopped terminal polling for variant ${variantId}`);
   }
 }
 
@@ -332,38 +307,13 @@ export function createSocketServer(
       timestamp: connectionState.lastSeen,
     });
 
-    // Send current stream state to new connections
-    if (connectionState.taskId) {
-      const streamState = taskStreamStates.get(connectionState.taskId);
-      if (
-        streamState &&
-        streamState.isStreaming &&
-        streamState.chunks.length > 0
-      ) {
-        console.log(
-          `[SOCKET] Sending stream state to ${connectionId} for task ${connectionState.taskId}:`,
-          streamState.chunks.length
-        );
-        socket.emit("stream-state", {
-          chunks: streamState.chunks,
-          isStreaming: true,
-          totalChunks: streamState.chunks.length,
-        });
-      } else {
-        socket.emit("stream-state", {
-          chunks: [],
-          isStreaming: false,
-          totalChunks: 0,
-        });
-      }
-    } else {
-      // No task associated yet, send empty state
-      socket.emit("stream-state", {
-        chunks: [],
-        isStreaming: false,
-        totalChunks: 0,
-      });
-    }
+    // Send empty stream state for new connections
+    // Variant-specific stream state will be sent when user selects a variant
+    socket.emit("stream-state", {
+      chunks: [],
+      isStreaming: false,
+      totalChunks: 0,
+    });
 
     socket.on("join-task", async (data) => {
       try {
@@ -420,12 +370,13 @@ export function createSocketServer(
           return;
         }
 
-        // Get task info and first variant workspace path from database
+        // Get task info and verify variant exists
         const task = await prisma.task.findUnique({
           where: { id: data.taskId },
           include: {
             variants: {
-              select: { workspacePath: true },
+              where: { id: data.variantId },
+              select: { id: true, workspacePath: true },
               take: 1,
             },
           },
@@ -435,6 +386,13 @@ export function createSocketServer(
           socket.emit("message-error", { error: "Task not found" });
           return;
         }
+
+        if (task.variants.length === 0) {
+          socket.emit("message-error", { error: "Variant not found" });
+          return;
+        }
+
+        // Variant validated above
 
         // Create model context for this task
         const modelContext = await modelContextService.createContext(
@@ -450,7 +408,7 @@ export function createSocketServer(
         );
 
         await updateTaskStatus(data.taskId, "RUNNING", "SOCKET");
-        startTerminalPolling(data.taskId);
+        startTerminalPolling(data.variantId);
 
         // Validate that user has the required API key for the selected model
         if (!modelContext.validateAccess()) {
@@ -469,9 +427,9 @@ export function createSocketServer(
 
         await chatService.processUserMessage({
           taskId: data.taskId,
+          variantId: data.variantId,
           userMessage: data.message,
           context: modelContext,
-          workspacePath: task?.variants[0]?.workspacePath || undefined,
           queue: data.queue || false,
         });
       } catch (error) {
@@ -533,12 +491,13 @@ export function createSocketServer(
           return;
         }
 
-        // Get task info and first variant workspace path from database
+        // Get task info and verify variant exists
         const task = await prisma.task.findUnique({
           where: { id: data.taskId },
           include: {
             variants: {
-              select: { workspacePath: true },
+              where: { id: data.variantId },
+              select: { id: true, workspacePath: true },
               take: 1,
             },
           },
@@ -546,6 +505,11 @@ export function createSocketServer(
 
         if (!task) {
           socket.emit("message-error", { error: "Task not found" });
+          return;
+        }
+
+        if (task.variants.length === 0) {
+          socket.emit("message-error", { error: "Variant not found" });
           return;
         }
 
@@ -564,7 +528,7 @@ export function createSocketServer(
         );
 
         await updateTaskStatus(data.taskId, "RUNNING", "SOCKET");
-        startTerminalPolling(data.taskId);
+        startTerminalPolling(data.variantId);
 
         // Validate that user has the required API key for the selected model
         if (!modelContext.validateAccess()) {
@@ -583,11 +547,11 @@ export function createSocketServer(
 
         await chatService.editUserMessage({
           taskId: data.taskId,
+          variantId: data.variantId,
           messageId: data.messageId,
           newContent: data.message,
           newModel: data.llmModel,
           context: modelContext,
-          workspacePath: task?.variants[0]?.workspacePath || undefined,
         });
       } catch (error) {
         console.error("Error editing user message:", error);
@@ -642,7 +606,7 @@ export function createSocketServer(
 
     socket.on("stop-stream", async (data) => {
       try {
-        console.log("Received stop stream request for task:", data.taskId);
+        console.log("Received stop stream request for variant:", data.variantId);
 
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
@@ -652,7 +616,7 @@ export function createSocketServer(
 
         await chatService.stopStream(data.taskId, true);
 
-        endStream(data.taskId);
+        endStream(data.variantId, data.taskId);
 
         emitToTask(data.taskId, "stream-complete", undefined);
       } catch (error) {
@@ -671,9 +635,10 @@ export function createSocketServer(
           return;
         }
 
-        const history = await getTerminalHistory(data.taskId);
+        const history = await getTerminalHistory(data.variantId);
         socket.emit("terminal-history", {
           taskId: data.taskId,
+          variantId: data.variantId,
           entries: history,
         });
       } catch (error) {
@@ -692,8 +657,11 @@ export function createSocketServer(
           return;
         }
 
-        await clearTerminal(data.taskId);
-        emitToTask(data.taskId, "terminal-cleared", { taskId: data.taskId });
+        await clearTerminal(data.variantId);
+        emitToTask(data.taskId, "terminal-cleared", { 
+          taskId: data.taskId, 
+          variantId: data.variantId 
+        });
       } catch (error) {
         console.error("Error clearing terminal:", error);
         socket.emit("terminal-error", {
@@ -724,20 +692,17 @@ export function createSocketServer(
           connectionStates.set(connectionId, state);
         }
 
-        // Send structured chunks instead of positional content
-        const streamState = taskStreamStates.get(data.taskId);
-        if (streamState && streamState.chunks.length > 0) {
-          // Send all chunks - let frontend handle deduplication
-          socket.emit("stream-state", {
-            chunks: streamState.chunks,
-            isStreaming: streamState.isStreaming,
-            totalChunks: streamState.chunks.length,
-          });
-        }
+        // For variant-specific stream state, frontend will request specific variant history
+        // Send empty state for now - frontend needs to specify variantId
+        socket.emit("stream-state", {
+          chunks: [],
+          isStreaming: false,
+          totalChunks: 0,
+        });
 
         socket.emit("history-complete", {
           taskId: data.taskId,
-          totalLength: streamState?.chunks.length || 0,
+          totalLength: 0,
         });
       } catch (error) {
         console.error(
@@ -778,29 +743,36 @@ export function createSocketServer(
   return io;
 }
 
-export function startStream(taskId: string) {
-  const streamState = getOrCreateTaskStreamState(taskId);
+export function startStream(variantId: string | undefined, taskId: string) {
+  if (!variantId) {
+    throw new Error("variantId is required for stream operations");
+  }
+  const streamState = getOrCreateVariantStreamState(variantId);
   streamState.chunks = [];
   streamState.isStreaming = true;
-  console.log(`[SOCKET] Started stream for task ${taskId}`);
+  console.log(`[SOCKET] Started stream for variant ${variantId} in task ${taskId}`);
 }
 
-export function endStream(taskId: string) {
-  const streamState = getOrCreateTaskStreamState(taskId);
+export function endStream(variantId: string, taskId: string) {
+  const streamState = getOrCreateVariantStreamState(variantId);
   streamState.isStreaming = false;
   if (io) {
     emitToTask(taskId, "stream-complete", undefined);
   }
-  console.log(`[SOCKET] Ended stream for task ${taskId}`);
+  console.log(`[SOCKET] Ended stream for variant ${variantId} in task ${taskId}`);
 }
 
-export function handleStreamError(error: unknown, taskId: string) {
-  const streamState = getOrCreateTaskStreamState(taskId);
+export function handleStreamError(error: unknown, variantId: string | undefined, taskId: string) {
+  if (!variantId) {
+    console.error("variantId is required for stream error handling");
+    return;
+  }
+  const streamState = getOrCreateVariantStreamState(variantId);
   streamState.isStreaming = false;
   if (io) {
     emitToTask(taskId, "stream-error", error);
   }
-  console.log(`[SOCKET] Stream error for task ${taskId}:`, error);
+  console.log(`[SOCKET] Stream error for variant ${variantId} in task ${taskId}:`, error);
 }
 
 export async function emitTaskStatusUpdate(
@@ -831,31 +803,38 @@ export function emitVariantStatusUpdate(taskId: string, data: VariantStatusUpdat
   }
 }
 
-export function emitStreamChunk(chunk: StreamChunk, taskId: string) {
+export function emitStreamChunk(chunk: StreamChunk, variantId: string | undefined, taskId: string) {
+  if (!variantId) {
+    console.error("variantId is required for stream chunk emission");
+    return;
+  }
+  // Add variantId to chunk for frontend routing
+  const chunkWithVariant = { ...chunk, variantId };
+  
   // Store the chunk for state recovery (exclude complete/error chunks from state)
   if (chunk.type !== "complete" && chunk.type !== "error") {
-    const streamState = getOrCreateTaskStreamState(taskId);
-    streamState.chunks.push(chunk);
+    const streamState = getOrCreateVariantStreamState(variantId);
+    streamState.chunks.push(chunkWithVariant);
   }
 
   if (io) {
-    emitToTask(taskId, "stream-chunk", chunk);
+    emitToTask(taskId, "stream-chunk", chunkWithVariant);
   }
 
   if (chunk.type === "complete") {
-    console.log(`[SOCKET] Chunk type: complete for task ${taskId}`);
-    endStream(taskId);
+    console.log(`[SOCKET] Chunk type: complete for variant ${variantId} in task ${taskId}`);
+    endStream(variantId, taskId);
   }
 }
 
-export function emitTerminalOutput(taskId: string, entry: TerminalEntry) {
+export function emitTerminalOutput(variantId: string, taskId: string, entry: TerminalEntry) {
   if (io) {
-    emitToTask(taskId, "terminal-output", { taskId, entry });
+    emitToTask(taskId, "terminal-output", { taskId, variantId, entry });
   }
 }
 
-// Export cleanup functions for task memory management
-export { cleanupTaskStreamState };
+// Export cleanup functions for variant memory management
+export { cleanupVariantStreamState };
 
 // Also export terminal polling cleanup (already exists)
 export { stopTerminalPolling };

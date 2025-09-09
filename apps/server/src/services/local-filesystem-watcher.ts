@@ -19,6 +19,7 @@ interface FileSystemChangeEvent {
 export class LocalFileSystemWatcher {
   private watcher: FSWatcher | null = null;
   private taskId: string;
+  private variantId: string;
   private watchedPath: string;
   private changeBuffer = new Map<string, FileSystemChangeEvent>();
   private flushTimer: NodeJS.Timeout | null = null;
@@ -26,8 +27,9 @@ export class LocalFileSystemWatcher {
   private gitignoreChecker: GitignoreChecker | null = null;
   private isPaused = false;
 
-  constructor(taskId: string) {
+  constructor(taskId: string, variantId: string) {
     this.taskId = taskId;
+    this.variantId = variantId;
     this.watchedPath = '';
   }
 
@@ -177,7 +179,7 @@ export class LocalFileSystemWatcher {
       emitStreamChunk({
         type: "fs-change",
         fsChange: change
-      }, this.taskId);
+      }, this.variantId, this.taskId);
     }
   }
 
