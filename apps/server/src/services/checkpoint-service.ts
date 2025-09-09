@@ -15,15 +15,15 @@ export class CheckpointService {
   /**
    * Create a checkpoint for a message after successful completion
    */
-  async createCheckpoint(taskId: string, messageId: string): Promise<void> {
+  async createCheckpoint(taskId: string, variantId: string, messageId: string): Promise<void> {
     console.log(
       `[CHECKPOINT] ✨ Starting checkpoint creation for task ${taskId}, message ${messageId}`
     );
 
     try {
-      // Create git service for the task (handles both local and remote modes)
-      console.log(`[CHECKPOINT] 🔧 Creating git service for task ${taskId}...`);
-      const gitService = await createGitService(taskId);
+      // Create git service for the variant (handles both local and remote modes)
+      console.log(`[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`);
+      const gitService = await createGitService(variantId);
 
       // 1. Ensure all changes are committed (reuse existing logic)
       console.log(`[CHECKPOINT] 🔍 Checking for uncommitted changes...`);
@@ -134,12 +134,12 @@ export class CheckpointService {
         `[CHECKPOINT] 📝 Checkpoint has ${checkpoint.todoSnapshot.length} todos`
       );
 
-      // Create git service for the task (handles both local and remote modes)
-      console.log(`[CHECKPOINT] 🔧 Creating git service for task ${taskId}...`);
-      const gitService = await createGitService(taskId);
+      // Create git service for the variant (handles both local and remote modes)
+      console.log(`[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`);
+      const gitService = await createGitService(variantId);
 
       // 2. Pause filesystem watcher to prevent spurious events from git operations
-      await this.pauseFilesystemWatcher(taskId);
+      await this.pauseFilesystemWatcher(taskId, variantId);
 
       // 3. Handle uncommitted changes
       console.log(`[CHECKPOINT] 🔍 Checking for uncommitted changes...`);
@@ -179,7 +179,7 @@ export class CheckpointService {
 
       // Resume filesystem watcher after fs-override has been sent
       await new Promise((resolve) => setTimeout(resolve, 200));
-      await this.resumeFilesystemWatcher(taskId);
+      await this.resumeFilesystemWatcher(taskId, variantId);
 
       console.log(`[CHECKPOINT] Restored to message ${checkpointMessage.id}`);
     } catch (error) {
@@ -410,12 +410,12 @@ export class CheckpointService {
         `[CHECKPOINT] 🎯 Target base commit SHA: ${task.baseCommitSha}`
       );
 
-      // Create git service for the task (handles both local and remote modes)
-      console.log(`[CHECKPOINT] 🔧 Creating git service for task ${taskId}...`);
-      const gitService = await createGitService(taskId);
+      // Create git service for the variant (handles both local and remote modes)
+      console.log(`[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`);
+      const gitService = await createGitService(variantId);
 
       // Pause filesystem watcher to prevent spurious events from git operations
-      await this.pauseFilesystemWatcher(taskId);
+      await this.pauseFilesystemWatcher(taskId, variantId);
 
       // Handle uncommitted changes
       console.log(`[CHECKPOINT] 🔍 Checking for uncommitted changes...`);
@@ -446,7 +446,7 @@ export class CheckpointService {
 
       // Resume filesystem watcher after fs-override has been sent
       await new Promise((resolve) => setTimeout(resolve, 200));
-      await this.resumeFilesystemWatcher(taskId);
+      await this.resumeFilesystemWatcher(taskId, variantId);
 
       console.log(`[CHECKPOINT] Restored to initial state`);
     } catch (error) {
@@ -497,11 +497,11 @@ export class CheckpointService {
   /**
    * Pause filesystem watcher to prevent spurious events during git operations
    */
-  private async pauseFilesystemWatcher(taskId: string): Promise<void> {
+  private async pauseFilesystemWatcher(taskId: string, variantId?: string): Promise<void> {
     try {
       if (config.agentMode === "local") {
         // Local mode: pause the local filesystem watcher
-        const watcher = getFileSystemWatcher(taskId);
+        const watcher = variantId ? getFileSystemWatcher(variantId) : null;
         if (watcher) {
           // Pause local watcher
           watcher.pause();
@@ -560,11 +560,11 @@ export class CheckpointService {
   /**
    * Resume filesystem watcher after git operations are complete
    */
-  private async resumeFilesystemWatcher(taskId: string): Promise<void> {
+  private async resumeFilesystemWatcher(taskId: string, variantId?: string): Promise<void> {
     try {
       if (config.agentMode === "local") {
         // Local mode: resume the local filesystem watcher
-        const watcher = getFileSystemWatcher(taskId);
+        const watcher = variantId ? getFileSystemWatcher(variantId) : null;
         if (watcher) {
           // Resume local watcher
           watcher.resume();

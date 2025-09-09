@@ -75,8 +75,13 @@ type QueuedAction = QueuedMessageAction | QueuedStackedPRAction;
 
 export class ChatService {
   private llmService: LLMService;
+  // variantId -> AbortController
   private activeStreams: Map<string, AbortController> = new Map();
+  // variantId set for which a stop has been requested
   private stopRequested: Set<string> = new Set();
+  // Map key semantics:
+  // - For "message" actions: key is variantId
+  // - For "stacked-pr" actions: key is parentTaskId
   private queuedActions: Map<string, QueuedAction> = new Map();
 
   constructor() {
@@ -262,8 +267,8 @@ export class ChatService {
         return false;
       }
 
-      // Use unified git service for both local and remote modes
-      const gitService = await createGitService(variant.taskId);
+      // Use unified git service for both local and remote modes (variant-scoped)
+      const gitService = await createGitService(variantId);
 
       // Check if there are any uncommitted changes
       const hasChanges = await gitService.hasChanges();
@@ -420,7 +425,7 @@ export class ChatService {
         return;
       }
 
-      const gitService = await createGitService(variant.taskId);
+      const gitService = await createGitService(variantId);
       const prManager = new PRManager(gitService, this.llmService);
 
       if (!messageId) {
@@ -674,7 +679,7 @@ export class ChatService {
     queue = false,
   }: {
     taskId: string;
-    variantId?: string;
+    variantId: string;
     userMessage: string;
     context: TaskModelContext;
     enableTools?: boolean;
@@ -718,7 +723,7 @@ export class ChatService {
     queue = false,
   }: {
     taskId: string;
-    variantId?: string;
+    variantId: string;
     userMessage: string;
     context: TaskModelContext;
     enableTools?: boolean;
@@ -740,10 +745,10 @@ export class ChatService {
     await this.handleFollowUpLogic(taskId, task.userId, context);
 
     if (queue) {
-      if (this.activeStreams.has(taskId)) {
+      if (this.activeStreams.has(variantId)) {
         // Support only one queued action at a time for now, can extend to a list later
         // Override the existing queued action if it exists
-        this.queuedActions.set(taskId, {
+        this.queuedActions.set(variantId, {
           type: "message",
           data: {
             message: userMessage,
@@ -756,12 +761,12 @@ export class ChatService {
       }
     } else {
       // queue=false: interrupt any active stream and process immediately
-      if (this.activeStreams.has(taskId)) {
-        await this.stopStream(taskId);
+      if (this.activeStreams.has(variantId)) {
+        await this.stopStream(taskId, variantId);
 
         // Override queued action if it exists
-        if (this.queuedActions.has(taskId)) {
-          this.queuedActions.delete(taskId);
+        if (this.queuedActions.has(variantId)) {
+          this.queuedActions.delete(variantId);
         }
 
         // Cleanup time buffer
@@ -889,7 +894,7 @@ These are specific instructions from the user that should be followed throughout
 
     // Create AbortController for this stream
     const abortController = new AbortController();
-    this.activeStreams.set(taskId, abortController);
+    this.activeStreams.set(variantId, abortController);
 
     // Track structured assistant message parts in chronological order
     let assistantSequence: number | null = null;
@@ -906,7 +911,7 @@ These are specific instructions from the user that should be followed throughout
     // Create tools first so we can generate system prompt based on available tools
     let availableTools: ToolSet | undefined;
     if (enableTools && taskId) {
-      availableTools = await createTools(taskId, workspacePath);
+      availableTools = await createTools(taskId, workspacePath, variantId);
     }
 
     // Get system prompt with available tools context
@@ -924,7 +929,7 @@ These are specific instructions from the user that should be followed throughout
         abortController.signal,
         availableTools
       )) {
-        if (this.stopRequested.has(taskId)) {
+        if (this.stopRequested.has(variantId)) {
           break;
         }
 
@@ -1184,9 +1189,9 @@ These are specific instructions from the user that should be followed throughout
           await updateTaskStatus(taskId, "FAILED", "CHAT", userFriendlyError);
 
           // Clean up stream tracking
-          this.activeStreams.delete(taskId);
-          this.stopRequested.delete(taskId);
-          endStream(taskId);
+          this.activeStreams.delete(variantId);
+          this.stopRequested.delete(variantId);
+          endStream(variantId, taskId);
 
           // Clean up MCP manager for this task
           try {
@@ -1216,7 +1221,7 @@ These are specific instructions from the user that should be followed throughout
       }
 
       // Check if stream was stopped early
-      const wasStoppedEarly = this.stopRequested.has(taskId);
+      const wasStoppedEarly = this.stopRequested.has(variantId);
 
       // Finalize any remaining reasoning parts that didn't receive signatures
       for (const reasoningPart of activeReasoningParts.values()) {
@@ -1301,6 +1306,7 @@ These are specific instructions from the user that should be followed throughout
             if (changesCommitted && assistantMessageId) {
               await checkpointService.createCheckpoint(
                 taskId,
+                variantId,
                 assistantMessageId
               );
             }
@@ -1328,9 +1334,9 @@ These are specific instructions from the user that should be followed throughout
     // Clean up and finalization
     try {
       // Clean up stream tracking
-      this.activeStreams.delete(taskId);
-      this.stopRequested.delete(taskId);
-      endStream(taskId);
+      this.activeStreams.delete(variantId);
+      this.stopRequested.delete(variantId);
+      endStream(variantId, taskId);
 
       // Clean up MCP manager for this task
       try {
@@ -1342,8 +1348,8 @@ These are specific instructions from the user that should be followed throughout
         );
       }
 
-      // Process any queued actions
-      await this.processQueuedActions(taskId);
+      // Process any queued actions for this variant
+      await this.processQueuedActionForVariant(variantId, taskId);
     } catch (error) {
       console.error("Error processing user message:", error);
 
@@ -1368,12 +1374,13 @@ These are specific instructions from the user that should be followed throughout
           error: errorMessage,
           finishReason: "error",
         },
+        variantId,
         taskId
       );
 
       // Clean up stream tracking on error
-      this.activeStreams.delete(taskId);
-      this.stopRequested.delete(taskId);
+      this.activeStreams.delete(variantId);
+      this.stopRequested.delete(variantId);
       handleStreamError(error, variantId, taskId);
 
       // Clean up MCP manager for this task
@@ -1392,36 +1399,40 @@ These are specific instructions from the user that should be followed throughout
     }
   }
 
-  // Process any queued actions for a task
-  private async processQueuedActions(taskId: string): Promise<void> {
-    const queuedAction = this.queuedActions.get(taskId);
-    if (!queuedAction) {
-      return;
+  // Process queued action for a specific variant if present
+  private async processQueuedActionForVariant(variantId: string, taskId: string): Promise<void> {
+    const queuedAction = this.queuedActions.get(variantId);
+    if (queuedAction && queuedAction.type === "message") {
+      this.queuedActions.delete(variantId);
+      try {
+        emitToTask(taskId, "queued-action-processing", {
+          taskId,
+          type: queuedAction.type,
+          message: queuedAction.data.message,
+          model: queuedAction.data.context.getMainModel(),
+        });
+        await this._processQueuedMessage(queuedAction.data, taskId);
+        return;
+      } catch (error) {
+        console.error(
+          `[CHAT] Error processing queued message for variant ${variantId} (task ${taskId}):`,
+          error
+        );
+      }
     }
 
-    this.queuedActions.delete(taskId);
-
-    try {
-      switch (queuedAction.type) {
-        case "message":
-          // Emit event for regular messages before processing
-          emitToTask(taskId, "queued-action-processing", {
-            taskId,
-            type: queuedAction.type,
-            message: queuedAction.data.message,
-            model: queuedAction.data.context.getMainModel(),
-          });
-          await this._processQueuedMessage(queuedAction.data, taskId);
-          break;
-        case "stacked-pr":
-          await this._processQueuedStackedPR(queuedAction.data);
-          break;
+    // Fallback to task-scoped queued action types (e.g., stacked-pr)
+    const taskQueuedAction = this.queuedActions.get(taskId);
+    if (taskQueuedAction && taskQueuedAction.type === "stacked-pr") {
+      this.queuedActions.delete(taskId);
+      try {
+        await this._processQueuedStackedPR(taskQueuedAction.data);
+      } catch (error) {
+        console.error(
+          `[CHAT] Error processing queued stacked-pr for task ${taskId}:`,
+          error
+        );
       }
-    } catch (error) {
-      console.error(
-        `[CHAT] Error processing queued ${queuedAction.type} for task ${taskId}:`,
-        error
-      );
     }
   }
 
@@ -1459,6 +1470,7 @@ These are specific instructions from the user that should be followed throughout
   }
 
   getQueuedAction(taskId: string): QueuedActionUI | null {
+    // Prefer task-scoped actions (stacked-pr)
     const action = this.queuedActions.get(taskId);
     if (!action) return null;
 
@@ -1488,15 +1500,16 @@ These are specific instructions from the user that should be followed throughout
 
   async stopStream(
     taskId: string,
+    variantId: string,
     updateStatus: boolean = false
   ): Promise<void> {
     // Mark stop requested so generator exits early
-    this.stopRequested.add(taskId);
+    this.stopRequested.add(variantId);
 
-    const abortController = this.activeStreams.get(taskId);
+    const abortController = this.activeStreams.get(variantId);
     if (abortController) {
       abortController.abort();
-      this.activeStreams.delete(taskId);
+      this.activeStreams.delete(variantId);
     }
 
     // Flush any pending database updates before stopping
@@ -1533,9 +1546,9 @@ These are specific instructions from the user that should be followed throughout
     newModel: ModelType;
     context: TaskModelContext;
   }): Promise<void> {
-    // First, stop any active stream and clear queued messages
-    if (this.activeStreams.has(taskId)) {
-      await this.stopStream(taskId);
+    // First, stop any active stream for this variant and clear queued messages
+    if (this.activeStreams.has(variantId)) {
+      await this.stopStream(taskId, variantId);
     }
     this.clearQueuedAction(taskId);
 

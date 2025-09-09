@@ -18,7 +18,7 @@ export class MemoryCleanupService {
 
     try {
       chatService.cleanupTask(taskId);
-      stopFileSystemWatcher(taskId);
+      // Task-level cleanup no longer stops per-variant filesystem watchers here
       cleanupTaskTerminalCounters(taskId);
 
       console.log(
@@ -42,6 +42,8 @@ export class MemoryCleanupService {
     try {
       cleanupVariantStreamState(variantId);
       stopTerminalPolling(variantId);
+      // Stop per-variant filesystem watcher
+      stopFileSystemWatcher(variantId);
 
       console.log(
         `[MEMORY_CLEANUP] Successfully cleaned up variant memory for variant ${variantId}`
