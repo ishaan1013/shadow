@@ -17,6 +17,7 @@ import { RemoteGitService } from "./remote/remote-git-service";
 import { GitService } from "./interfaces/git-service";
 import { GitManager } from "../services/git-manager";
 import { prisma } from "@repo/db";
+import path from "path";
 
 /**
  * Create a tool executor based on the configured agent mode
@@ -96,6 +97,17 @@ export function createWorkspaceManager(mode?: AgentMode): WorkspaceManager {
  */
 export function getAgentMode(): AgentMode {
   return config.agentMode;
+}
+
+/**
+ * Deterministically compute the local workspace path for a given id (taskId or variantId)
+ * Path format: <workspaceDir>/tasks/<id>
+ */
+export function getLocalWorkspacePathForId(pathId: string): string {
+  if (pathId.includes("/")) {
+    pathId = pathId.split("/").pop()!;
+  }
+  return path.join(config.workspaceDir, "tasks", pathId);
 }
 
 /**

@@ -39,6 +39,7 @@ export class StreamProcessor {
     userApiKeys: ApiKeys,
     enableTools: boolean = true,
     taskId: string,
+    variantId: string,
     workspacePath?: string,
     abortSignal?: AbortSignal,
     preCreatedTools?: ToolSet
@@ -49,9 +50,10 @@ export class StreamProcessor {
       // Convert our messages to AI SDK CoreMessage format
       const coreMessages: CoreMessage[] = messages.map(toCoreMessage);
 
-      // Use pre-created tools if provided, otherwise create tools with task context if taskId is provided
+      // Use pre-created tools if provided, otherwise create tools with variant context
       const tools =
-        preCreatedTools || (await createTools(taskId, workspacePath));
+        preCreatedTools ||
+        (await createTools(taskId, variantId, workspacePath));
 
       const modelProvider = getModelProvider(model);
       const isAnthropicModel = modelProvider === "anthropic";

@@ -26,11 +26,14 @@ const initializationEngine = new TaskInitializationEngine();
 
 const initiateTaskSchema = z.object({
   message: z.string().min(1, "Message is required"),
-  models: z.array(
-    z.enum(Object.values(AvailableModels) as [string, ...string[]], {
-      errorMap: () => ({ message: "Invalid model type" }),
-    })
-  ).min(1, "At least one model is required").max(3, "Maximum 3 models allowed"),
+  models: z
+    .array(
+      z.enum(Object.values(AvailableModels) as [string, ...string[]], {
+        errorMap: () => ({ message: "Invalid model type" }),
+      })
+    )
+    .min(1, "At least one model is required")
+    .max(3, "Maximum 3 models allowed"),
   userId: z.string().min(1, "User ID is required"),
 });
 
@@ -187,7 +190,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
           req.headers.cookie,
           model as ModelType
         );
-        
+
         if (!context.validateAccess()) {
           invalidModels.push({
             model,
@@ -195,7 +198,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
           });
         }
       }
-      
+
       if (invalidModels.length > 0) {
         const errorMessages = invalidModels.map(({ model, provider }) => {
           const providerName =
@@ -206,7 +209,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
                 : "OpenAI";
           return `${providerName} API key required for ${model}`;
         });
-        
+
         return res.status(400).json({
           error: "Missing API keys",
           details: errorMessages.join(", "),
@@ -225,7 +228,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
           req.headers.cookie,
           model
         );
-        
+
         try {
           const initSteps = await initializationEngine.getDefaultStepsForTask();
           await initializationEngine.initializeTask(
@@ -234,7 +237,7 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
             userId,
             variantContext
           );
-          
+
           // Process initial user message for this variant
           await chatService.processUserMessage({
             taskId,
@@ -244,21 +247,26 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
             enableTools: true,
             skipUserMessageSave: true,
           });
-          
+
           return { success: true, variantId: variant.id };
         } catch (error) {
           console.error(`[TASK_INITIATE] Variant ${variant.id} failed:`, error);
           return { success: false, variantId: variant.id, error };
         }
       });
-      
+
       const results = await Promise.allSettled(initPromises);
       const successfulVariants = results
         .map((result, index) => ({ result, variant: task.variants[index] }))
-        .filter(({ result, variant }) => variant && result.status === 'fulfilled' && result.value.success)
+        .filter(
+          ({ result, variant }) =>
+            variant && result.status === "fulfilled" && result.value.success
+        )
         .map(({ variant }) => variant!.id);
-        
-      console.log(`✅ [TASK_INITIATE] Task ${taskId} initialized ${successfulVariants.length}/${task.variants.length} variants successfully`);
+
+      console.log(
+        `✅ [TASK_INITIATE] Task ${taskId} initialized ${successfulVariants.length}/${task.variants.length} variants successfully`
+      );
 
       res.json({
         success: true,
@@ -299,10 +307,13 @@ app.post("/api/tasks/:taskId/initiate", async (req, res) => {
   }
 });
 
-app.get("/api/tasks/:taskId/messages", async (req, res) => {
+app.get("/api/tasks/:taskId/:variantId/messages", async (req, res) => {
   try {
-    const { taskId } = req.params;
-    const messages = await chatService.getChatHistory(taskId);
+    const { taskId, variantId } = req.params as {
+      taskId: string;
+      variantId: string;
+    };
+    const messages = await chatService.getChatHistory(taskId, variantId);
     res.json({ messages });
   } catch (error) {
     console.error("Error fetching messages:", error);
@@ -338,10 +349,14 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
     }
 
     // Check if all variants are already cleaned up
-    const variantsNeedingCleanup = task.variants.filter(v => !v.workspaceCleanedUp);
-    
+    const variantsNeedingCleanup = task.variants.filter(
+      (v) => !v.workspaceCleanedUp
+    );
+
     if (variantsNeedingCleanup.length === 0) {
-      console.log(`[TASK_CLEANUP] All variants for task ${taskId} already cleaned up`);
+      console.log(
+        `[TASK_CLEANUP] All variants for task ${taskId} already cleaned up`
+      );
       return res.json({
         success: true,
         message: "All workspaces already cleaned up",
@@ -363,15 +378,17 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
     const cleanupResults = [];
     for (const variant of variantsNeedingCleanup) {
       try {
-        const cleanupResult = await workspaceManager.cleanupWorkspace(variant.id);
-        
+        const cleanupResult = await workspaceManager.cleanupWorkspace(
+          variant.id
+        );
+
         if (cleanupResult.success) {
           // Mark variant as cleaned up
           await prisma.variant.update({
             where: { id: variant.id },
             data: { workspaceCleanedUp: true },
           });
-          
+
           cleanupResults.push({
             variantId: variant.id,
             success: true,
@@ -393,16 +410,17 @@ app.delete("/api/tasks/:taskId/cleanup", async (req, res) => {
       }
     }
 
-    const successfulCleanups = cleanupResults.filter(r => r.success);
-    const failedCleanups = cleanupResults.filter(r => !r.success);
+    const successfulCleanups = cleanupResults.filter((r) => r.success);
+    const failedCleanups = cleanupResults.filter((r) => !r.success);
 
     // Update task cleanup status if all variants are now cleaned up
-    const allVariantsCleanedUp = await prisma.variant.count({
-      where: {
-        taskId,
-        workspaceCleanedUp: false,
-      },
-    }) === 0;
+    const allVariantsCleanedUp =
+      (await prisma.variant.count({
+        where: {
+          taskId,
+          workspaceCleanedUp: false,
+        },
+      })) === 0;
 
     if (allVariantsCleanedUp) {
       await prisma.task.update({
@@ -479,8 +497,10 @@ app.post("/api/tasks/:taskId/pull-request", async (req, res) => {
     }
 
     // Check if any variants already have PRs
-    const variantsWithPRs = task.variants.filter(v => v.pullRequestNumber);
-    const variantsWithoutPRs = task.variants.filter(v => !v.pullRequestNumber);
+    const variantsWithPRs = task.variants.filter((v) => v.pullRequestNumber);
+    const variantsWithoutPRs = task.variants.filter(
+      (v) => !v.pullRequestNumber
+    );
 
     if (variantsWithoutPRs.length === 0) {
       console.log(
@@ -488,7 +508,7 @@ app.post("/api/tasks/:taskId/pull-request", async (req, res) => {
       );
       return res.json({
         success: true,
-        existingPRs: variantsWithPRs.map(v => ({
+        existingPRs: variantsWithPRs.map((v) => ({
           variantId: v.id,
           prNumber: v.pullRequestNumber,
           prUrl: `${task.repoUrl}/pull/${v.pullRequestNumber}`,
@@ -579,8 +599,8 @@ app.post("/api/tasks/:taskId/pull-request", async (req, res) => {
       }
     }
 
-    const successfulPRs = prCreationResults.filter(r => r.success);
-    const failedPRs = prCreationResults.filter(r => !r.success);
+    const successfulPRs = prCreationResults.filter((r) => r.success);
+    const failedPRs = prCreationResults.filter((r) => !r.success);
 
     console.log(
       `[PR_CREATION] Created ${successfulPRs.length} PRs for task ${taskId}, ${failedPRs.length} failed`

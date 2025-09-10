@@ -35,13 +35,8 @@ import {
 } from "../socket";
 import config from "../config";
 import { getGitHubAppEmail, getGitHubAppName } from "../config/shared";
-import {
-  updateVariantStatus,
-} from "../utils/variant-status";
-import {
-  updateTaskStatus,
-  resetTaskCleanupTimer,
-} from "../utils/task-status";
+import { updateVariantStatus } from "../utils/variant-status";
+import { updateTaskStatus, resetTaskCleanupTimer } from "../utils/task-status";
 import { createGitService } from "../execution";
 import { memoryService } from "../services/memory-service";
 import { TaskInitializationEngine } from "@/initialization";
@@ -53,7 +48,7 @@ type QueuedMessageAction = {
   type: "message";
   data: {
     message: string;
-    variantId?: string;
+    variantId: string;
     context: TaskModelContext;
     workspacePath?: string;
   };
@@ -104,6 +99,7 @@ export class ChatService {
   // Helper method to atomically create any message with sequence generation
   private async createMessageWithAtomicSequence(
     taskId: string,
+    variantId: string | undefined,
     messageData: {
       content: string;
       role: "USER" | "ASSISTANT" | "SYSTEM";
@@ -118,7 +114,7 @@ export class ChatService {
     return await prisma.$transaction(async (tx) => {
       // Atomically get next sequence within transaction
       const lastMessage = await tx.chatMessage.findFirst({
-        where: { taskId },
+        where: variantId ? { taskId, variantId } : { taskId },
         orderBy: { sequence: "desc" },
         select: { sequence: true },
       });
@@ -128,6 +124,7 @@ export class ChatService {
       return await tx.chatMessage.create({
         data: {
           taskId,
+          ...(variantId ? { variantId } : {}),
           content: messageData.content,
           role: messageData.role,
           sequence,
@@ -145,17 +142,22 @@ export class ChatService {
 
   async saveUserMessage(
     taskId: string,
+    variantId: string,
     content: string,
     llmModel: string,
     metadata?: MessageMetadata
   ): Promise<ChatMessage> {
     // Use atomic sequence generation to prevent race conditions
-    const message = await this.createMessageWithAtomicSequence(taskId, {
-      content,
-      role: "USER",
-      llmModel,
-      metadata,
-    });
+    const message = await this.createMessageWithAtomicSequence(
+      taskId,
+      variantId,
+      {
+        content,
+        role: "USER",
+        llmModel,
+        metadata,
+      }
+    );
 
     // TODO: Update variant activity timestamp when user sends a message
     // await updateVariantActivity(variantId, "MESSAGE");
@@ -165,6 +167,7 @@ export class ChatService {
 
   async saveAssistantMessage(
     taskId: string,
+    variantId: string,
     content: string,
     llmModel: string,
     sequence?: number,
@@ -173,7 +176,7 @@ export class ChatService {
     // If no sequence provided, generate atomically
     if (sequence === undefined) {
       const usage = metadata?.usage;
-      return await this.createMessageWithAtomicSequence(taskId, {
+      return await this.createMessageWithAtomicSequence(taskId, variantId, {
         content,
         role: "ASSISTANT",
         llmModel,
@@ -191,6 +194,7 @@ export class ChatService {
     return await prisma.chatMessage.create({
       data: {
         taskId,
+        variantId,
         content,
         role: "ASSISTANT",
         llmModel,
@@ -208,6 +212,7 @@ export class ChatService {
 
   async saveSystemMessage(
     taskId: string,
+    variantId: string | undefined,
     content: string,
     llmModel: string,
     sequence?: number,
@@ -215,7 +220,7 @@ export class ChatService {
   ): Promise<ChatMessage> {
     // If no sequence provided, generate atomically
     if (sequence === undefined) {
-      return await this.createMessageWithAtomicSequence(taskId, {
+      return await this.createMessageWithAtomicSequence(taskId, variantId, {
         content,
         role: "SYSTEM",
         llmModel,
@@ -226,6 +231,7 @@ export class ChatService {
     return await prisma.chatMessage.create({
       data: {
         taskId,
+        ...(variantId ? { variantId } : {}),
         content,
         role: "SYSTEM",
         llmModel,
@@ -541,9 +547,9 @@ export class ChatService {
     }
   }
 
-  async getChatHistory(taskId: string): Promise<Message[]> {
+  async getChatHistory(taskId: string, variantId: string): Promise<Message[]> {
     const dbMessages = await prisma.chatMessage.findMany({
-      where: { taskId },
+      where: { taskId, variantId },
       include: {
         pullRequestSnapshot: true,
         stackedTask: {
@@ -776,10 +782,15 @@ export class ChatService {
 
     // Save user message to database (unless skipped, e.g. on task initialization)
     if (!skipUserMessageSave) {
-      await this.saveUserMessage(taskId, userMessage, context.getMainModel());
+      await this.saveUserMessage(
+        taskId,
+        variantId,
+        userMessage,
+        context.getMainModel()
+      );
     }
 
-    const history = await this.getChatHistory(taskId);
+    const history = await this.getChatHistory(taskId, variantId);
 
     const messages: Message[] = history
       .slice(0, -1)
@@ -800,6 +811,7 @@ export class ChatService {
         const shadowWikiSequence = await this.getNextSequence(taskId);
         await this.saveSystemMessage(
           taskId,
+          variantId,
           shadowWikiContent,
           context.getMainModel(),
           shadowWikiSequence
@@ -836,6 +848,7 @@ export class ChatService {
           const memorySequence = await this.getNextSequence(taskId);
           await this.saveSystemMessage(
             taskId,
+            variantId,
             memoryContent,
             context.getMainModel(),
             memorySequence
@@ -865,6 +878,7 @@ These are specific instructions from the user that should be followed throughout
         const rulesSequence = await this.getNextSequence(taskId);
         await this.saveSystemMessage(
           taskId,
+          variantId,
           rulesContent,
           context.getMainModel(),
           rulesSequence
@@ -911,7 +925,7 @@ These are specific instructions from the user that should be followed throughout
     // Create tools first so we can generate system prompt based on available tools
     let availableTools: ToolSet | undefined;
     if (enableTools && taskId) {
-      availableTools = await createTools(taskId, workspacePath, variantId);
+      availableTools = await createTools(taskId, variantId, workspacePath);
     }
 
     // Get system prompt with available tools context
@@ -925,6 +939,7 @@ These are specific instructions from the user that should be followed throughout
         context.getApiKeys(),
         enableTools,
         taskId, // Pass taskId to enable todo tool context
+        variantId,
         workspacePath, // Pass workspace path for tool operations
         abortController.signal,
         availableTools
@@ -949,6 +964,7 @@ These are specific instructions from the user that should be followed throughout
             assistantSequence = await this.getNextSequence(taskId);
             const assistantMsg = await this.saveAssistantMessage(
               taskId,
+              variantId,
               chunk.content, // Still store some content for backward compatibility
               context.getMainModel(),
               assistantSequence,
@@ -995,6 +1011,7 @@ These are specific instructions from the user that should be followed throughout
             assistantSequence = await this.getNextSequence(taskId);
             const assistantMsg = await this.saveAssistantMessage(
               taskId,
+              variantId,
               chunk.reasoning, // Store some content for backward compatibility
               context.getMainModel(),
               assistantSequence,
@@ -1047,6 +1064,7 @@ These are specific instructions from the user that should be followed throughout
             assistantSequence = await this.getNextSequence(taskId);
             const assistantMsg = await this.saveAssistantMessage(
               taskId,
+              variantId,
               "[Redacted reasoning]", // Store placeholder content
               context.getMainModel(),
               assistantSequence,
@@ -1400,11 +1418,17 @@ These are specific instructions from the user that should be followed throughout
   }
 
   // Process queued action for a specific variant if present
-  private async processQueuedActionForVariant(variantId: string, taskId: string): Promise<void> {
+  private async processQueuedActionForVariant(
+    variantId: string,
+    taskId: string
+  ): Promise<void> {
     const queuedAction = this.queuedActions.get(variantId);
-    if (queuedAction && queuedAction.type === "message") {
-      this.queuedActions.delete(variantId);
-      try {
+    if (!queuedAction) return;
+
+    this.queuedActions.delete(variantId);
+
+    try {
+      if (queuedAction.type === "message") {
         emitToTask(taskId, "queued-action-processing", {
           taskId,
           type: queuedAction.type,
@@ -1413,26 +1437,17 @@ These are specific instructions from the user that should be followed throughout
         });
         await this._processQueuedMessage(queuedAction.data, taskId);
         return;
-      } catch (error) {
-        console.error(
-          `[CHAT] Error processing queued message for variant ${variantId} (task ${taskId}):`,
-          error
-        );
       }
-    }
 
-    // Fallback to task-scoped queued action types (e.g., stacked-pr)
-    const taskQueuedAction = this.queuedActions.get(taskId);
-    if (taskQueuedAction && taskQueuedAction.type === "stacked-pr") {
-      this.queuedActions.delete(taskId);
-      try {
-        await this._processQueuedStackedPR(taskQueuedAction.data);
-      } catch (error) {
-        console.error(
-          `[CHAT] Error processing queued stacked-pr for task ${taskId}:`,
-          error
-        );
+      if (queuedAction.type === "stacked-pr") {
+        await this._processQueuedStackedPR(queuedAction.data);
+        return;
       }
+    } catch (error) {
+      console.error(
+        `[CHAT] Error processing queued action for variant ${variantId} (task ${taskId}):`,
+        error
+      );
     }
   }
 
@@ -1469,12 +1484,10 @@ These are specific instructions from the user that should be followed throughout
     return await this.llmService.getAvailableModels(userApiKeys);
   }
 
-  getQueuedAction(taskId: string): QueuedActionUI | null {
-    // Prefer task-scoped actions (stacked-pr)
-    const action = this.queuedActions.get(taskId);
+  getQueuedActionForVariant(variantId: string): QueuedActionUI | null {
+    const action = this.queuedActions.get(variantId);
     if (!action) return null;
 
-    // Model is now required for both action types
     const model =
       action.type === "stacked-pr"
         ? action.data.model
@@ -1482,7 +1495,7 @@ These are specific instructions from the user that should be followed throughout
 
     if (!model) {
       console.warn(
-        `[CHAT] No model available for queued ${action.type} action in task ${taskId}`
+        `[CHAT] No model available for queued ${action.type} action in variant ${variantId}`
       );
       return null;
     }
@@ -1496,6 +1509,10 @@ These are specific instructions from the user that should be followed throughout
 
   clearQueuedAction(taskId: string): void {
     this.queuedActions.delete(taskId);
+  }
+
+  clearQueuedActionForVariant(variantId: string): void {
+    this.queuedActions.delete(variantId);
   }
 
   async stopStream(
@@ -1576,9 +1593,9 @@ These are specific instructions from the user that should be followed throughout
     }
 
     // variantId is provided as parameter - no need to query for first variant
-    
+
     // variantId is now passed as a parameter
-    
+
     await checkpointService.restoreCheckpoint(taskId, variantId, messageId);
     console.log(
       `[CHAT] ✅ Checkpoint restoration completed for message editing`
@@ -1588,6 +1605,7 @@ These are specific instructions from the user that should be followed throughout
     await prisma.chatMessage.deleteMany({
       where: {
         taskId,
+        variantId,
         sequence: {
           gt: editedMessage.sequence,
         },
@@ -1631,6 +1649,7 @@ These are specific instructions from the user that should be followed throughout
    */
   async createStackedPR({
     parentTaskId,
+    parentVariantId,
     message,
     model,
     userId,
@@ -1639,6 +1658,7 @@ These are specific instructions from the user that should be followed throughout
     newTaskId,
   }: {
     parentTaskId: string;
+    parentVariantId: string;
     message: string;
     model: ModelType;
     userId: string;
@@ -1648,8 +1668,8 @@ These are specific instructions from the user that should be followed throughout
   }): Promise<void> {
     try {
       // If there's an active stream and queue is true, queue the stacked PR
-      if (this.activeStreams.has(parentTaskId) && queue) {
-        this.queuedActions.set(parentTaskId, {
+      if (this.activeStreams.has(parentVariantId) && queue) {
+        this.queuedActions.set(parentVariantId, {
           type: "stacked-pr",
           data: {
             message,
@@ -1759,6 +1779,7 @@ These are specific instructions from the user that should be followed throughout
               role: MessageRole.USER,
               sequence: 1,
               llmModel: model,
+              // this is the first message; variant(s) for the new task will be created during init
             },
           },
         },
@@ -1774,16 +1795,12 @@ These are specific instructions from the user that should be followed throughout
           taskId: parentTaskId,
           stackedTaskId: taskId,
           sequence: parentNextSequence,
+          // keep message task-scoped; parent variant context was the requester of the action
         },
       });
 
       // Trigger task initialization (similar to the backend initiate endpoint)
-      await this.initializeStackedTask(
-        taskId,
-        model,
-        userId,
-        parentTaskId
-      );
+      await this.initializeStackedTask(taskId, model, userId, parentTaskId);
 
       // Emit event to frontend for optimistic message display with full context
       emitToTask(parentTaskId, "queued-action-processing", {
@@ -1861,8 +1878,10 @@ These are specific instructions from the user that should be followed throughout
             const contextMessage = `<parent_task_conversation_summary>${conversationSummary}</parent_task_conversation_summary>`;
 
             const contextSequence = await this.getNextSequence(taskId);
+            // No variant exists yet for newly created stacked task; write system message without variantId
             await this.saveSystemMessage(
               taskId,
+              undefined,
               contextMessage,
               newTaskContext.getMainModel(),
               contextSequence
@@ -1871,7 +1890,9 @@ These are specific instructions from the user that should be followed throughout
 
           // TODO: For multi-variant support, need to create variants first and use specific variantId
           // For now, this stacked PR flow needs to be updated for multi-variant architecture
-          throw new Error("Stacked PR creation needs multi-variant support - not yet implemented");
+          throw new Error(
+            "Stacked PR creation needs multi-variant support - not yet implemented"
+          );
         } catch (error) {
           console.error(
             `[CHAT] Failed to process first message for stacked task ${taskId}:`,

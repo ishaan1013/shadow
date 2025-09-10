@@ -15,14 +15,20 @@ export class CheckpointService {
   /**
    * Create a checkpoint for a message after successful completion
    */
-  async createCheckpoint(taskId: string, variantId: string, messageId: string): Promise<void> {
+  async createCheckpoint(
+    taskId: string,
+    variantId: string,
+    messageId: string
+  ): Promise<void> {
     console.log(
       `[CHECKPOINT] ✨ Starting checkpoint creation for task ${taskId}, message ${messageId}`
     );
 
     try {
       // Create git service for the variant (handles both local and remote modes)
-      console.log(`[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`);
+      console.log(
+        `[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`
+      );
       const gitService = await createGitService(variantId);
 
       // 1. Ensure all changes are committed (reuse existing logic)
@@ -38,7 +44,7 @@ export class CheckpointService {
       // 2. Capture current state
       console.log(`[CHECKPOINT] 📸 Capturing current state...`);
       const commitSha = await gitService.getCurrentCommitSha();
-      const todoSnapshot = await this.getTodoSnapshot(taskId);
+      const todoSnapshot = await this.getTodoSnapshot(taskId, variantId);
 
       console.log(`[CHECKPOINT] 🎯 Captured commit SHA: ${commitSha}`);
       console.log(`[CHECKPOINT] 📝 Captured ${todoSnapshot.length} todos`);
@@ -135,7 +141,9 @@ export class CheckpointService {
       );
 
       // Create git service for the variant (handles both local and remote modes)
-      console.log(`[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`);
+      console.log(
+        `[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`
+      );
       const gitService = await createGitService(variantId);
 
       // 2. Pause filesystem watcher to prevent spurious events from git operations
@@ -170,7 +178,7 @@ export class CheckpointService {
       }
 
       // Restore todo state
-      await this.restoreTodoState(taskId, checkpoint.todoSnapshot);
+      await this.restoreTodoState(taskId, variantId, checkpoint.todoSnapshot);
       this.emitTodoUpdate(taskId, variantId, checkpoint.todoSnapshot);
 
       // Wait for git state to settle, then recompute and emit file state
@@ -191,9 +199,12 @@ export class CheckpointService {
   /**
    * Get a snapshot of the current todo state
    */
-  private async getTodoSnapshot(taskId: string): Promise<Todo[]> {
+  private async getTodoSnapshot(
+    taskId: string,
+    variantId?: string
+  ): Promise<Todo[]> {
     return await prisma.todo.findMany({
-      where: { taskId },
+      where: variantId ? { taskId, variantId } : { taskId },
       orderBy: { sequence: "asc" },
     });
   }
@@ -203,6 +214,7 @@ export class CheckpointService {
    */
   private async restoreTodoState(
     taskId: string,
+    variantId: string | undefined,
     snapshot: Todo[]
   ): Promise<void> {
     console.log(
@@ -214,7 +226,9 @@ export class CheckpointService {
       console.log(
         `[CHECKPOINT] 🗑️ Deleting current todos for task ${taskId}...`
       );
-      const deleteResult = await tx.todo.deleteMany({ where: { taskId } });
+      const deleteResult = await tx.todo.deleteMany({
+        where: variantId ? { taskId, variantId } : { taskId },
+      });
       console.log(
         `[CHECKPOINT] ✅ Deleted ${deleteResult.count} existing todos`
       );
@@ -230,9 +244,10 @@ export class CheckpointService {
             content: todo.content,
             status: todo.status,
             sequence: todo.sequence,
-            taskId, // Ensure correct task association
+            taskId,
+            ...(variantId ? { variantId } : {}),
             createdAt: todo.createdAt,
-            updatedAt: new Date(), // Update timestamp
+            updatedAt: new Date(),
           })),
         });
         console.log(
@@ -294,7 +309,10 @@ export class CheckpointService {
 
       // Get current codebase tree using tool executor
       console.log(`[CHECKPOINT] 🌳 Computing codebase tree...`);
-      const toolExecutor = await createToolExecutor(taskId, variant.workspacePath);
+      const toolExecutor = await createToolExecutor(
+        taskId,
+        variant.workspacePath
+      );
       const treeResult = await toolExecutor.listDirectoryRecursive(".");
 
       const codebaseTree = treeResult.success
@@ -344,7 +362,11 @@ export class CheckpointService {
   /**
    * Emit todo update to frontend via WebSocket
    */
-  private emitTodoUpdate(taskId: string, variantId: string, todos: Todo[]): void {
+  private emitTodoUpdate(
+    taskId: string,
+    variantId: string,
+    todos: Todo[]
+  ): void {
     try {
       const todoUpdate = {
         todos: todos.map((todo, index) => ({
@@ -387,7 +409,10 @@ export class CheckpointService {
    * Restore workspace to initial repository state (before any assistant changes)
    * Now variant-specific for proper workspace restoration
    */
-  private async restoreToInitialState(taskId: string, variantId: string): Promise<void> {
+  private async restoreToInitialState(
+    taskId: string,
+    variantId: string
+  ): Promise<void> {
     console.log(
       `[CHECKPOINT] 🏁 Restoring to initial repository state for task ${taskId}`
     );
@@ -411,7 +436,9 @@ export class CheckpointService {
       );
 
       // Create git service for the variant (handles both local and remote modes)
-      console.log(`[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`);
+      console.log(
+        `[CHECKPOINT] 🔧 Creating git service for variant ${variantId}...`
+      );
       const gitService = await createGitService(variantId);
 
       // Pause filesystem watcher to prevent spurious events from git operations
@@ -437,7 +464,7 @@ export class CheckpointService {
       }
 
       // Clear all todos (initial state has none)
-      await this.restoreTodoState(taskId, []); // Empty array = no todos
+      await this.restoreTodoState(taskId, variantId, []); // Empty array = no todos
       this.emitTodoUpdate(taskId, variantId, []);
 
       // Wait for git state to settle, then recompute and emit file state
@@ -497,7 +524,10 @@ export class CheckpointService {
   /**
    * Pause filesystem watcher to prevent spurious events during git operations
    */
-  private async pauseFilesystemWatcher(taskId: string, variantId?: string): Promise<void> {
+  private async pauseFilesystemWatcher(
+    taskId: string,
+    variantId?: string
+  ): Promise<void> {
     try {
       if (config.agentMode === "local") {
         // Local mode: pause the local filesystem watcher
@@ -560,7 +590,10 @@ export class CheckpointService {
   /**
    * Resume filesystem watcher after git operations are complete
    */
-  private async resumeFilesystemWatcher(taskId: string, variantId?: string): Promise<void> {
+  private async resumeFilesystemWatcher(
+    taskId: string,
+    variantId?: string
+  ): Promise<void> {
     try {
       if (config.agentMode === "local") {
         // Local mode: resume the local filesystem watcher

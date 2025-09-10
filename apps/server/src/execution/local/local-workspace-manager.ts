@@ -1,6 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import config from "../../config";
+// config was previously used for manual path join; now we use shared helper
+import { getLocalWorkspacePathForId } from "../index";
 import { RepositoryService } from "../../github/repositories";
 import { execAsync } from "../../utils/exec";
 import { WorkspaceManager } from "../interfaces/workspace-manager";
@@ -27,14 +28,11 @@ export class LocalWorkspaceManager implements WorkspaceManager {
   }
 
   /**
-   * Get the workspace directory path for a specific task
+   * Get the workspace directory path for a specific id (taskId or variantId)
+   * Uses the shared helper to ensure consistent path generation.
    */
-  private getTaskWorkspaceDir(taskId: string): string {
-    // Currently taskId is the local workspace path / taskId so only get the last part
-    if (taskId.includes("/")) {
-      taskId = taskId.split("/").pop()!;
-    }
-    return path.join(config.workspaceDir, "tasks", taskId);
+  private getTaskWorkspaceDir(id: string): string {
+    return getLocalWorkspacePathForId(id);
   }
 
   /**

@@ -1,4 +1,9 @@
-import { TaskStatus, InitStatus, VariantStatus, PullRequestSnapshot } from "@repo/db";
+import {
+  TaskStatus,
+  InitStatus,
+  VariantStatus,
+  PullRequestSnapshot,
+} from "@repo/db";
 import type { Message } from "../chat/messages";
 import type { StreamChunk } from "../chat/streaming-client";
 import type { ModelType } from "../llm/models";
@@ -38,12 +43,21 @@ export interface AutoPRStatusEvent {
   taskId: string;
   messageId: string;
   status: "in-progress" | "completed" | "failed";
-  
+
   // Present when status === "completed"
-  snapshot?: Pick<PullRequestSnapshot, "title" | "description" | "filesChanged" | "linesAdded" | "linesRemoved" | "commitSha" | "status">;
+  snapshot?: Pick<
+    PullRequestSnapshot,
+    | "title"
+    | "description"
+    | "filesChanged"
+    | "linesAdded"
+    | "linesRemoved"
+    | "commitSha"
+    | "status"
+  >;
   prNumber?: number;
   prUrl?: string;
-  
+
   // Present when status === "failed"
   error?: string;
 }
@@ -85,7 +99,11 @@ export interface ServerToClientEvents {
     entries: TerminalEntry[];
   }) => void;
   "terminal-history-error": (data: { error: string }) => void;
-  "terminal-output": (data: { taskId: string; variantId: string; entry: TerminalEntry }) => void;
+  "terminal-output": (data: {
+    taskId: string;
+    variantId: string;
+    entry: TerminalEntry;
+  }) => void;
   "terminal-cleared": (data: { taskId: string; variantId: string }) => void;
   "terminal-error": (data: { error: string }) => void;
 
@@ -121,12 +139,17 @@ export interface ClientToServerEvents {
     message: string;
     llmModel: ModelType;
   }) => void;
-  "get-chat-history": (data: { taskId: string; complete: boolean }) => void;
+  "get-chat-history": (data: {
+    taskId: string;
+    variantId: string;
+    complete: boolean;
+  }) => void;
   "stop-stream": (data: { taskId: string; variantId: string }) => void;
   "request-history": (data: { taskId: string; fromPosition?: number }) => void;
-  "clear-queued-action": (data: { taskId: string }) => void;
+  "clear-queued-action": (data: { taskId: string; variantId: string }) => void;
   "create-stacked-pr": (data: {
     taskId: string;
+    variantId: string;
     message: string;
     llmModel: ModelType;
     queue?: boolean;

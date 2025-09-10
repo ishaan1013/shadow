@@ -5,6 +5,7 @@ import { TaskModelContext } from "@/services/task-model-context";
 import { ModelType, getModelProvider } from "@repo/types";
 import { AssistantMessagePart, ReasoningPart } from "@repo/types";
 import { ChatService } from "@/agent/chat";
+import { prisma } from "@repo/db";
 
 export class ChatSummarizationService {
   private modelProvider: ModelProvider;
@@ -35,7 +36,53 @@ export class ChatSummarizationService {
     context: TaskModelContext
   ): Promise<string> {
     try {
-      const history = await this.chatService.getChatHistory(parentTaskId);
+      // Choose the first variant for the parent task if present; otherwise fall back to task-scoped DB messages
+      const parentVariant = await prisma.variant.findFirst({
+        where: { taskId: parentTaskId },
+        select: { id: true },
+      });
+
+      let history: Array<{
+        id: string;
+        role: string;
+        content: string;
+        llmModel: string;
+        createdAt: string;
+        metadata?: any;
+        pullRequestSnapshot?: any;
+        stackedTaskId?: string;
+        stackedTask?: { id: string; title: string };
+      }>;
+
+      if (parentVariant?.id) {
+        history = await this.chatService.getChatHistory(
+          parentTaskId,
+          parentVariant.id
+        );
+      } else {
+        const dbMessages = await prisma.chatMessage.findMany({
+          where: { taskId: parentTaskId },
+          include: {
+            pullRequestSnapshot: true,
+            stackedTask: {
+              select: { id: true, title: true },
+            },
+          },
+          orderBy: [{ sequence: "asc" }, { createdAt: "asc" }],
+        });
+
+        history = dbMessages.map((msg) => ({
+          id: msg.id,
+          role: msg.role.toLowerCase(),
+          content: msg.content,
+          llmModel: msg.llmModel,
+          createdAt: msg.createdAt.toISOString(),
+          metadata: msg.metadata as any,
+          pullRequestSnapshot: msg.pullRequestSnapshot || undefined,
+          stackedTaskId: msg.stackedTaskId || undefined,
+          stackedTask: msg.stackedTask || undefined,
+        }));
+      }
 
       const relevantMessages = history.filter(
         (msg) =>

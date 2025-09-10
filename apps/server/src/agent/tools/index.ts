@@ -16,6 +16,7 @@ import {
   SemanticSearchParamsSchema,
 } from "@repo/types";
 import { createToolExecutor, isLocalMode } from "../../execution";
+import { getLocalWorkspacePathForId } from "../../execution";
 import { LocalFileSystemWatcher } from "../../services/local-filesystem-watcher";
 import { emitTerminalOutput, emitStreamChunk } from "../../socket";
 import { isIndexingComplete } from "../../initialization/background-indexing";
@@ -156,10 +157,18 @@ function readDescription(toolName: string): string {
 }
 
 // Factory function to create tools with task context using abstraction layer
-export async function createTools(taskId: string, workspacePath?: string, variantId?: string) {
+export async function createTools(
+  taskId: string,
+  variantId: string,
+  workspacePath?: string
+) {
   console.log(
-    `[TOOLS] Creating tools for task ${taskId}${variantId ? ` (variant ${variantId})` : ""} with workspace: ${workspacePath || "default"}${workspacePath ? " (task-specific)" : " (fallback)"}`
+    `[TOOLS] Creating tools for task ${taskId} (variant ${variantId}) with workspace: ${workspacePath || "default"}${workspacePath ? " (task-specific)" : " (fallback)"}`
   );
+
+  if (isLocalMode() && !workspacePath) {
+    workspacePath = getLocalWorkspacePathForId(variantId);
+  }
 
   // Create tool executor through abstraction layer
   // The factory function is now smart enough to handle mode detection internally:
@@ -189,7 +198,7 @@ export async function createTools(taskId: string, workspacePath?: string, varian
   }
 
   // Initialize filesystem watcher for local mode
-  if (isLocalMode() && workspacePath && variantId) {
+  if (isLocalMode() && workspacePath) {
     // Check if we already have a watcher for this task
     if (!activeFileSystemWatchers.has(variantId)) {
       try {
@@ -197,7 +206,7 @@ export async function createTools(taskId: string, workspacePath?: string, varian
         watcher.startWatching(workspacePath);
         activeFileSystemWatchers.set(variantId, watcher);
         console.log(
-          `[TOOLS] Started local filesystem watcher for variant ${variantId} (task ${taskId})`
+          `[TOOLS] Started local filesystem watcher for variant ${variantId} (task ${taskId}) at ${workspacePath}`
         );
       } catch (error) {
         console.error(
@@ -242,9 +251,9 @@ export async function createTools(taskId: string, workspacePath?: string, varian
           console.log(`[TODO_WRITE] ${explanation}`);
 
           if (!merge) {
-            // Replace: delete existing todos for this task
+            // Replace: delete existing todos for this variant (fallback to task if no variantId)
             await prisma.todo.deleteMany({
-              where: { taskId },
+              where: variantId ? { taskId, variantId } : { taskId },
             });
           }
 
@@ -256,10 +265,9 @@ export async function createTools(taskId: string, workspacePath?: string, varian
 
             // Check if todo exists (by id within the task)
             const existingTodo = await prisma.todo.findFirst({
-              where: {
-                taskId,
-                id: todo.id,
-              },
+              where: variantId
+                ? { taskId, variantId, id: todo.id }
+                : { taskId, id: todo.id },
             });
 
             if (existingTodo) {
@@ -270,6 +278,7 @@ export async function createTools(taskId: string, workspacePath?: string, varian
                   content: todo.content,
                   status: todo.status.toUpperCase() as TodoStatus,
                   sequence: i,
+                  ...(variantId ? { variantId } : {}),
                 },
               });
               results.push({
@@ -287,6 +296,7 @@ export async function createTools(taskId: string, workspacePath?: string, varian
                   status: todo.status.toUpperCase() as TodoStatus,
                   sequence: i,
                   taskId,
+                  ...(variantId ? { variantId } : {}),
                 },
               });
               results.push({
@@ -299,12 +309,14 @@ export async function createTools(taskId: string, workspacePath?: string, varian
           }
 
           const totalTodos = merge
-            ? await prisma.todo.count({ where: { taskId } })
+            ? await prisma.todo.count({
+                where: variantId ? { taskId, variantId } : { taskId },
+              })
             : todos.length;
           const completedTodos = merge
             ? await prisma.todo.count({
                 where: {
-                  taskId,
+                  ...(variantId ? { taskId, variantId } : { taskId }),
                   status: "COMPLETED",
                 },
               })
@@ -384,22 +396,30 @@ export async function createTools(taskId: string, workspacePath?: string, varian
         console.log(`[TERMINAL_CMD] ${explanation}`);
 
         // Emit the command being executed to the terminal
-        if (variantId) {
-          createAndEmitTerminalEntry(taskId, variantId, "command", command);
-        }
+        createAndEmitTerminalEntry(taskId, variantId, "command", command);
 
         const result = await executor.executeCommand(command, {
           isBackground: is_background,
         });
 
         // Emit stdout output if present
-        if (variantId && result.success && result.stdout) {
-          createAndEmitTerminalEntry(taskId, variantId, "stdout", result.stdout);
+        if (result.success && result.stdout) {
+          createAndEmitTerminalEntry(
+            taskId,
+            variantId,
+            "stdout",
+            result.stdout
+          );
         }
 
         // Emit stderr output if present
-        if (variantId && result.stderr) {
-          createAndEmitTerminalEntry(taskId, variantId, "stderr", result.stderr);
+        if (result.stderr) {
+          createAndEmitTerminalEntry(
+            taskId,
+            variantId,
+            "stderr",
+            result.stderr
+          );
         }
 
         return result;
@@ -950,12 +970,13 @@ let _defaultToolsPromise:
 export const tools = new Proxy({} as Awaited<ReturnType<typeof createTools>>, {
   get(_target, prop) {
     if (!_defaultTools && !_defaultToolsPromise) {
-      _defaultToolsPromise = createTools("placeholder-task-id").then(
-        (tools) => {
-          _defaultTools = tools;
-          return tools;
-        }
-      );
+      _defaultToolsPromise = createTools(
+        "placeholder-task-id",
+        "placeholder-variant-id"
+      ).then((tools) => {
+        _defaultTools = tools;
+        return tools;
+      });
     }
     if (_defaultTools) {
       return _defaultTools[

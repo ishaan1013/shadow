@@ -23,6 +23,7 @@ export class LLMService {
     userApiKeys: ApiKeys,
     enableTools: boolean = true,
     taskId: string,
+    variantId: string,
     workspacePath?: string,
     abortSignal?: AbortSignal,
     preCreatedTools?: ToolSet
@@ -34,6 +35,7 @@ export class LLMService {
       userApiKeys,
       enableTools,
       taskId,
+      variantId,
       workspacePath,
       abortSignal,
       preCreatedTools

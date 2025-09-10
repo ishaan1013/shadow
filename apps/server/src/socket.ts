@@ -171,8 +171,9 @@ function startTerminalPolling(variantId: string) {
       }
 
       const agentMode = config.agentMode;
+      // Use taskId for executor discovery in remote mode
       const executor = await createToolExecutor(
-        variantId,
+        variant.taskId,
         variant.workspacePath || undefined,
         agentMode
       );
@@ -438,13 +439,16 @@ export function createSocketServer(
       }
     });
 
-    socket.on("clear-queued-action", async (data: { taskId: string }) => {
-      try {
-        chatService.clearQueuedAction(data.taskId);
-      } catch (error) {
-        console.error("Error clearing queued action:", error);
+    socket.on(
+      "clear-queued-action",
+      async (data: { taskId: string; variantId: string }) => {
+        try {
+          chatService.clearQueuedActionForVariant(data.variantId);
+        } catch (error) {
+          console.error("Error clearing queued action:", error);
+        }
       }
-    });
+    );
 
     socket.on("create-stacked-pr", async (data) => {
       try {
@@ -453,6 +457,11 @@ export function createSocketServer(
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
           socket.emit("message-error", { error: "Access denied to task" });
+          return;
+        }
+
+        if (!data.variantId) {
+          socket.emit("message-error", { error: "variantId is required" });
           return;
         }
 
@@ -468,6 +477,7 @@ export function createSocketServer(
 
         await chatService.createStackedPR({
           parentTaskId: data.taskId,
+          parentVariantId: data.variantId,
           message: data.message,
           model: data.llmModel as ModelType,
           userId: parentTask.userId,
@@ -578,7 +588,15 @@ export function createSocketServer(
           return;
         }
 
-        const history = await chatService.getChatHistory(data.taskId);
+        if (!data.variantId) {
+          socket.emit("chat-history-error", { error: "variantId is required" });
+          return;
+        }
+
+        const history = await chatService.getChatHistory(
+          data.taskId,
+          data.variantId
+        );
         console.log(`[SOCKET] Successfully retrieved chat history:`, {
           taskId: data.taskId,
           messageCount: history.length,
@@ -591,7 +609,7 @@ export function createSocketServer(
           // If complete is true, the queued action will automatically get sent, so set it to null so the frontend removes it from the queue UI
           queuedAction: data.complete
             ? null
-            : chatService.getQueuedAction(data.taskId),
+            : chatService.getQueuedActionForVariant(data.variantId),
         });
       } catch (error) {
         console.error(
@@ -606,7 +624,10 @@ export function createSocketServer(
 
     socket.on("stop-stream", async (data) => {
       try {
-        console.log("Received stop stream request for variant:", data.variantId);
+        console.log(
+          "Received stop stream request for variant:",
+          data.variantId
+        );
 
         const hasAccess = await verifyTaskAccess(connectionId, data.taskId);
         if (!hasAccess) {
@@ -658,9 +679,9 @@ export function createSocketServer(
         }
 
         await clearTerminal(data.variantId);
-        emitToTask(data.taskId, "terminal-cleared", { 
-          taskId: data.taskId, 
-          variantId: data.variantId 
+        emitToTask(data.taskId, "terminal-cleared", {
+          taskId: data.taskId,
+          variantId: data.variantId,
         });
       } catch (error) {
         console.error("Error clearing terminal:", error);
@@ -750,7 +771,9 @@ export function startStream(variantId: string | undefined, taskId: string) {
   const streamState = getOrCreateVariantStreamState(variantId);
   streamState.chunks = [];
   streamState.isStreaming = true;
-  console.log(`[SOCKET] Started stream for variant ${variantId} in task ${taskId}`);
+  console.log(
+    `[SOCKET] Started stream for variant ${variantId} in task ${taskId}`
+  );
 }
 
 export function endStream(variantId: string, taskId: string) {
@@ -759,10 +782,16 @@ export function endStream(variantId: string, taskId: string) {
   if (io) {
     emitToTask(taskId, "stream-complete", undefined);
   }
-  console.log(`[SOCKET] Ended stream for variant ${variantId} in task ${taskId}`);
+  console.log(
+    `[SOCKET] Ended stream for variant ${variantId} in task ${taskId}`
+  );
 }
 
-export function handleStreamError(error: unknown, variantId: string | undefined, taskId: string) {
+export function handleStreamError(
+  error: unknown,
+  variantId: string | undefined,
+  taskId: string
+) {
   if (!variantId) {
     console.error("variantId is required for stream error handling");
     return;
@@ -772,7 +801,10 @@ export function handleStreamError(error: unknown, variantId: string | undefined,
   if (io) {
     emitToTask(taskId, "stream-error", error);
   }
-  console.log(`[SOCKET] Stream error for variant ${variantId} in task ${taskId}:`, error);
+  console.log(
+    `[SOCKET] Stream error for variant ${variantId} in task ${taskId}:`,
+    error
+  );
 }
 
 export async function emitTaskStatusUpdate(
@@ -782,7 +814,7 @@ export async function emitTaskStatusUpdate(
 ) {
   if (io) {
     // Task-level status updates don't include variant-specific initStatus/errorMessage
-    let currentInitStatus = initStatus;
+    const currentInitStatus = initStatus;
 
     const statusUpdateEvent = {
       taskId,
@@ -796,21 +828,28 @@ export async function emitTaskStatusUpdate(
   }
 }
 
-export function emitVariantStatusUpdate(taskId: string, data: VariantStatusUpdateEvent) {
+export function emitVariantStatusUpdate(
+  taskId: string,
+  data: VariantStatusUpdateEvent
+) {
   if (io) {
     console.log(`[SOCKET] Emitting variant status update:`, data);
     emitToTask(taskId, "variant-status-updated", data);
   }
 }
 
-export function emitStreamChunk(chunk: StreamChunk, variantId: string | undefined, taskId: string) {
+export function emitStreamChunk(
+  chunk: StreamChunk,
+  variantId: string | undefined,
+  taskId: string
+) {
   if (!variantId) {
     console.error("variantId is required for stream chunk emission");
     return;
   }
   // Add variantId to chunk for frontend routing
   const chunkWithVariant = { ...chunk, variantId };
-  
+
   // Store the chunk for state recovery (exclude complete/error chunks from state)
   if (chunk.type !== "complete" && chunk.type !== "error") {
     const streamState = getOrCreateVariantStreamState(variantId);
@@ -822,12 +861,18 @@ export function emitStreamChunk(chunk: StreamChunk, variantId: string | undefine
   }
 
   if (chunk.type === "complete") {
-    console.log(`[SOCKET] Chunk type: complete for variant ${variantId} in task ${taskId}`);
+    console.log(
+      `[SOCKET] Chunk type: complete for variant ${variantId} in task ${taskId}`
+    );
     endStream(variantId, taskId);
   }
 }
 
-export function emitTerminalOutput(variantId: string, taskId: string, entry: TerminalEntry) {
+export function emitTerminalOutput(
+  variantId: string,
+  taskId: string,
+  entry: TerminalEntry
+) {
   if (io) {
     emitToTask(taskId, "terminal-output", { taskId, variantId, entry });
   }
