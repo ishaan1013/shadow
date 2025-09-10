@@ -251,7 +251,7 @@ router.get("/:taskId/:variantId/file-changes", async (req, res) => {
 
     // For ACTIVE tasks, use GitService abstraction (handles both local and remote modes)
     try {
-      const gitService = await createGitService(taskId);
+      const gitService = await createGitService(variantId);
 
       const { fileChanges, diffStats } = await gitService.getFileChanges(
         variant.task.baseBranch

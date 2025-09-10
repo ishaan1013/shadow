@@ -29,7 +29,7 @@ import {
 
 const MAX_CONTEXT7_TOKENS = 4000;
 
-// Map to track active filesystem watchers by task ID
+// Map to track active filesystem watchers by variant ID
 const activeFileSystemWatchers = new Map<string, LocalFileSystemWatcher>();
 
 // Map to track MCP managers by task ID
@@ -98,9 +98,9 @@ function createMCPToolWrapper(
  * Get the active filesystem watcher for a task (local mode only)
  */
 export function getFileSystemWatcher(
-  taskId: string
+  variantId: string
 ): LocalFileSystemWatcher | null {
-  return activeFileSystemWatchers.get(taskId) || null;
+  return activeFileSystemWatchers.get(variantId) || null;
 }
 
 /**
@@ -156,9 +156,9 @@ function readDescription(toolName: string): string {
 }
 
 // Factory function to create tools with task context using abstraction layer
-export async function createTools(taskId: string, workspacePath?: string) {
+export async function createTools(taskId: string, workspacePath?: string, variantId?: string) {
   console.log(
-    `[TOOLS] Creating tools for task ${taskId} with workspace: ${workspacePath || "default"}${workspacePath ? " (task-specific)" : " (fallback)"}`
+    `[TOOLS] Creating tools for task ${taskId}${variantId ? ` (variant ${variantId})` : ""} with workspace: ${workspacePath || "default"}${workspacePath ? " (task-specific)" : " (fallback)"}`
   );
 
   // Create tool executor through abstraction layer
@@ -189,19 +189,19 @@ export async function createTools(taskId: string, workspacePath?: string) {
   }
 
   // Initialize filesystem watcher for local mode
-  if (isLocalMode() && workspacePath) {
+  if (isLocalMode() && workspacePath && variantId) {
     // Check if we already have a watcher for this task
-    if (!activeFileSystemWatchers.has(taskId)) {
+    if (!activeFileSystemWatchers.has(variantId)) {
       try {
-        const watcher = new LocalFileSystemWatcher(taskId);
+        const watcher = new LocalFileSystemWatcher(taskId, variantId);
         watcher.startWatching(workspacePath);
-        activeFileSystemWatchers.set(taskId, watcher);
+        activeFileSystemWatchers.set(variantId, watcher);
         console.log(
-          `[TOOLS] Started local filesystem watcher for task ${taskId}`
+          `[TOOLS] Started local filesystem watcher for variant ${variantId} (task ${taskId})`
         );
       } catch (error) {
         console.error(
-          `[TOOLS] Failed to start filesystem watcher for task ${taskId}:`,
+          `[TOOLS] Failed to start filesystem watcher for variant ${variantId} (task ${taskId}):`,
           error
         );
       }
@@ -334,6 +334,7 @@ export async function createTools(taskId: string, workspacePath?: string) {
                 completedTodos,
               },
             },
+            variantId || "",
             taskId
           );
 
@@ -383,20 +384,22 @@ export async function createTools(taskId: string, workspacePath?: string) {
         console.log(`[TERMINAL_CMD] ${explanation}`);
 
         // Emit the command being executed to the terminal
-        createAndEmitTerminalEntry(taskId, "command", command);
+        if (variantId) {
+          createAndEmitTerminalEntry(taskId, variantId, "command", command);
+        }
 
         const result = await executor.executeCommand(command, {
           isBackground: is_background,
         });
 
         // Emit stdout output if present
-        if (result.success && result.stdout) {
-          createAndEmitTerminalEntry(taskId, "stdout", result.stdout);
+        if (variantId && result.success && result.stdout) {
+          createAndEmitTerminalEntry(taskId, variantId, "stdout", result.stdout);
         }
 
         // Emit stderr output if present
-        if (result.stderr) {
-          createAndEmitTerminalEntry(taskId, "stderr", result.stderr);
+        if (variantId && result.stderr) {
+          createAndEmitTerminalEntry(taskId, variantId, "stderr", result.stderr);
         }
 
         return result;
@@ -841,12 +844,12 @@ export async function createTools(taskId: string, workspacePath?: string) {
 /**
  * Stop filesystem watcher for a specific task
  */
-export function stopFileSystemWatcher(taskId: string): void {
-  const watcher = activeFileSystemWatchers.get(taskId);
+export function stopFileSystemWatcher(variantId: string): void {
+  const watcher = activeFileSystemWatchers.get(variantId);
   if (watcher) {
     watcher.stop();
-    activeFileSystemWatchers.delete(taskId);
-    console.log(`[TOOLS] Stopped filesystem watcher for task ${taskId}`);
+    activeFileSystemWatchers.delete(variantId);
+    console.log(`[TOOLS] Stopped filesystem watcher for variant ${variantId}`);
   }
 }
 
@@ -879,11 +882,11 @@ export function stopAllFileSystemWatchers(): void {
     `[TOOLS] Stopping ${activeFileSystemWatchers.size} active filesystem watchers`
   );
 
-  for (const [taskId, watcher] of Array.from(
+  for (const [variantId, watcher] of Array.from(
     activeFileSystemWatchers.entries()
   )) {
     watcher.stop();
-    console.log(`[TOOLS] Stopped filesystem watcher for task ${taskId}`);
+    console.log(`[TOOLS] Stopped filesystem watcher for variant ${variantId}`);
   }
 
   activeFileSystemWatchers.clear();
@@ -918,7 +921,7 @@ export async function stopAllMCPManagers(): Promise<void> {
  */
 export function getFileSystemWatcherStats() {
   const stats = [];
-  for (const [_taskId, watcher] of Array.from(
+  for (const [_variantId, watcher] of Array.from(
     activeFileSystemWatchers.entries()
   )) {
     stats.push(watcher.getStats());
