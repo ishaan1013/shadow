@@ -121,6 +121,23 @@ const VariantContextProvider = ({ children, taskId }) => {
 - [ ] Handle variant-specific progress events
 - [ ] Test real-time updates with multiple variants
 
+## ✅ Backend Alignment (as of current merge)
+
+- WebSockets now require `variantId` for these events:
+  - `user-message`, `get-chat-history`, `stop-stream`, `get-terminal-history`, `clear-terminal`, `create-stacked-pr`, `clear-queued-action` (now `{ taskId, variantId }`).
+- HTTP messages route is variant-first:
+  - `GET /api/tasks/:taskId/:variantId/messages` (no task-only fallback).
+- Tools and terminal output are variant-scoped:
+  - `createTools(taskId, variantId, workspacePath?)`; in local mode if `workspacePath` is omitted, backend derives `<workspaceDir>/tasks/<variantId>`.
+  - Terminal output and filesystem watcher are keyed by `variantId`.
+- Chat history and todos are variant-scoped:
+  - `getChatHistory(taskId, variantId)`; `todo_write` filters `{ taskId, variantId }`.
+
+### FE TODOs tied to these changes
+- Ensure all socket emits include `variantId`.
+- Update any REST calls for messages to the new route with `:variantId`.
+- When showing terminal/history/todo panels, scope by `currentVariantId`.
+
 ## 🔍 How to Find Components to Update
 
 ### File Operation Components

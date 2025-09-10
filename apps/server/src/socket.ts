@@ -66,7 +66,7 @@ async function getTerminalHistory(variantId: string): Promise<TerminalEntry[]> {
     // Create executor based on current mode
     const agentMode = config.agentMode;
     const executor = await createToolExecutor(
-      variant.id,
+      variant.taskId,
       variant.workspacePath || undefined,
       agentMode
     );
@@ -113,7 +113,7 @@ async function clearTerminal(variantId: string): Promise<void> {
 
     const agentMode = config.agentMode;
     const executor = await createToolExecutor(
-      variant.id,
+      variant.taskId,
       variant.workspacePath || undefined,
       agentMode
     );

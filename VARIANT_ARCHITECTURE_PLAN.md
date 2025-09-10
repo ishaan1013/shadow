@@ -43,6 +43,13 @@ private queuedActions: Map<string, QueuedAction> = new Map(); // variantId → a
 - Pass both `variantId` and `taskId` to maintain task-level aggregation where needed
 - Error handling emits to correct variant stream
 
+Additional updates now implemented:
+- LLM layer threads `variantId` end-to-end:
+  - `LLMService.createMessageStream(..., taskId, variantId, ...)`
+  - `StreamProcessor.createMessageStream(..., taskId, variantId, ...)`
+  - `StreamProcessor` falls back to `createTools(taskId, variantId, workspacePath)` if no pre-created tools supplied
+- Socket event fixes: `stop-stream`, `get-chat-history`, `create-stacked-pr`, and `clear-queued-action` all require and validate `variantId`.
+
 ### 2.2 Cleanup Architecture Decision
 **Recommendation**: **Hybrid approach** - variant-specific execution, task-level coordination
 
@@ -77,8 +84,8 @@ updateTaskStatus(taskId, "COMPLETED"); // Overall task status
 **Recommendation: Option C** (least disruptive)
 
 ```typescript
-// Tool creation (task-scoped, shared across variants)
-const tools = await createTools(taskId, workspacePath);
+// Tool creation (task-scoped context, requires variant)
+const tools = await createTools(taskId, variantId, workspacePath);
 
 // Tool execution (variant-aware)
 tools.run_terminal_cmd.execute({ command: "ls" }, { variantId, taskId });
@@ -101,12 +108,16 @@ interface ToolExecutionContext {
 }
 ```
 
+Local mode workspace derivation (implemented):
+- Helper `getLocalWorkspacePathForId(id)` computes `<workspaceDir>/tasks/<id>`.
+- In `createTools`, when `isLocalMode()` and no `workspacePath` is provided, we derive the variant workspace via `getLocalWorkspacePathForId(variantId)` (avoids DB lookups and guarantees per-variant isolation).
+
 ## Phase 4: Filesystem & Infrastructure Updates
 
 ### 4.1 Filesystem Watchers (Already Updated)
 - ✅ `LocalFileSystemWatcher` now requires `variantId`
 - ✅ File change events emit with variant context
-- 🔄 Need to update filesystem watcher creation in `createTools`
+- ✅ Filesystem watcher creation in `createTools` now uses `variantId` and the derived local workspace path when needed
 
 ### 4.2 Infrastructure Resource Management
 **Current**: One watcher/resources per task → **New**: One per variant
@@ -177,9 +188,16 @@ if (!variantId) {
 ```
 
 ### 7.2 Database Considerations
-**Chat messages** already have `taskId` (all variants share message history) ✅
-**Todos** need to be migrated to variant-scoped ⚠️  
-**Stream state** is now variant-scoped (new architecture) ✅
+**Chat messages** are retrieved per-variant via `getChatHistory(taskId, variantId)` ✅
+**Todos** migrated to variant-scoped operations ✅  
+**Stream state** is variant-scoped (new architecture) ✅
+
+Routes & sockets (current state):
+- HTTP messages: `GET /api/tasks/:taskId/:variantId/messages` (no task-only fallback)
+- WebSocket events require `variantId`:
+  - `user-message`, `get-chat-history`, `stop-stream`, `get-terminal-history`, `clear-terminal`
+  - `create-stacked-pr` now requires `variantId`
+  - `clear-queued-action` now requires `{ taskId, variantId }`
 
 ## Phase 8: Testing & Integration Points
 

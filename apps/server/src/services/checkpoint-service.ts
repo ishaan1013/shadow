@@ -201,10 +201,10 @@ export class CheckpointService {
    */
   private async getTodoSnapshot(
     taskId: string,
-    variantId?: string
+    variantId: string
   ): Promise<Todo[]> {
     return await prisma.todo.findMany({
-      where: variantId ? { taskId, variantId } : { taskId },
+      where: { taskId, variantId },
       orderBy: { sequence: "asc" },
     });
   }
@@ -214,7 +214,7 @@ export class CheckpointService {
    */
   private async restoreTodoState(
     taskId: string,
-    variantId: string | undefined,
+    variantId: string,
     snapshot: Todo[]
   ): Promise<void> {
     console.log(
@@ -227,7 +227,7 @@ export class CheckpointService {
         `[CHECKPOINT] 🗑️ Deleting current todos for task ${taskId}...`
       );
       const deleteResult = await tx.todo.deleteMany({
-        where: variantId ? { taskId, variantId } : { taskId },
+        where: { taskId, variantId },
       });
       console.log(
         `[CHECKPOINT] ✅ Deleted ${deleteResult.count} existing todos`
@@ -245,7 +245,7 @@ export class CheckpointService {
             status: todo.status,
             sequence: todo.sequence,
             taskId,
-            ...(variantId ? { variantId } : {}),
+            variantId,
             createdAt: todo.createdAt,
             updatedAt: new Date(),
           })),

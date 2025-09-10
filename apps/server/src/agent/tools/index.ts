@@ -251,9 +251,9 @@ export async function createTools(
           console.log(`[TODO_WRITE] ${explanation}`);
 
           if (!merge) {
-            // Replace: delete existing todos for this variant (fallback to task if no variantId)
+            // Replace: delete existing todos for this variant
             await prisma.todo.deleteMany({
-              where: variantId ? { taskId, variantId } : { taskId },
+              where: { taskId, variantId },
             });
           }
 
@@ -265,9 +265,7 @@ export async function createTools(
 
             // Check if todo exists (by id within the task)
             const existingTodo = await prisma.todo.findFirst({
-              where: variantId
-                ? { taskId, variantId, id: todo.id }
-                : { taskId, id: todo.id },
+              where: { taskId, variantId, id: todo.id },
             });
 
             if (existingTodo) {
@@ -278,7 +276,7 @@ export async function createTools(
                   content: todo.content,
                   status: todo.status.toUpperCase() as TodoStatus,
                   sequence: i,
-                  ...(variantId ? { variantId } : {}),
+                  variantId,
                 },
               });
               results.push({
@@ -296,7 +294,7 @@ export async function createTools(
                   status: todo.status.toUpperCase() as TodoStatus,
                   sequence: i,
                   taskId,
-                  ...(variantId ? { variantId } : {}),
+                  variantId,
                 },
               });
               results.push({
@@ -310,15 +308,12 @@ export async function createTools(
 
           const totalTodos = merge
             ? await prisma.todo.count({
-                where: variantId ? { taskId, variantId } : { taskId },
+                where: { taskId, variantId },
               })
             : todos.length;
           const completedTodos = merge
             ? await prisma.todo.count({
-                where: {
-                  ...(variantId ? { taskId, variantId } : { taskId }),
-                  status: "COMPLETED",
-                },
+                where: { taskId, variantId, status: "COMPLETED" },
               })
             : todos.filter((t) => t.status === "completed").length;
 
@@ -346,7 +341,7 @@ export async function createTools(
                 completedTodos,
               },
             },
-            variantId || "",
+            variantId,
             taskId
           );
 
