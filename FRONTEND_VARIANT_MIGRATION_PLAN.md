@@ -225,3 +225,22 @@ Notes:
 1) Messages scope: OK to fetch per‑variant (`/tasks/:taskId/:variantId/messages`) and keep per‑variant caches?
 2) Todos/file-changes: move to variant-scoped now or defer to Stage 2 (recommended later)?
 3) Backend payload updates: confirm adding `variantId` to `chat-history`, streaming, `queued-action-processing`, and `auto-pr-status` events.
+
+---
+
+## Progress
+
+- Stage 1 (logic): in progress
+  - Added variant fetching in layout and provided to TaskSocketProvider
+  - Exposed `currentVariantId` (first by sequence) and `variants` via TaskSocketContext
+  - Chat sockets emit variantId for user-message, get-chat-history, stop-stream, clear-queued-action, create-stacked-pr
+  - Messages moved to variant-first route and query keys `[taskId, variantId]`
+  - Queued-action keys are now `[taskId, variantId]`
+  - File tree/content hooks and proxies pass `?variantId=` and key by `[taskId, variantId]`
+  - Terminal sockets are variant-aware (emit/filter by `{ taskId, variantId }`)
+  - PR creation passes `{ variantId }` through FE route to backend
+  - Removed legacy task-only messages route
+
+- Next up (still Stage 1, no UI changes)
+  - Add visibility map and derived selectors/actions (focus from visibility)
+  - Guard agent environment: close/disable when multiple variants visible (will take effect with multi-view)

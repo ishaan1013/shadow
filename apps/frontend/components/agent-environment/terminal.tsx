@@ -12,6 +12,7 @@ import { useAgentEnvironment } from "./agent-environment-context";
 import { Button } from "../ui/button";
 import { ChevronDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { useTaskSocketContext } from "@/contexts/task-socket-context";
 
 function TerminalComponent({ handleCollapse }: { handleCollapse: () => void }) {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -23,8 +24,9 @@ function TerminalComponent({ handleCollapse }: { handleCollapse: () => void }) {
   const taskId = params?.taskId as string;
 
   // Use our hook architecture but with enhanced terminal functionality
+  const { currentVariantId } = useTaskSocketContext();
   const { terminalEntries, clearTerminal: _clearTerminal } =
-    useTerminalSocket(taskId);
+    useTerminalSocket(taskId, currentVariantId);
 
   // Get terminal resize trigger from context
   const { terminalResizeTrigger } = useAgentEnvironment();

@@ -13,6 +13,8 @@ export async function POST(
     const { error, user: user } = await verifyTaskOwnership(taskId);
     if (error) return error;
 
+    const { variantId } = await request.json().catch(() => ({ variantId: undefined }));
+
     // Forward request to backend
     const requestHeaders = await headers();
     const cookieHeader = requestHeaders.get("cookie");
@@ -27,6 +29,7 @@ export async function POST(
         },
         body: JSON.stringify({
           userId: user.id,
+          ...(variantId ? { variantId } : {}),
         }),
       }
     );

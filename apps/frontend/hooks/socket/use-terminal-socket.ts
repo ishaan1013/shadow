@@ -4,39 +4,41 @@ import { useSocket } from "./use-socket";
 import { useEffect, useState, useCallback } from "react";
 import type { TerminalEntry } from "@repo/types";
 
-export function useTerminalSocket(taskId: string | undefined) {
+export function useTerminalSocket(
+  taskId: string | undefined,
+  variantId: string | null | undefined
+) {
   const { socket, isConnected } = useSocket();
   const [terminalEntries, setTerminalEntries] = useState<TerminalEntry[]>([]);
   const [isTerminalConnected, setIsTerminalConnected] = useState(false);
 
   // Join task room and request terminal history
   useEffect(() => {
-    if (socket && taskId && isConnected) {
+    if (socket && taskId && variantId && isConnected) {
       socket.emit('join-task', { taskId });
-      socket.emit('get-terminal-history', { taskId });
+      socket.emit('get-terminal-history', { taskId, variantId });
     }
-  }, [socket, taskId, isConnected]);
+  }, [socket, taskId, variantId, isConnected]);
 
   // Terminal event handlers with enhanced functionality from main branch
   useEffect(() => {
-    if (!socket || !taskId) return;
+    if (!socket || !taskId || !variantId) return;
 
-
-    const handleTerminalHistory = (data: { taskId: string; entries: TerminalEntry[] }) => {
-      if (data.taskId !== taskId) return;
+    const handleTerminalHistory = (data: { taskId: string; variantId: string; entries: TerminalEntry[] }) => {
+      if (data.taskId !== taskId || data.variantId !== variantId) return;
 
       setTerminalEntries(data.entries);
       setIsTerminalConnected(true);
     };
 
-    const handleTerminalOutput = (data: { taskId: string; entry: TerminalEntry }) => {
-      if (data.taskId !== taskId) return;
+    const handleTerminalOutput = (data: { taskId: string; variantId: string; entry: TerminalEntry }) => {
+      if (data.taskId !== taskId || data.variantId !== variantId) return;
 
       setTerminalEntries(prev => [...prev, data.entry]);
     };
 
-    const handleTerminalCleared = (data: { taskId: string }) => {
-      if (data.taskId !== taskId) return;
+    const handleTerminalCleared = (data: { taskId: string; variantId: string }) => {
+      if (data.taskId !== taskId || data.variantId !== variantId) return;
 
       setTerminalEntries([]);
     };
@@ -54,8 +56,8 @@ export function useTerminalSocket(taskId: string | undefined) {
     const handleConnect = () => {
       setIsTerminalConnected(true);
       // Re-request terminal history on reconnect
-      if (taskId) {
-        socket.emit('get-terminal-history', { taskId });
+      if (taskId && variantId) {
+        socket.emit('get-terminal-history', { taskId, variantId });
       }
     };
 
@@ -84,13 +86,13 @@ export function useTerminalSocket(taskId: string | undefined) {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
     };
-  }, [socket, taskId]);
+  }, [socket, taskId, variantId]);
 
   const clearTerminal = useCallback(() => {
-    if (socket && taskId) {
-      socket.emit('clear-terminal', { taskId });
+    if (socket && taskId && variantId) {
+      socket.emit('clear-terminal', { taskId, variantId });
     }
-  }, [socket, taskId]);
+  }, [socket, taskId, variantId]);
 
   return {
     terminalEntries,

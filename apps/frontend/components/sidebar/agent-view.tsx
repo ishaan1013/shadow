@@ -117,7 +117,7 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
   const { task, todos, fileChanges, diffStats } = useTask(taskId);
   const { updateSelectedFilePath, openAgentEnvironment, openShadowWiki } =
     useAgentEnvironment();
-  const { isStreaming, autoPRStatus } = useTaskSocketContext();
+  const { isStreaming, autoPRStatus, currentVariantId } = useTaskSocketContext();
   const createPRMutation = useCreatePR();
   const queryClient = useQueryClient();
 
@@ -156,13 +156,13 @@ export function SidebarAgentView({ taskId }: { taskId: string }) {
   );
 
   const handleCreatePR = useCallback(async () => {
-    if (!task?.id) return;
+    if (!task?.id || !currentVariantId) return;
     try {
-      await createPRMutation.mutateAsync(task.id);
+      await createPRMutation.mutateAsync({ taskId: task.id, variantId: currentVariantId });
     } catch (error) {
       console.error("Failed to create PR:", error);
     }
-  }, [task?.id, createPRMutation]);
+  }, [task?.id, currentVariantId, createPRMutation]);
 
   const handleIndexRepo = useCallback(async () => {
     if (!task?.repoFullName || !task?.id) return;
