@@ -12,7 +12,8 @@ export class CodebaseUnderstandingStorage {
     repoFullName: string,
     repoUrl: string,
     summaryContent: any,
-    userId: string
+    userId: string,
+    options?: { forceUpdate?: boolean }
   ): Promise<string> {
     try {
       // Check if task already has a codebase understanding
@@ -43,8 +44,18 @@ export class CodebaseUnderstandingStorage {
         });
 
         if (existing) {
-          // Just use the existing record - no need to update content
-          codebaseUnderstanding = existing;
+          // Update if forced; otherwise reuse existing as-is
+          if (options?.forceUpdate) {
+            codebaseUnderstanding = await db.codebaseUnderstanding.update({
+              where: { id: existing.id },
+              data: {
+                content: summaryContent,
+                updatedAt: new Date(),
+              },
+            });
+          } else {
+            codebaseUnderstanding = existing;
+          }
         } else {
           // Create new
           const codebaseUnderstandingId = generateTaskId();

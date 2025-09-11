@@ -18,29 +18,31 @@ interface BackgroundService {
  * to handle both Shadow Wiki and indexing as parallel background services
  */
 export class BackgroundServiceManager {
-  private services = new Map<string, BackgroundService[]>(); // taskId -> services
+  // taskId -> serviceName -> service state
+  private services = new Map<string, Map<string, BackgroundService>>();
 
   async startServices(
     taskId: string,
     userSettings: { enableShadowWiki?: boolean; enableIndexing?: boolean },
     context: TaskModelContext
   ): Promise<void> {
-    const services: BackgroundService[] = [];
+    // Initialize map for task if missing
+    if (!this.services.has(taskId)) {
+      this.services.set(taskId, new Map());
+    }
+    const serviceMap = this.services.get(taskId)!;
 
-    if (userSettings.enableShadowWiki) {
+    if (userSettings.enableShadowWiki && !serviceMap.has("shadowWiki")) {
       const shadowWikiPromise = this.startShadowWiki(taskId, context);
-
-      const service = {
-        name: "shadowWiki" as const,
+      const service: BackgroundService = {
+        name: "shadowWiki",
         promise: shadowWikiPromise,
         started: true,
         completed: false,
         failed: false,
-        blocking: true, // Shadow Wiki blocks initialization
-        error: undefined as string | undefined,
+        blocking: true,
+        error: undefined,
       };
-
-      // Wrap the promise to update completion status when it resolves
       service.promise = service.promise
         .then(() => {
           service.completed = true;
@@ -54,24 +56,20 @@ export class BackgroundServiceManager {
             error
           );
         });
-
-      services.push(service);
+      serviceMap.set("shadowWiki", service);
     }
 
-    if (userSettings.enableIndexing) {
+    if (userSettings.enableIndexing && !serviceMap.has("indexing")) {
       const indexingPromise = this.startIndexing(taskId);
-
-      const service = {
-        name: "indexing" as const,
+      const service: BackgroundService = {
+        name: "indexing",
         promise: indexingPromise,
         started: true,
         completed: false,
         failed: false,
-        blocking: false, // Indexing runs in background, doesn't block initialization
-        error: undefined as string | undefined,
+        blocking: false,
+        error: undefined,
       };
-
-      // Wrap the promise to update completion status when it resolves
       service.promise = service.promise
         .then(() => {
           service.completed = true;
@@ -85,11 +83,8 @@ export class BackgroundServiceManager {
             error
           );
         });
-
-      services.push(service);
+      serviceMap.set("indexing", service);
     }
-
-    this.services.set(taskId, services);
   }
 
   /**
@@ -125,18 +120,18 @@ export class BackgroundServiceManager {
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      const workspacePath = task.variants[0]?.workspacePath;
-      if (!workspacePath) {
-        throw new Error(`Workspace path not found for task: ${taskId}`);
-      }
+      // Workspace path is not required for repo-based Shadow Wiki
 
-      // If a summary already exists for this repo, link it and skip generation
+      // If a summary already exists and is fresh (< 24h), link and skip. Otherwise regenerate.
       const existingForRepo = await prisma.codebaseUnderstanding.findUnique({
         where: { repoFullName: task.repoFullName },
-        select: { id: true },
+        select: { id: true, updatedAt: true },
       });
-
-      if (existingForRepo) {
+      const isStale = existingForRepo
+        ? Date.now() - new Date(existingForRepo.updatedAt).getTime() >
+          24 * 60 * 60 * 1000
+        : true;
+      if (existingForRepo && !isStale) {
         if (!task.codebaseUnderstandingId) {
           await prisma.task.update({
             where: { id: taskId },
@@ -144,21 +139,17 @@ export class BackgroundServiceManager {
           });
         }
         console.log(
-          `[SHADOW-WIKI] Skipping generation for ${task.repoFullName} (summary already exists)`
+          `[SHADOW-WIKI] Using existing fresh summary for ${task.repoFullName}`
         );
         return;
       }
 
-      console.log(
-        `[SHADOW-WIKI] Task details - Repo: ${task.repoFullName}, Workspace: ${workspacePath}`
-      );
+      console.log(`[SHADOW-WIKI] Task details - Repo: ${task.repoFullName}`);
       console.log(
         `[SHADOW-WIKI] Using model: ${context.getMainModel()} for analysis`
       );
 
-      // Generate Shadow Wiki documentation
-      // Note: runShadowWiki handles duplicate detection and task linking internally
-
+      // Generate (or regenerate stale) Shadow Wiki documentation
       await runShadowWiki(
         taskId,
         task.repoFullName,
@@ -213,16 +204,24 @@ export class BackgroundServiceManager {
   }
 
   areAllServicesComplete(taskId: string): boolean {
-    const services = this.services.get(taskId) || [];
-    const blockingServices = services.filter((s) => s.blocking);
+    const serviceMap = this.services.get(taskId);
+    const services = serviceMap
+      ? Array.from(serviceMap.values())
+      : ([] as BackgroundService[]);
+    const blockingServices = services.filter(
+      (s: BackgroundService) => s.blocking
+    );
 
     if (blockingServices.length === 0) {
       return true;
     }
 
     // Only check blocking services for completion
-    return blockingServices.every(
-      (service) => service.completed || service.failed
+    const inMemoryDone = blockingServices.every(
+      (service: BackgroundService) => service.completed || service.failed
     );
+
+    // Fallback to DB readiness if in-memory services map was lost (e.g., restart)
+    return inMemoryDone;
   }
 }

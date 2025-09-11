@@ -636,10 +636,7 @@ export function createSocketServer(
         }
 
         await chatService.stopStream(data.taskId, data.variantId, true);
-
-        endStream(data.variantId, data.taskId);
-
-        emitToTask(data.taskId, "stream-complete", undefined);
+        // endStream will be invoked by stream lifecycle handlers; avoid double emission
       } catch (error) {
         console.error("Error stopping stream:", error);
         socket.emit("stream-error", { error: "Failed to stop stream" });

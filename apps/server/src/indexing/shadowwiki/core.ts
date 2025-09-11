@@ -4,6 +4,7 @@ import Parser from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
 import { prisma, Prisma } from "@repo/db";
 import { CodebaseUnderstandingStorage } from "./db-storage";
+import { tryAcquireRepoLock, releaseRepoLock } from "../repo-lock";
 import TS from "tree-sitter-typescript";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const Python = require("tree-sitter-python");
@@ -1254,29 +1255,70 @@ export async function runShadowWiki(
     recursionLimit?: number;
   }
 ): Promise<{ codebaseUnderstandingId: string; stats: ProcessingStats }> {
-  // Skip regeneration if a summary already exists for this repository
+  // Freshness check (24h) and single-run lock
+  let haveLock = false;
   try {
     const existing = await prisma.codebaseUnderstanding.findUnique({
       where: { repoFullName },
-      select: { id: true },
+      select: { id: true, updatedAt: true },
     });
-    if (existing) {
-      // Ensure task is linked to existing summary
+    const isFresh = existing
+      ? Date.now() - new Date(existing.updatedAt).getTime() <=
+        24 * 60 * 60 * 1000
+      : false;
+
+    if (existing && isFresh) {
       await prisma.task.update({
         where: { id: taskId },
         data: { codebaseUnderstandingId: existing.id },
       });
       console.log(
-        `[SHADOW-WIKI] Summary already exists for ${repoFullName}. Skipping regeneration.`
+        `[SHADOW-WIKI] Using fresh summary for ${repoFullName}. Skipping regeneration.`
       );
       return {
         codebaseUnderstandingId: existing.id,
         stats: { filesProcessed: 0, directoriesProcessed: 0, totalTokens: 0 },
       };
     }
+
+    haveLock = await tryAcquireRepoLock(repoFullName);
+    if (!haveLock) {
+      console.log(
+        `[SHADOW-WIKI] Another generation in progress for ${repoFullName}, waiting...`
+      );
+      const start = Date.now();
+      const maxWaitMs = 15 * 60 * 1000;
+      const pollMs = 2000;
+      while (Date.now() - start < maxWaitMs) {
+        const ready = await prisma.codebaseUnderstanding.findUnique({
+          where: { repoFullName },
+          select: { id: true },
+        });
+        if (ready) {
+          await prisma.task.update({
+            where: { id: taskId },
+            data: { codebaseUnderstandingId: ready.id },
+          });
+          return {
+            codebaseUnderstandingId: ready.id,
+            stats: {
+              filesProcessed: 0,
+              directoriesProcessed: 0,
+              totalTokens: 0,
+            },
+          };
+        }
+        await new Promise((r) => setTimeout(r, pollMs));
+      }
+      console.warn(
+        `[SHADOW-WIKI] Timeout waiting for repo summary for ${repoFullName}; proceeding`
+      );
+    }
   } catch (e) {
-    // If check fails, proceed with generation
-    console.warn(`[SHADOW-WIKI] Existing summary check failed, continuing:`, e);
+    console.warn(
+      `[SHADOW-WIKI] Freshness/lock precheck failed, continuing:`,
+      e
+    );
   }
   console.log(
     `[SHADOW-WIKI] Initializing codebase analysis for ${repoFullName}`
@@ -1585,7 +1627,8 @@ export async function runShadowWiki(
     repoFullName,
     repoUrl,
     contentJson,
-    userId
+    userId,
+    { forceUpdate: true }
   );
 
   console.log(
@@ -1595,5 +1638,8 @@ export async function runShadowWiki(
     `[SHADOW-WIKI] Final statistics - files=${stats.filesProcessed}, directories=${stats.directoriesProcessed}, totalTokens=${stats.totalTokens}`
   );
 
+  if (haveLock) {
+    await releaseRepoLock(repoFullName);
+  }
   return { codebaseUnderstandingId, stats };
 }

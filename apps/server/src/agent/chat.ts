@@ -1221,8 +1221,8 @@ These are specific instructions from the user that should be followed throughout
             );
           }
 
-          // Clear any queued actions (don't process them after error)
-          this.clearQueuedAction(taskId);
+          // Clear any queued message action for this variant (don't process after error)
+          this.clearQueuedActionForVariant(variantId);
 
           // Exit the streaming loop
           break;
@@ -1412,7 +1412,7 @@ These are specific instructions from the user that should be followed throughout
       }
 
       // Clear any queued actions (don't process them after error)
-      this.clearQueuedAction(taskId);
+      this.clearQueuedActionForVariant(variantId);
       throw error;
     }
   }
@@ -1910,11 +1910,20 @@ These are specific instructions from the user that should be followed throughout
    */
   async cleanupTask(taskId: string): Promise<void> {
     try {
-      // Clean up active streams
-      const abortController = this.activeStreams.get(taskId);
-      if (abortController) {
-        abortController.abort();
-        this.activeStreams.delete(taskId);
+      // Clean up active streams for all variants of this task
+      const variantIds = (
+        await prisma.variant.findMany({
+          where: { taskId },
+          select: { id: true },
+        })
+      ).map((v) => v.id);
+      for (const vId of variantIds) {
+        const abortController = this.activeStreams.get(vId);
+        if (abortController) {
+          abortController.abort();
+          this.activeStreams.delete(vId);
+        }
+        this.stopRequested.delete(vId);
       }
 
       // Clean up MCP manager for this task
@@ -1927,8 +1936,19 @@ These are specific instructions from the user that should be followed throughout
         );
       }
 
-      // Clean up queued actions
-      this.queuedActions.delete(taskId);
+      // Clean up queued actions: remove message queues for variants of this task and any stacked-pr keyed by parentTaskId
+      for (const [key, action] of Array.from(this.queuedActions.entries())) {
+        if (action.type === "message") {
+          // key is variantId → check variant belongs to this task
+          if (variantIds.includes(key)) {
+            this.queuedActions.delete(key);
+          }
+        } else if (action.type === "stacked-pr") {
+          if (key === taskId) {
+            this.queuedActions.delete(key);
+          }
+        }
+      }
 
       // Clean up batched database updates
       databaseBatchService.clear(taskId);
