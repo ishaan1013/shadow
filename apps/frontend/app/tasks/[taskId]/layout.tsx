@@ -6,6 +6,7 @@ import { getUser } from "@/lib/auth/get-user";
 import { getTaskMessages } from "@/lib/db-operations/get-task-messages";
 import { getTaskWithDetails } from "@/lib/db-operations/get-task-with-details";
 import { getTasks } from "@/lib/db-operations/get-tasks";
+import { getTaskVariants } from "@/lib/db-operations/get-task-variants";
 import {
   dehydrate,
   HydrationBoundary,
@@ -24,11 +25,12 @@ export default async function TaskLayout({
 
   const user = await getUser();
 
-  const [initialTasks, { task, todos, fileChanges, diffStats }, taskMessages] =
+  const [initialTasks, { task, todos, fileChanges, diffStats }, taskMessages, variants] =
     await Promise.all([
       user ? getTasks(user.id) : [],
       getTaskWithDetails(taskId),
       getTaskMessages(taskId),
+      getTaskVariants(taskId),
     ]);
 
   if (!task) {
@@ -81,7 +83,7 @@ export default async function TaskLayout({
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <TaskSocketProvider taskId={taskId}>
+      <TaskSocketProvider taskId={taskId} variants={variants}>
         <AgentEnvironmentProvider taskId={taskId}>
           <SidebarViews initialTasks={initialTasks} currentTaskId={task.id} />
           {children}

@@ -22,8 +22,9 @@ function TaskPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
   const { task } = useTask(taskId);
 
+  const { currentVariantId } = useTaskSocketContext();
   const { data: messages = [], error: taskMessagesError } =
-    useTaskMessages(taskId);
+    useTaskMessages(taskId, currentVariantId);
 
   const sendMessageMutation = useSendMessage();
 

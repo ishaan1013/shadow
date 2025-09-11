@@ -235,3 +235,25 @@ Routes & sockets (current state):
 11. Integration testing
 
 This plan establishes `variantId` as the primary identifier for chat operations while maintaining necessary task-level coordination for shared resources like MCP managers and overall task status.
+
+## Phase 10: Shadow Wiki Background Service (Single-run + Staleness)
+
+### 10.1 Single-run per Repository
+- A repo-level advisory lock guarantees only one Shadow Wiki generation runs per `repoFullName` across all variants and processes.
+- Other variants skip starting generation and wait on DB readiness (summary existence) before proceeding.
+
+### 10.2 24h Staleness Policy
+- Use existing summary if `CodebaseUnderstanding.updatedAt` is ≤ 24 hours old; link it to the task and proceed.
+- If the summary is older than 24 hours (stale), regenerate and overwrite the repo summary content, then link to the task.
+
+### 10.3 Background Services are Idempotent/Merge-Safe
+- `BackgroundServiceManager` maintains a per-task map of services; repeated `startServices(taskId, ...)` calls add missing services rather than overwriting.
+- Shadow Wiki is marked as a blocking background service; variants monitor completion and proceed when done or failed.
+
+### 10.4 Variant Waiting Semantics
+- Variants rely on DB readiness for shared repo-level artifacts: once a summary exists (fresh or newly generated), all variants can proceed.
+- This avoids redundant computation and ensures consistent initialization across concurrent variants.
+
+### 10.5 Operational Notes
+- Shadow Wiki is repo-based; no workspace-path gating is required to start generation.
+- Works in both local and remote modes via the execution abstraction layer.

@@ -10,6 +10,7 @@ import { useEditMessageId } from "@/hooks/chat/use-edit-message-id";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import { useEditMessage } from "@/hooks/chat/use-edit-message";
+import { useTaskSocketContext } from "@/contexts/task-socket-context";
 
 const MAX_CONTENT_HEIGHT = 128;
 
@@ -31,6 +32,7 @@ export function UserMessage({
   const queryClient = useQueryClient();
   const { data: editMessageId } = useEditMessageId(taskId);
   const editMessageMutation = useEditMessage();
+  const { currentVariantId } = useTaskSocketContext();
   const isEditing = useMemo(
     () => editMessageId === message.id,
     [editMessageId, message.id]
@@ -82,8 +84,10 @@ export function UserMessage({
       return;
     }
 
+    if (!currentVariantId) return;
     editMessageMutation.mutate({
       taskId,
+      variantId: currentVariantId,
       messageId: message.id,
       newContent: editValue.trim(),
       newModel: selectedModel,
@@ -94,6 +98,7 @@ export function UserMessage({
     message.id,
     selectedModel,
     taskId,
+    currentVariantId,
     editMessageMutation,
     handleStopEditing,
   ]);

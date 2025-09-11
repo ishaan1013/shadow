@@ -23,6 +23,7 @@ import { BottomPanelIcon } from "../graphics/icons/bottom-panel-icon";
 import { Close as SheetPrimitiveClose } from "@radix-ui/react-dialog";
 import { useTaskStatus } from "@/hooks/tasks/use-task-status";
 import { SheetTitle } from "../ui/sheet";
+import { useTaskSocketContext } from "@/contexts/task-socket-context";
 
 const Terminal = dynamic(() => import("./terminal"), { ssr: false });
 
@@ -48,7 +49,8 @@ function AgentEnvironment({
     shouldUseSheet,
   } = useAgentEnvironment();
 
-  const { data: treeData, error: treeError } = useFileTree(taskId);
+  const { currentVariantId } = useTaskSocketContext();
+  const { data: treeData, error: treeError } = useFileTree(taskId, currentVariantId);
   const { data } = useTaskStatus(taskId);
   const { status, initStatus } = data || {};
   const isLoading = status === "INITIALIZING";

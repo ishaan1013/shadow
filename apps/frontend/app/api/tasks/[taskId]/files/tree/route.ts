@@ -3,7 +3,7 @@ import { verifyTaskOwnership } from "@/lib/auth/verify-task-ownership";
 import { makeBackendRequest } from "@/lib/make-backend-request";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   const { taskId } = await params;
@@ -13,9 +13,12 @@ export async function GET(
     if (error) return error;
 
     // Proxy request to backend server
-    const response = await makeBackendRequest(
-      `/api/tasks/${taskId}/files/tree`
-    );
+    const { searchParams } = new URL(req.url);
+    const variantId = searchParams.get("variantId");
+    const url = variantId
+      ? `/api/tasks/${taskId}/files/tree?variantId=${encodeURIComponent(variantId)}`
+      : `/api/tasks/${taskId}/files/tree`;
+    const response = await makeBackendRequest(url);
 
     if (!response.ok) {
       console.error(

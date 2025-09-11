@@ -41,6 +41,7 @@ import { ModelSelector } from "./model-selector";
 import { generateIssuePrompt } from "@/lib/github/issue-prompt";
 import { useSelectedModel } from "@/hooks/chat/use-selected-model";
 import { motion, useReducedMotion } from "framer-motion";
+import { useTaskSocketContext } from "@/contexts/task-socket-context";
 
 export function PromptForm({
   onSubmit,
@@ -125,6 +126,7 @@ export function PromptForm({
   );
 
   const queryClient = useQueryClient();
+  const { currentVariantId } = useTaskSocketContext();
 
   const [isMessageOptionsOpen, setIsMessageOptionsOpen] = useState(false);
   const [isGithubConnectionOpen, setIsGithubConnectionOpen] = useState(false);
@@ -136,11 +138,13 @@ export function PromptForm({
         return;
       }
       onSubmit?.(message, selectedModel, true);
-      queryClient.setQueryData(["queued-action", taskId], {
-        type: "message",
-        message,
-        model: selectedModel,
-      });
+      if (currentVariantId) {
+        queryClient.setQueryData(["queued-action", taskId, currentVariantId], {
+          type: "message",
+          message,
+          model: selectedModel,
+        });
+      }
       setMessage("");
     };
 
@@ -159,8 +163,8 @@ export function PromptForm({
         return;
       }
       onCreateStackedPR?.(message, selectedModel, queue);
-      if (queue) {
-        queryClient.setQueryData(["queued-action", taskId], {
+      if (queue && currentVariantId) {
+        queryClient.setQueryData(["queued-action", taskId, currentVariantId], {
           type: "stacked-pr",
           message,
           model: selectedModel,
@@ -239,7 +243,7 @@ export function PromptForm({
             },
           },
         ];
-  }, [isStreaming, onSubmit, message, selectedModel, queryClient, taskId]);
+  }, [isStreaming, onSubmit, message, selectedModel, queryClient, taskId, currentVariantId]);
 
   const formatShortcut = useCallback(
     (shortcut: {

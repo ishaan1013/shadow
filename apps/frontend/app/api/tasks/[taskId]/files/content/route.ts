@@ -52,6 +52,8 @@ export async function GET(
 
     // Proxy request to backend server
     const params = new URLSearchParams({ path: filePath });
+    const variantId = searchParams.get("variantId");
+    if (variantId) params.set("variantId", variantId);
     const response = await makeBackendRequest(
       `/api/tasks/${taskId}/files/content?${params}`
     );

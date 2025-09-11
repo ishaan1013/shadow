@@ -3,6 +3,7 @@
 import { useFileContent } from "@/hooks/agent-environment/use-file-content";
 import { SHADOW_WIKI_PATH } from "@/lib/constants";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useTaskSocketContext } from "@/contexts/task-socket-context";
 import {
   createContext,
   useContext,
@@ -69,10 +70,12 @@ export function AgentEnvironmentProvider({
     }
   }
 
-  // Fetch file content when a file is selected
+  // Fetch file content when a file is selected (variant-aware)
+  const { currentVariantId } = useTaskSocketContext();
   const fileContentQuery = useFileContent(
     taskId,
-    selectedFilePath || undefined
+    selectedFilePath || undefined,
+    currentVariantId
   );
 
   // Create selected file object with content for the editor

@@ -9,8 +9,8 @@ export function QueuedAction() {
   const { taskId } = useParams<{ taskId: string }>();
 
   const queryClient = useQueryClient();
-  const { clearQueuedAction } = useTaskSocketContext();
-  const { data: queuedAction } = useQueuedAction(taskId);
+  const { clearQueuedAction, currentVariantId } = useTaskSocketContext();
+  const { data: queuedAction } = useQueuedAction(taskId, currentVariantId || "");
 
   if (!queuedAction) return null;
 
@@ -32,7 +32,9 @@ export function QueuedAction() {
         size="iconXs"
         className="text-muted-foreground hover:text-foreground hover:bg-sidebar-border p-0"
         onClick={() => {
-          queryClient.setQueryData(["queued-action", taskId], null);
+          if (currentVariantId) {
+            queryClient.setQueryData(["queued-action", taskId, currentVariantId], null);
+          }
           clearQueuedAction();
         }}
       >
