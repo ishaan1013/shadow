@@ -12,9 +12,9 @@ export interface FileContentResponse {
   errorType?: "FILE_NOT_FOUND" | "UNKNOWN";
 }
 
-export function useFileContent(taskId: string, filePath?: string) {
+export function useFileContent(taskId: string, filePath?: string, variantId?: string | null) {
   return useQuery({
-    queryKey: ["file-content", taskId, filePath],
+    queryKey: ["file-content", taskId, variantId, filePath],
     queryFn: async (): Promise<FileContentResponse> => {
       if (filePath === SHADOW_WIKI_PATH) {
         return {
@@ -28,6 +28,7 @@ export function useFileContent(taskId: string, filePath?: string) {
       }
 
       const params = new URLSearchParams({ path: filePath });
+      if (variantId) params.set("variantId", variantId);
       const res = await fetch(`/api/tasks/${taskId}/files/content?${params}`);
 
       if (!res.ok) {
@@ -45,7 +46,7 @@ export function useFileContent(taskId: string, filePath?: string) {
 
       return res.json();
     },
-    enabled: !!taskId && !!filePath,
+    enabled: !!taskId && !!variantId && !!filePath,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }

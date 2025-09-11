@@ -7,16 +7,21 @@ export interface FileTreeResponse {
   error?: string;
 }
 
-export function useFileTree(taskId: string) {
+export function useFileTree(taskId: string, variantId?: string | null) {
   return useQuery({
-    queryKey: ["file-tree", taskId],
+    queryKey: ["file-tree", taskId, variantId],
     queryFn: async (): Promise<FileTreeResponse> => {
-      const res = await fetch(`/api/tasks/${taskId}/files/tree`);
+      const params = new URLSearchParams();
+      if (variantId) params.set("variantId", variantId);
+      const url = params.toString()
+        ? `/api/tasks/${taskId}/files/tree?${params}`
+        : `/api/tasks/${taskId}/files/tree`;
+      const res = await fetch(url);
       if (!res.ok) {
         throw new Error("Failed to fetch codebase tree");
       }
       return res.json();
     },
-    enabled: !!taskId,
+    enabled: !!taskId && !!variantId,
   });
 }

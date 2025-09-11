@@ -1,11 +1,12 @@
 import { Message } from "@repo/types";
 import { useQuery, isCancelledError } from "@tanstack/react-query";
 
-export function useTaskMessages(taskId: string) {
+export function useTaskMessages(taskId: string, variantId: string | null) {
   const query = useQuery({
-    queryKey: ["task-messages", taskId],
+    queryKey: ["task-messages", taskId, variantId],
     queryFn: async ({ signal }): Promise<Message[]> => {
-      const res = await fetch(`/api/tasks/${taskId}/messages`, { signal });
+      if (!variantId) return [];
+      const res = await fetch(`/api/tasks/${taskId}/${variantId}/messages`, { signal });
       if (!res.ok) throw new Error("Failed to fetch messages");
       const data = await res.json();
 
@@ -13,7 +14,7 @@ export function useTaskMessages(taskId: string) {
     },
     // Do not surface cancellations as runtime errors in the UI
     throwOnError: (error) => !isCancelledError(error),
-    enabled: !!taskId,
+    enabled: !!taskId && !!variantId,
   });
 
   return query;

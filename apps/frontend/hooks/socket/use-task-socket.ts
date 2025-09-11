@@ -234,7 +234,7 @@ function updateFileChangesOptimistically(
   }
 }
 
-export function useTaskSocket(taskId: string | undefined) {
+export function useTaskSocket(taskId: string | undefined, variantId?: string) {
   const { socket, isConnected } = useSocket();
   const queryClient = useQueryClient();
 
@@ -297,7 +297,10 @@ export function useTaskSocket(taskId: string | undefined) {
     if (!socket || !taskId) return;
 
     function onConnect() {
-      socket.emit("get-chat-history", { taskId: taskId!, complete: false });
+      // Stage 1: request chat history for the action variant (single-variant base case)
+      if (variantId) {
+        socket.emit("get-chat-history", { taskId: taskId!, variantId, complete: false });
+      }
     }
 
     function onDisconnect() {}
@@ -312,7 +315,9 @@ export function useTaskSocket(taskId: string | undefined) {
           ["task-messages", taskId],
           data.messages
         );
-        queryClient.setQueryData(["queued-action", taskId], data.queuedAction);
+        if (variantId) {
+          queryClient.setQueryData(["queued-action", taskId, variantId], data.queuedAction);
+        }
 
         // Clear streaming state and completion pending flag now that fresh data has arrived
         clearStreamingState();
@@ -914,7 +919,9 @@ export function useTaskSocket(taskId: string | undefined) {
           }
         );
 
-        queryClient.setQueryData(["queued-action", taskId], null);
+        if (variantId) {
+          queryClient.setQueryData(["queued-action", taskId, variantId], null);
+        }
       }
     }
 
@@ -1047,46 +1054,48 @@ export function useTaskSocket(taskId: string | undefined) {
   // Socket actions (methods to call from components)
   const sendMessage = useCallback(
     (message: string, model: string, queue: boolean = false) => {
-      if (!socket || !taskId || !message.trim()) return;
+      if (!socket || !taskId || !variantId || !message.trim()) return;
 
       setIsStreaming(true);
       socket.emit("user-message", {
         taskId,
+        variantId,
         message: message.trim(),
         llmModel: model as ModelType,
         queue,
       });
     },
-    [socket, taskId]
+    [socket, taskId, variantId]
   );
 
   const stopStream = useCallback(() => {
-    if (!socket || !taskId || !isStreaming) return;
+    if (!socket || !taskId || !variantId || !isStreaming) return;
 
-    socket.emit("stop-stream", { taskId });
+    socket.emit("stop-stream", { taskId, variantId });
     clearStreamingState();
-  }, [socket, taskId, isStreaming, clearStreamingState]);
+  }, [socket, taskId, variantId, isStreaming, clearStreamingState]);
 
   const clearQueuedAction = useCallback(() => {
-    if (!socket || !taskId) return;
-    socket.emit("clear-queued-action", { taskId });
-  }, [socket, taskId]);
+    if (!socket || !taskId || !variantId) return;
+    socket.emit("clear-queued-action", { taskId, variantId });
+  }, [socket, taskId, variantId]);
 
   const createStackedPR = useCallback(
     (message: string, model: string, queue: boolean = false) => {
-      if (!socket || !taskId || !message.trim()) return;
+      if (!socket || !taskId || !variantId || !message.trim()) return;
 
       const newTaskId = generateTaskId();
 
       socket.emit("create-stacked-pr", {
         taskId,
+        variantId,
         message: message.trim(),
         llmModel: model as ModelType,
         queue,
         newTaskId,
       });
     },
-    [socket, taskId]
+    [socket, taskId, variantId]
   );
 
   return {
