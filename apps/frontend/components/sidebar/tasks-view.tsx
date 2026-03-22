@@ -39,6 +39,7 @@ import { statusColorsConfig, statusOrder, getDisplayStatus } from "./status";
 import { getStatusText } from "@repo/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useRef, useState } from "react";
 import { useDebounceCallback } from "@/lib/debounce";
 import { useArchiveTask } from "@/hooks/tasks/use-archive-task";
@@ -71,8 +72,18 @@ type GroupedByStatus = {
 };
 
 type GroupBy = "repo" | "status";
+type SortBy = "newest" | "oldest" | "alphabetical";
 
 const HIDDEN_STATUSES: TaskStatus[] = ["ARCHIVED", "FAILED"];
+
+const FILTERABLE_STATUSES: TaskStatus[] = [
+  "RUNNING",
+  "COMPLETED",
+  "INITIALIZING",
+  "STOPPED",
+  "FAILED",
+  "ARCHIVED",
+];
 
 export function SidebarTasksView({
   tasks,
@@ -86,9 +97,27 @@ export function SidebarTasksView({
   const searchFormRef = useRef<HTMLFormElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [groupBy, setGroupBy] = useState<GroupBy>("repo");
+  const [sortBy, setSortBy] = useState<SortBy>("newest");
+  const [statusFilters, setStatusFilters] = useState<Set<TaskStatus>>(
+    new Set()
+  );
   const archiveTask = useArchiveTask();
   const deleteTask = useDeleteTask();
   const { copyToClipboard } = useCopyToClipboard();
+
+  const toggleStatusFilter = (status: TaskStatus) => {
+    setStatusFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      return next;
+    });
+  };
+
+  const hasActiveFilters = statusFilters.size > 0;
 
   // Debounced search handler
   const debouncedSearch = useDebounceCallback((query: string) => {
@@ -130,9 +159,14 @@ export function SidebarTasksView({
     window.open(repoUrl, "_blank");
   };
 
-  // Filter tasks based on search query
+  // Filter tasks based on search query and status filters
   const filteredTasks = tasks
     .filter((task) => {
+      // Apply status filters
+      if (hasActiveFilters && !statusFilters.has(task.status as TaskStatus)) {
+        return false;
+      }
+
       if (!searchQuery.trim()) return true;
 
       const query = searchQuery.toLowerCase().trim();
@@ -144,9 +178,20 @@ export function SidebarTasksView({
         task.status.toLowerCase().includes(query)
       );
     })
-    // Sort by updated date (most recent first)
     .sort((a, b) => {
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      switch (sortBy) {
+        case "oldest":
+          return (
+            new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+          );
+        case "alphabetical":
+          return a.title.localeCompare(b.title);
+        case "newest":
+        default:
+          return (
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          );
+      }
     });
 
   // Group filtered tasks based on the selected grouping method
@@ -155,7 +200,7 @@ export function SidebarTasksView({
 
   if (groupBy === "repo") {
     // Group by repository
-    tasks.forEach((task) => {
+    filteredTasks.forEach((task) => {
       if (!groupedTasks[task.repoUrl]) {
         groupedTasks[task.repoUrl] = {
           repoName: task.repoFullName,
@@ -165,19 +210,31 @@ export function SidebarTasksView({
       groupedTasks[task.repoUrl]?.tasks.push(task);
     });
 
-    // Sort tasks within each repo group by status priority, then by updated date
+    // Sort tasks within each repo group by status priority, then by sort preference
     Object.values(groupedTasks).forEach((group) => {
       group.tasks.sort((a, b) => {
         const statusDiff = statusOrder[a.status] - statusOrder[b.status];
         if (statusDiff !== 0) return statusDiff;
-        return (
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
+        switch (sortBy) {
+          case "oldest":
+            return (
+              new Date(a.updatedAt).getTime() -
+              new Date(b.updatedAt).getTime()
+            );
+          case "alphabetical":
+            return a.title.localeCompare(b.title);
+          case "newest":
+          default:
+            return (
+              new Date(b.updatedAt).getTime() -
+              new Date(a.updatedAt).getTime()
+            );
+        }
       });
     });
   } else {
     // Group by status
-    tasks.forEach((task) => {
+    filteredTasks.forEach((task) => {
       const status = task.status;
       if (!groupedByStatus[status]) {
         groupedByStatus[status] = {
@@ -187,12 +244,24 @@ export function SidebarTasksView({
       groupedByStatus[status]?.tasks.push(task);
     });
 
-    // Sort tasks within each status group by updated date (most recent first)
+    // Sort tasks within each status group by sort preference
     Object.values(groupedByStatus).forEach((group) => {
       group.tasks.sort((a, b) => {
-        return (
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
+        switch (sortBy) {
+          case "oldest":
+            return (
+              new Date(a.updatedAt).getTime() -
+              new Date(b.updatedAt).getTime()
+            );
+          case "alphabetical":
+            return a.title.localeCompare(b.title);
+          case "newest":
+          default:
+            return (
+              new Date(b.updatedAt).getTime() -
+              new Date(a.updatedAt).getTime()
+            );
+        }
       });
     });
   }
@@ -327,19 +396,22 @@ export function SidebarTasksView({
                   <Button
                     variant="outline"
                     size="icon"
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground relative"
                   >
                     <ListFilter className="size-3.5" />
+                    {hasActiveFilters && (
+                      <span className="bg-primary absolute -right-0.5 -top-0.5 size-1.5 rounded-full" />
+                    )}
                   </Button>
                 </PopoverTrigger>
               </TooltipTrigger>
               <TooltipContent side="top" align="end" lighter>
-                Group By
+                Filter & Sort
               </TooltipContent>
             </Tooltip>
             <PopoverContent
               align="end"
-              className="bg-sidebar-accent border-sidebar-border flex w-48 select-none flex-col gap-2 p-2"
+              className="bg-sidebar-accent border-sidebar-border flex w-48 select-none flex-col gap-3 p-2"
             >
               <div className="flex items-center gap-2 pl-0.5">
                 <span className="text-muted-foreground flex-1 text-[13px]">
@@ -375,6 +447,94 @@ export function SidebarTasksView({
                     </SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="flex items-center gap-2 pl-0.5">
+                <span className="text-muted-foreground flex-1 text-[13px]">
+                  Sort By
+                </span>
+                <Select
+                  value={sortBy}
+                  onValueChange={(value) => setSortBy(value as SortBy)}
+                >
+                  <SelectTrigger
+                    data-size="sm"
+                    className="bg-sidebar-accent border-sidebar-border text-muted-foreground hover:text-foreground"
+                  >
+                    <SelectValue className="text-[13px]" />
+                  </SelectTrigger>
+                  <SelectContent
+                    align="end"
+                    className="bg-sidebar-accent border-sidebar-border"
+                  >
+                    <SelectItem
+                      data-size="sm"
+                      value="newest"
+                      className="hover:bg-sidebar-border!"
+                    >
+                      Newest
+                    </SelectItem>
+                    <SelectItem
+                      data-size="sm"
+                      value="oldest"
+                      className="hover:bg-sidebar-border!"
+                    >
+                      Oldest
+                    </SelectItem>
+                    <SelectItem
+                      data-size="sm"
+                      value="alphabetical"
+                      className="hover:bg-sidebar-border!"
+                    >
+                      A–Z
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="border-sidebar-border border-t pt-2">
+                <div className="flex items-center justify-between pl-0.5 pb-1.5">
+                  <span className="text-muted-foreground text-[13px]">
+                    Status
+                  </span>
+                  {hasActiveFilters && (
+                    <Button
+                      variant="ghost"
+                      size="iconXs"
+                      className="text-muted-foreground hover:text-foreground h-5 w-5"
+                      onClick={() => setStatusFilters(new Set())}
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {FILTERABLE_STATUSES.map((status) => {
+                    const config =
+                      statusColorsConfig[
+                        status as keyof typeof statusColorsConfig
+                      ];
+                    const StatusIcon = config.icon;
+                    return (
+                      <label
+                        key={status}
+                        className="hover:bg-sidebar-border flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1"
+                      >
+                        <Checkbox
+                          checked={statusFilters.has(status)}
+                          onCheckedChange={() => toggleStatusFilter(status)}
+                          className="size-3.5"
+                        />
+                        <StatusIcon
+                          className={`!size-3 ${config.className}`}
+                        />
+                        <span className="text-muted-foreground text-[13px] capitalize">
+                          {status.toLowerCase().replaceAll("_", " ")}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </PopoverContent>
           </Popover>
