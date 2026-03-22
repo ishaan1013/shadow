@@ -105,6 +105,22 @@ export function SidebarTasksView({
   const deleteTask = useDeleteTask();
   const { copyToClipboard } = useCopyToClipboard();
 
+  const compareTasks = (a: Task, b: Task) => {
+    switch (sortBy) {
+      case "oldest":
+        return (
+          new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+        );
+      case "alphabetical":
+        return a.title.localeCompare(b.title);
+      case "newest":
+      default:
+        return (
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+    }
+  };
+
   const toggleStatusFilter = (status: TaskStatus) => {
     setStatusFilters((prev) => {
       const next = new Set(prev);
@@ -178,21 +194,7 @@ export function SidebarTasksView({
         task.status.toLowerCase().includes(query)
       );
     })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case "oldest":
-          return (
-            new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
-          );
-        case "alphabetical":
-          return a.title.localeCompare(b.title);
-        case "newest":
-        default:
-          return (
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          );
-      }
-    });
+    .sort(compareTasks);
 
   // Group filtered tasks based on the selected grouping method
   const groupedTasks: GroupedTasks = {};
@@ -215,21 +217,7 @@ export function SidebarTasksView({
       group.tasks.sort((a, b) => {
         const statusDiff = statusOrder[a.status] - statusOrder[b.status];
         if (statusDiff !== 0) return statusDiff;
-        switch (sortBy) {
-          case "oldest":
-            return (
-              new Date(a.updatedAt).getTime() -
-              new Date(b.updatedAt).getTime()
-            );
-          case "alphabetical":
-            return a.title.localeCompare(b.title);
-          case "newest":
-          default:
-            return (
-              new Date(b.updatedAt).getTime() -
-              new Date(a.updatedAt).getTime()
-            );
-        }
+        return compareTasks(a, b);
       });
     });
   } else {
@@ -246,23 +234,7 @@ export function SidebarTasksView({
 
     // Sort tasks within each status group by sort preference
     Object.values(groupedByStatus).forEach((group) => {
-      group.tasks.sort((a, b) => {
-        switch (sortBy) {
-          case "oldest":
-            return (
-              new Date(a.updatedAt).getTime() -
-              new Date(b.updatedAt).getTime()
-            );
-          case "alphabetical":
-            return a.title.localeCompare(b.title);
-          case "newest":
-          default:
-            return (
-              new Date(b.updatedAt).getTime() -
-              new Date(a.updatedAt).getTime()
-            );
-        }
-      });
+      group.tasks.sort(compareTasks);
     });
   }
 
