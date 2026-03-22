@@ -85,6 +85,18 @@ shadowWikiRouter.post("/generate/:taskId", async (req, res, next) => {
 
     console.log(`[SHADOW-WIKI] Analyzing workspace directly: ${workspaceDir}`);
 
+    // Resolve mini model: request body > user settings > hardcoded fallback
+    let resolvedMiniModel = modelMini as ModelType | undefined;
+    if (!resolvedMiniModel) {
+      const userSettings = await db.userSettings.findUnique({
+        where: { userId: task.userId },
+        select: { miniModel: true },
+      });
+      if (userSettings?.miniModel) {
+        resolvedMiniModel = userSettings.miniModel as ModelType;
+      }
+    }
+
     // Run Shadow Wiki analysis directly on workspace
     const result = await runShadowWiki(
       taskId,
@@ -95,7 +107,7 @@ shadowWikiRouter.post("/generate/:taskId", async (req, res, next) => {
       {
         concurrency: 12,
         model: model as ModelType,
-        modelMini: modelMini as ModelType,
+        modelMini: resolvedMiniModel,
         recursionLimit: 1,
       }
     );

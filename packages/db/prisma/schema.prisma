@@ -284,6 +284,7 @@ model UserSettings {
   enableShadowWiki Boolean  @default(true)
   enableIndexing   Boolean  @default(false)
   selectedModels   String[] @default([])
+  miniModel        String?
   rules            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

@@ -14,6 +14,7 @@ interface UserSettings {
   enableShadowWiki: boolean;
   memoriesEnabled: boolean;
   selectedModels: string[];
+  miniModel?: string | null;
   enableIndexing: boolean;
   rules?: string | null;
   createdAt: Date;
@@ -25,6 +26,7 @@ type UpdateUserSettingsParams = {
   memoriesEnabled?: boolean;
   enableShadowWiki?: boolean;
   selectedModels?: string[];
+  miniModel?: string | null;
   enableIndexing?: boolean;
   rules?: string | null;
 };
@@ -56,6 +58,7 @@ async function updateUserSettingsAPI(settings: {
   memoriesEnabled?: boolean;
   enableShadowWiki?: boolean;
   selectedModels?: string[];
+  miniModel?: string | null;
   enableIndexing?: boolean;
   rules?: string | null;
 }): Promise<UserSettings> {

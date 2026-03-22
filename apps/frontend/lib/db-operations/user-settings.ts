@@ -7,6 +7,7 @@ export interface UserSettings {
   enableShadowWiki: boolean;
   memoriesEnabled: boolean;
   selectedModels: string[];
+  miniModel?: string | null;
   enableIndexing: boolean;
   rules?: string | null;
   createdAt: Date;
@@ -30,6 +31,7 @@ export async function createUserSettings(
     enableShadowWiki?: boolean;
     memoriesEnabled?: boolean;
     selectedModels?: string[];
+    miniModel?: string;
     enableIndexing?: boolean;
     rules?: string;
   }
@@ -41,6 +43,7 @@ export async function createUserSettings(
       enableShadowWiki: settings.enableShadowWiki ?? true,
       memoriesEnabled: settings.memoriesEnabled ?? true,
       selectedModels: settings.selectedModels ?? [],
+      miniModel: settings.miniModel,
       enableIndexing: settings.enableIndexing ?? false,
       rules: settings.rules,
     },
@@ -56,6 +59,7 @@ export async function updateUserSettings(
     enableShadowWiki?: boolean;
     memoriesEnabled?: boolean;
     selectedModels?: string[];
+    miniModel?: string | null;
     enableIndexing?: boolean;
     rules?: string;
   }
@@ -66,6 +70,7 @@ export async function updateUserSettings(
       enableShadowWiki?: boolean;
       memoriesEnabled?: boolean;
       selectedModels?: string[];
+      miniModel?: string | null;
       enableIndexing?: boolean;
       rules?: string;
     } = {};
@@ -78,6 +83,8 @@ export async function updateUserSettings(
       updateData.memoriesEnabled = settings.memoriesEnabled;
     if (settings.selectedModels !== undefined)
       updateData.selectedModels = settings.selectedModels;
+    if (settings.miniModel !== undefined)
+      updateData.miniModel = settings.miniModel;
     if (settings.enableIndexing !== undefined)
       updateData.enableIndexing = settings.enableIndexing;
     if (settings.rules !== undefined)
@@ -90,6 +97,7 @@ export async function updateUserSettings(
       enableShadowWiki?: boolean;
       memoriesEnabled?: boolean;
       selectedModels?: string[];
+      miniModel?: string;
       enableIndexing?: boolean;
       rules?: string;
     } = {
@@ -116,6 +124,8 @@ export async function updateUserSettings(
       settings.selectedModels.length > 0
     )
       createData.selectedModels = settings.selectedModels;
+    if (settings.miniModel !== undefined && settings.miniModel !== null)
+      createData.miniModel = settings.miniModel;
     if (
       settings.enableIndexing !== undefined &&
       settings.enableIndexing !== false

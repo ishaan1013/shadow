@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { autoPullRequest, enableShadowWiki, memoriesEnabled, selectedModels, enableIndexing, rules } =
+    const { autoPullRequest, enableShadowWiki, memoriesEnabled, selectedModels, miniModel, enableIndexing, rules } =
       body;
 
     // Validate autoPullRequest if provided
@@ -81,6 +81,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate miniModel if provided
+    if (miniModel !== undefined && miniModel !== null && typeof miniModel !== "string") {
+      return NextResponse.json(
+        { error: "miniModel must be a string or null" },
+        { status: 400 }
+      );
+    }
+
     // Validate rules if provided
     if (rules !== undefined && rules !== null && typeof rules !== "string") {
       return NextResponse.json(
@@ -106,6 +114,7 @@ export async function POST(request: NextRequest) {
       enableShadowWiki?: boolean;
       memoriesEnabled?: boolean;
       selectedModels?: string[];
+      miniModel?: string | null;
       enableIndexing?: boolean;
       rules?: string;
     } = {};
@@ -117,6 +126,8 @@ export async function POST(request: NextRequest) {
       updateData.memoriesEnabled = memoriesEnabled;
     if (selectedModels !== undefined)
       updateData.selectedModels = selectedModels;
+    if (miniModel !== undefined)
+      updateData.miniModel = miniModel || null;
     if (enableIndexing !== undefined)
       updateData.enableIndexing = enableIndexing;
     if (rules !== undefined)

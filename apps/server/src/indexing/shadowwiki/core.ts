@@ -1308,7 +1308,8 @@ export async function runShadowWiki(
     miniModel = options.modelMini;
   } else {
     mainModel = context.getModelForOperation("pr-gen");
-    miniModel = getHardcodedMiniModel(context.getProvider());
+    // Use user's mini model preference if provided, otherwise fall back to hardcoded default
+    miniModel = options.modelMini || getHardcodedMiniModel(context.getProvider());
   }
 
   if (!context.validateAccess()) {

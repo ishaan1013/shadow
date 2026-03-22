@@ -9,6 +9,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useApiKeys,
   useSaveApiKey,
   useClearApiKey,
@@ -31,6 +38,8 @@ import { useDebounceCallbackWithCancel } from "@/lib/debounce";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ApiKeyProvider,
+  ModelType,
+  ModelInfos,
   getProviderDefaultModel,
   getModelProvider,
 } from "@repo/types";
@@ -38,6 +47,31 @@ import { useModal } from "@/components/layout/modal-context";
 import { getModelSelectorCookie } from "@/lib/actions/model-selector-cookie";
 import { useSetSelectedModel } from "@/hooks/chat/use-selected-model";
 import { getValidationResult } from "@/lib/types/validation";
+import {
+  useUserSettings,
+  useUpdateUserSettings,
+} from "@/hooks/use-user-settings";
+import { getAllPossibleModelsInfo } from "@/lib/actions/api-keys";
+
+// Mini models available per provider for Shadow Wiki processing
+const MINI_MODELS: Record<string, { id: ModelType; name: string }[]> = {
+  openai: [
+    { id: "gpt-4o-mini" as ModelType, name: "GPT-4o Mini" },
+    { id: "gpt-4.1-mini" as ModelType, name: "GPT-4.1 Mini" },
+    { id: "gpt-5-mini-2025-08-07" as ModelType, name: "GPT-5 Mini" },
+  ],
+  anthropic: [
+    { id: "claude-3-5-haiku-20241022" as ModelType, name: "Claude 3.5 Haiku" },
+  ],
+  openrouter: [
+    { id: "x-ai/grok-3" as ModelType, name: "Grok 3" },
+    {
+      id: "deepseek/deepseek-chat-v3-0324" as ModelType,
+      name: "DeepSeek Chat V3",
+    },
+    { id: "qwen/qwen3-coder" as ModelType, name: "Qwen3 Coder" },
+  ],
+};
 
 export function ModelSettings() {
   const { data: apiKeys, isLoading: isLoadingApiKeys } = useApiKeys();
@@ -49,6 +83,13 @@ export function ModelSettings() {
   const queryClient = useQueryClient();
   const { openProviderConfig } = useModal();
   const setSelectedModelMutation = useSetSelectedModel();
+  const { data: userSettings } = useUserSettings();
+  const updateUserSettings = useUpdateUserSettings();
+
+  // Compute available mini models based on which API keys the user has
+  const availableMiniModels = Object.entries(MINI_MODELS)
+    .filter(([provider]) => apiKeys?.[provider as keyof typeof apiKeys])
+    .flatMap(([, models]) => models);
 
   const [openaiInput, setOpenaiInput] = useState(apiKeys?.openai ?? "");
   const [anthropicInput, setAnthropicInput] = useState(
@@ -435,6 +476,41 @@ export function ModelSettings() {
           </div>
         );
       })}
+
+      {/* Mini Model Selection */}
+      {availableMiniModels.length > 0 && (
+        <div className="flex w-full flex-col gap-2 border-t pt-4">
+          <Label className="font-normal">
+            Shadow Wiki Mini Model
+          </Label>
+          <p className="text-muted-foreground text-xs">
+            Used for file analysis and code summarization in Shadow Wiki. A
+            smaller, faster model keeps costs low.
+          </p>
+          <Select
+            value={userSettings?.miniModel ?? "auto"}
+            onValueChange={(value) => {
+              updateUserSettings.mutate({
+                miniModel: value === "auto" ? null : value,
+              });
+            }}
+          >
+            <SelectTrigger data-size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto" data-size="sm">
+                Auto (provider default)
+              </SelectItem>
+              {availableMiniModels.map((model) => (
+                <SelectItem key={model.id} value={model.id} data-size="sm">
+                  {model.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="text-muted-foreground flex w-full flex-col gap-1 border-t pt-4 text-xs">
         <span>Shadow is BYOK; you must provide an API key to use models.</span>
