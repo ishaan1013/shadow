@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { z } from "zod";
 import { prisma, TodoStatus, MemoryCategory } from "@repo/db";
-import { tool } from "ai";
+import { tool, type ToolExecutionOptions } from "ai";
 import {
   TodoWriteParamsSchema,
   ReadFileParamsSchema,
@@ -43,7 +43,7 @@ const activeMCPManagers = new Map<string, MCPManager>();
 function createMCPToolWrapper(
   originalName: string,
   mcpTool: {
-    execute: (params: Record<string, unknown>) => Promise<unknown>;
+    execute: (params: Record<string, unknown>, options?: ToolExecutionOptions) => Promise<unknown>;
     description: string;
     parameters: unknown;
   }
@@ -65,7 +65,7 @@ function createMCPToolWrapper(
 
   return {
     ...mcpTool,
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (params: Record<string, unknown>, options?: ToolExecutionOptions) => {
       console.log(
         `[MCP_TOOL] Executing ${originalName} (transformed from ${transformedName})`
       );
@@ -84,7 +84,7 @@ function createMCPToolWrapper(
       }
 
       try {
-        return await mcpTool.execute(modifiedParams);
+        return await mcpTool.execute(modifiedParams, options);
       } catch (error) {
         console.error(`[MCP_TOOL] Error executing ${originalName}:`, error);
         throw error;

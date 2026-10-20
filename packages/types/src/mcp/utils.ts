@@ -8,11 +8,15 @@ export interface ParsedMCPToolName {
 const KNOWN_MCP_TOOLS = new Set([
   "context7_resolve_library_id",
   "context7_get_library_docs",
+  "parallel_web_search",
+  "parallel_web_fetch",
 ]);
 
 const MCP_TOOL_MAPPINGS: Record<string, string> = {
   context7_resolve_library_id: "context7:resolve-library-id",
   context7_get_library_docs: "context7:get-library-docs",
+  parallel_web_search: "parallel:web_search",
+  parallel_web_fetch: "parallel:web_fetch",
 };
 
 /**
