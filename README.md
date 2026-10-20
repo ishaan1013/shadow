@@ -229,6 +229,20 @@ Shadow provides a comprehensive set of tools for AI agents:
 
 ## Development Guidelines
 
+### Web Search and Page Fetching
+
+Shadow loads [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)
+by default in both local and remote modes. Agents can use `parallel_web_search`
+for current web sources and `parallel_web_fetch` to read pages. Search uses Fast
+mode with no account or API key required. Queries and requested URLs are sent to
+Parallel when the agent calls these tools; free access is subject to service limits.
+
+Set `MCP_PARALLEL_ENABLED=false` in the server environment to disable both tools.
+`MCP_PARALLEL_URL` overrides the default `https://search.parallel.ai/mcp` endpoint.
+Context7 keeps its existing configuration and can be disabled separately with
+`MCP_CONTEXT7_ENABLED=false`. MCP tool arguments, including optional conversation
+`session_id`, are passed through to the server without a shared client-wide ID.
+
 ### Code Organization
 - TypeScript throughout with strict type checking
 - Shared configurations via packages

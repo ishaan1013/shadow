@@ -1,14 +1,25 @@
 import { experimental_createMCPClient } from "ai";
 import type { ToolSet } from "ai";
 import type { MCPServerConfig, MCPClientWrapper } from "./types";
+import { createHttpMCPClient } from "./http-client";
 
-const MCP_SERVERS: MCPServerConfig[] = [
+const getMCPServers = (): MCPServerConfig[] => [
   {
     name: "context7",
     transport: "sse",
     url: process.env.MCP_CONTEXT7_URL || "https://mcp.context7.com/sse",
     enabled: process.env.MCP_CONTEXT7_ENABLED !== "false", // Default to enabled
     timeout: 30000, // 30 second timeout
+    headers: {
+      "User-Agent": "Shadow-Agent/1.0",
+    },
+  },
+  {
+    name: "parallel",
+    transport: "http",
+    url: process.env.MCP_PARALLEL_URL || "https://search.parallel.ai/mcp",
+    enabled: process.env.MCP_PARALLEL_ENABLED !== "false",
+    timeout: 30000,
     headers: {
       "User-Agent": "Shadow-Agent/1.0",
     },
@@ -20,23 +31,25 @@ export class MCPManager {
   private isShuttingDown: boolean = false;
 
   async initializeConnections(): Promise<void> {
-    const connectionPromises = MCP_SERVERS.map(async (config) => {
-      try {
-        await this.connectToServer(config);
-      } catch (error) {
-        console.error(
-          `[MCP_MANAGER] Failed to connect to ${config.name}:`,
-          error
-        );
-        // Store failed connection for status tracking
-        this.clients.set(config.name, {
-          serverName: config.name,
-          client: null,
-          connected: false,
-          lastError: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    });
+    const connectionPromises = getMCPServers()
+      .filter((config) => config.enabled)
+      .map(async (config) => {
+        try {
+          await this.connectToServer(config);
+        } catch (error) {
+          console.error(
+            `[MCP_MANAGER] Failed to connect to ${config.name}:`,
+            error
+          );
+          // Store failed connection for status tracking
+          this.clients.set(config.name, {
+            serverName: config.name,
+            client: null,
+            connected: false,
+            lastError: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      });
 
     await Promise.allSettled(connectionPromises);
   }
@@ -84,14 +97,7 @@ export class MCPManager {
               `HTTP transport requires URL for server ${config.name}`
             );
           }
-          // HTTP transport currently uses SSE endpoint
-          client = await experimental_createMCPClient({
-            transport: {
-              type: "sse",
-              url: config.url,
-              headers: config.headers,
-            },
-          });
+          client = await createHttpMCPClient(config);
           break;
 
         default:
@@ -181,7 +187,7 @@ export class MCPManager {
 
     const closePromises = Array.from(this.clients.values()).map(
       async (clientWrapper) => {
-        if (clientWrapper.connected && clientWrapper.client) {
+        if (clientWrapper.client) {
           try {
             await clientWrapper.client.close();
           } catch (error) {
